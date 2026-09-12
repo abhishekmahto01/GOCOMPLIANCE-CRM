@@ -44,20 +44,20 @@ export const BrandPanel: React.FC<BrandPanelProps> = ({ onExploreClick }) => {
         {/* Uppercase Small Heading */}
         <div className="inline-block mb-3">
           <span className="text-[11px] sm:text-xs font-semibold tracking-[0.22em] text-blue-200/90 uppercase select-none">
-            ACCESS MADE EFFORTLESS
+            25+ YEARS OF COMPLIANCE EXPERTISE
           </span>
         </div>
 
         {/* Main Title */}
         <h1 className="text-3xl sm:text-4xl lg:text-[42px] font-extrabold text-white tracking-tight leading-[1.15] mb-4">
-          <span>Secure Access.</span>
+          <span>Simplifying Compliance.</span>
           <br />
-          <span>Smarter Control.</span>
+          <span>Empowering Businesses.</span>
         </h1>
 
         {/* Subtitle / Description */}
         <p className="text-sm sm:text-base text-blue-100/85 font-normal leading-relaxed max-w-md mb-6">
-          Manage your compliance operations, clients, and licenses — all in one place.
+          A unified workspace for managing HR compliance, statutory operations, client services, applications and regulatory processes across India.
         </p>
 
         {/* Subtle Horizontal Divider Accent */}
@@ -67,23 +67,23 @@ export const BrandPanel: React.FC<BrandPanelProps> = ({ onExploreClick }) => {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-3.5 max-w-lg">
           <FeatureCard
             icon="shield"
-            title="Secure"
-            subtitle="Access"
+            title="Compliance"
+            subtitle="Management"
+          />
+          <FeatureCard
+            icon="scale"
+            title="Statutory"
+            subtitle="Operations"
+          />
+          <FeatureCard
+            icon="users"
+            title="Client"
+            subtitle="Management"
           />
           <FeatureCard
             icon="chart"
             title="Real-time"
             subtitle="Insights"
-          />
-          <FeatureCard
-            icon="users"
-            title="Team"
-            subtitle="Collaboration"
-          />
-          <FeatureCard
-            icon="document"
-            title="Compliance"
-            subtitle="Simplified"
           />
         </div>
       </div>

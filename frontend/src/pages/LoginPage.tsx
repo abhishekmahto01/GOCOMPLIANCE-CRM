@@ -4,8 +4,8 @@ import { LoginForm } from '../components/auth/LoginForm';
 import { Modal } from '../components/ui/modal';
 import { ToastContainer } from '../components/ui/toast';
 import type { ToastMessage } from '../components/ui/toast';
-import type { LoginCredentials, SocialProvider } from '../types/auth';
-import { Mail, Phone, Building2, Key, Shield } from 'lucide-react';
+import type { LoginCredentials } from '../types/auth';
+import { Mail, Phone, Building2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 
@@ -18,7 +18,6 @@ export const LoginPage: React.FC = () => {
   const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
   const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
   const [isTermsModalOpen, setIsTermsModalOpen] = useState(false);
-  const [isSSOModalOpen, setIsSSOModalOpen] = useState(false);
 
   // Forgot password form state
   const [forgotEmail, setForgotEmail] = useState('');
@@ -52,26 +51,6 @@ export const LoginPage: React.FC = () => {
     }, 1000);
   };
 
-  // Social / Enterprise provider click handler
-  const handleSocialLogin = (provider: SocialProvider) => {
-    if (provider === 'sso') {
-      setIsSSOModalOpen(true);
-      return;
-    }
-
-    const providerNames = {
-      google: 'Google Workspace',
-      microsoft: 'Microsoft Azure Entra ID',
-      sso: 'Single Sign-On',
-    };
-
-    addToast(
-      'info',
-      `${providerNames[provider]} Initiated`,
-      `Redirecting to ${providerNames[provider]} secure identity provider...`
-    );
-  };
-
   // Forgot password submit handler
   const handleForgotSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,7 +60,7 @@ export const LoginPage: React.FC = () => {
       addToast(
         'success',
         'Reset Link Sent',
-        `Password reset instructions sent to ${forgotEmail}`
+        `Password reset instructions sent for ${forgotEmail}`
       );
       setIsForgotModalOpen(false);
       setForgotSubmitted(false);
@@ -107,7 +86,6 @@ export const LoginPage: React.FC = () => {
         <section className="order-2 lg:order-2 h-full w-full flex flex-col justify-center">
           <LoginForm
             onSubmit={handleLogin}
-            onSocialLogin={handleSocialLogin}
             onContactAdmin={() => setIsAdminModalOpen(true)}
             onForgotPassword={() => setIsForgotModalOpen(true)}
             onOpenPrivacyPolicy={() => setIsPrivacyModalOpen(true)}
@@ -165,8 +143,8 @@ export const LoginPage: React.FC = () => {
       >
         <form onSubmit={handleForgotSubmit} className="space-y-4">
           <Input
-            label="Work Email / Employee ID"
-            placeholder="name@gocompliances.com or GC0001"
+            label="Employee ID / Work Email"
+            placeholder="GC0001 or name@gocompliances.com"
             type="text"
             required
             value={forgotEmail}
@@ -188,42 +166,6 @@ export const LoginPage: React.FC = () => {
         </form>
       </Modal>
 
-      {/* Modal: SSO Enterprise Login */}
-      <Modal
-        isOpen={isSSOModalOpen}
-        onClose={() => setIsSSOModalOpen(false)}
-        title="Enterprise Single Sign-On (SSO)"
-        description="Sign in using SAML 2.0 or OIDC corporate credentials."
-      >
-        <div className="space-y-4">
-          <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl flex items-start gap-3">
-            <Shield className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-            <p className="text-xs text-blue-800">
-              Enter your enterprise organization domain (e.g. <code>acme-corp</code>) to be redirected to your company's Identity Provider (Okta, Ping, Azure AD).
-            </p>
-          </div>
-          <Input
-            label="Company Domain or Workspace URL"
-            placeholder="your-company (e.g. gocompliances)"
-            leftIcon={<Key className="w-4 h-4 text-slate-400" />}
-          />
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setIsSSOModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => {
-                setIsSSOModalOpen(false);
-                addToast('info', 'SSO Redirect', 'Connecting to enterprise Identity Provider...');
-              }}
-            >
-              Continue to IDP
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
       {/* Modal: Privacy Policy */}
       <Modal
         isOpen={isPrivacyModalOpen}
@@ -236,9 +178,9 @@ export const LoginPage: React.FC = () => {
           <p>
             All corporate compliance records, client data, and user authentication tokens are encrypted at rest using AES-256 and in transit via TLS 1.3.
           </p>
-          <p className="font-semibold text-slate-800">2. Compliance & SOC 2 Type II</p>
+          <p className="font-semibold text-slate-800">2. Compliance & Statutory Operations</p>
           <p>
-            GOCOMPLIANCE CRM undergoes annual third-party audits for SOC 2 Type II, ISO 27001, and GDPR compliance standards.
+            GOCOMPLIANCE CRM supports automated filings, audits, and regulatory tracking across all state and central jurisdictions in India.
           </p>
           <p className="font-semibold text-slate-800">3. Audit Logging</p>
           <p>

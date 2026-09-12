@@ -4,15 +4,14 @@ export const BuildingVisual: React.FC = () => {
   return (
     <div className="relative w-full mt-auto pt-6 flex items-end justify-between overflow-hidden">
       {/* Cursive Handwriting Text */}
-      <div className="relative z-10 pb-4 pl-1 select-none pointer-events-none">
+      <div className="relative z-10 pb-4 pl-1 select-none pointer-events-none max-w-[270px] sm:max-w-[310px]">
         <div className="font-handwriting text-2xl sm:text-3xl text-white/95 leading-tight font-normal tracking-wide drop-shadow-md">
-          <p>Building</p>
-          <p>Compliant Businesses</p>
+          <p>Built on 25+ Years of</p>
           <div className="relative inline-block">
-            <p>Together</p>
+            <p>Compliance Expertise</p>
             {/* Elegant Hand-drawn swoosh underline */}
             <svg
-              className="absolute -bottom-2.5 left-0 w-32 h-4 text-white/70 overflow-visible"
+              className="absolute -bottom-2.5 left-0 w-36 h-4 text-white/70 overflow-visible"
               viewBox="0 0 120 16"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
@@ -26,6 +25,9 @@ export const BuildingVisual: React.FC = () => {
             </svg>
           </div>
         </div>
+        <p className="text-[11px] sm:text-xs text-blue-100/85 font-normal leading-relaxed mt-2.5 drop-shadow-sm">
+          Supporting businesses with sustainable and reliable compliance processes.
+        </p>
       </div>
 
       {/* Corporate Glass Building Architectural Graphic */}

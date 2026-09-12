@@ -1,9 +1,9 @@
 import React from 'react';
-import { ShieldCheck, BarChart3, Users, FileCheck2 } from 'lucide-react';
+import { ShieldCheck, BarChart3, Users, FileCheck2, Scale } from 'lucide-react';
 import { clsx } from 'clsx';
 
 export interface FeatureCardProps {
-  icon: 'shield' | 'chart' | 'users' | 'document';
+  icon: 'shield' | 'chart' | 'users' | 'document' | 'scale';
   title: string;
   subtitle: string;
   className?: string;
@@ -26,6 +26,8 @@ export const FeatureCard: React.FC<FeatureCardProps> = ({
         return <Users className={iconClass} />;
       case 'document':
         return <FileCheck2 className={iconClass} />;
+      case 'scale':
+        return <Scale className={iconClass} />;
       default:
         return <ShieldCheck className={iconClass} />;
     }

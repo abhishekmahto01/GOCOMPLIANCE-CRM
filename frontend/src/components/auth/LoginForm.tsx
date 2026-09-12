@@ -1,14 +1,12 @@
 import React, { useState } from 'react';
-import { Mail, Lock, Eye, EyeOff, ArrowRight, UserCheck } from 'lucide-react';
+import { User, Lock, Eye, EyeOff, ArrowRight, UserCheck } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Checkbox } from '../ui/checkbox';
-import { SocialLogin } from './SocialLogin';
-import type { LoginCredentials, SocialProvider } from '../../types/auth';
+import type { LoginCredentials } from '../../types/auth';
 
 export interface LoginFormProps {
   onSubmit: (credentials: LoginCredentials) => void;
-  onSocialLogin: (provider: SocialProvider) => void;
   onContactAdmin: () => void;
   onForgotPassword: () => void;
   onOpenPrivacyPolicy: () => void;
@@ -18,7 +16,6 @@ export interface LoginFormProps {
 
 export const LoginForm: React.FC<LoginFormProps> = ({
   onSubmit,
-  onSocialLogin,
   onContactAdmin,
   onForgotPassword,
   onOpenPrivacyPolicy,
@@ -31,20 +28,14 @@ export const LoginForm: React.FC<LoginFormProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<{ identifier?: string; password?: string }>({});
 
-  // Detect format: e.g. GC0001, EP0001, BM0001 (company employee ID) vs Email
+  // Detect format: e.g. GC0001, EP0001, BM0001 (company employee ID)
   const isEmployeeIdPattern = /^[A-Za-z]{2}\d{4,6}$/i.test(identifier.trim());
 
   const validate = () => {
     const newErrors: { identifier?: string; password?: string } = {};
 
     if (!identifier.trim()) {
-      newErrors.identifier = 'Please enter your Employee ID or Email address';
-    } else if (
-      !identifier.includes('@') &&
-      !isEmployeeIdPattern &&
-      identifier.trim().length < 3
-    ) {
-      newErrors.identifier = 'Enter a valid email or employee ID (e.g., GC0001, EP0001)';
+      newErrors.identifier = 'Please enter your Employee ID (e.g., GC0001, EP0001, BM0001)';
     }
 
     if (!password) {
@@ -85,27 +76,27 @@ export const LoginForm: React.FC<LoginFormProps> = ({
       </div>
 
       {/* Main Login Form Container */}
-      <div className="w-full max-w-md mx-auto my-auto py-6">
+      <div className="w-full max-w-md mx-auto my-auto py-8 sm:py-10">
         {/* Header */}
-        <div className="mb-8">
+        <div className="mb-8 sm:mb-9">
           <h2 className="text-3xl sm:text-4xl font-extrabold text-[#0a2569] tracking-tight">
             Welcome Back!
           </h2>
           <p className="text-sm sm:text-base text-slate-500 mt-2 font-normal">
-            Sign in to continue to Gocompliance CRM
+            Sign in to access your Gocompliances workspace.
           </p>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-5" noValidate>
-          {/* Email / Employee ID Field */}
+        <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-6" noValidate>
+          {/* Employee ID Field */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label
                 htmlFor="identifier"
                 className="block text-sm font-semibold text-slate-800 tracking-tight"
               >
-                Email Address
+                Employee ID
               </label>
               {isEmployeeIdPattern && (
                 <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 animate-fade-in">
@@ -118,13 +109,13 @@ export const LoginForm: React.FC<LoginFormProps> = ({
               id="identifier"
               type="text"
               autoComplete="username"
-              placeholder="Enter your email"
+              placeholder="GC0001"
               value={identifier}
               onChange={(e) => {
                 setIdentifier(e.target.value);
                 if (errors.identifier) setErrors({ ...errors, identifier: undefined });
               }}
-              leftIcon={<Mail className="w-4 h-4 text-slate-400" />}
+              leftIcon={<User className="w-4 h-4 text-slate-400" />}
               error={errors.identifier}
             />
           </div>
@@ -185,7 +176,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
           </div>
 
           {/* Submit Login Button */}
-          <div className="pt-2">
+          <div className="pt-3">
             <Button
               type="submit"
               variant="primary"
@@ -198,21 +189,6 @@ export const LoginForm: React.FC<LoginFormProps> = ({
             </Button>
           </div>
         </form>
-
-        {/* Divider */}
-        <div className="relative my-7 flex items-center justify-center">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-slate-200" />
-          </div>
-          <div className="relative bg-white px-4">
-            <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
-              or continue with
-            </span>
-          </div>
-        </div>
-
-        {/* Social / Enterprise Login Buttons */}
-        <SocialLogin onProviderSelect={onSocialLogin} disabled={isLoading} />
       </div>
 
       {/* Footer */}
