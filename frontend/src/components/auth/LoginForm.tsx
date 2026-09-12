@@ -3,14 +3,15 @@ import { User, Lock, Eye, EyeOff, ArrowRight, UserCheck } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Checkbox } from '../ui/checkbox';
+import { BrandEmblem } from './BrandLogo';
 import type { LoginCredentials } from '../../types/auth';
 
 export interface LoginFormProps {
   onSubmit: (credentials: LoginCredentials) => void;
   onContactAdmin: () => void;
   onForgotPassword: () => void;
-  onOpenPrivacyPolicy: () => void;
-  onOpenTerms: () => void;
+  onOpenPrivacyPolicy?: () => void;
+  onOpenTerms?: () => void;
   isLoading?: boolean;
 }
 
@@ -18,8 +19,6 @@ export const LoginForm: React.FC<LoginFormProps> = ({
   onSubmit,
   onContactAdmin,
   onForgotPassword,
-  onOpenPrivacyPolicy,
-  onOpenTerms,
   isLoading = false,
 }) => {
   const [identifier, setIdentifier] = useState('');
@@ -79,6 +78,10 @@ export const LoginForm: React.FC<LoginFormProps> = ({
       <div className="w-full max-w-md mx-auto my-auto py-8 sm:py-10">
         {/* Header */}
         <div className="mb-8 sm:mb-9">
+          {/* Mobile-only Emblem */}
+          <div className="lg:hidden mb-4">
+            <BrandEmblem size="lg" />
+          </div>
           <h2 className="text-3xl sm:text-4xl font-extrabold text-[#0a2569] tracking-tight">
             Welcome Back!
           </h2>
@@ -196,22 +199,10 @@ export const LoginForm: React.FC<LoginFormProps> = ({
         <div>
           <span>© 2026 Gocompliances. All rights reserved.</span>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onOpenPrivacyPolicy}
-            className="hover:text-slate-800 hover:underline transition-colors focus:outline-none"
-          >
-            Privacy Policy
-          </button>
+        <div className="flex items-center gap-2 text-slate-400">
+          <span>Privacy Policy</span>
           <span className="text-slate-300">|</span>
-          <button
-            type="button"
-            onClick={onOpenTerms}
-            className="hover:text-slate-800 hover:underline transition-colors focus:outline-none"
-          >
-            Terms of Use
-          </button>
+          <span>Terms of Use</span>
         </div>
       </div>
     </div>

@@ -16,8 +16,6 @@ export const LoginPage: React.FC = () => {
   // Modals
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
-  const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
-  const [isTermsModalOpen, setIsTermsModalOpen] = useState(false);
 
   // Forgot password form state
   const [forgotEmail, setForgotEmail] = useState('');
@@ -88,8 +86,6 @@ export const LoginPage: React.FC = () => {
             onSubmit={handleLogin}
             onContactAdmin={() => setIsAdminModalOpen(true)}
             onForgotPassword={() => setIsForgotModalOpen(true)}
-            onOpenPrivacyPolicy={() => setIsPrivacyModalOpen(true)}
-            onOpenTerms={() => setIsTermsModalOpen(true)}
             isLoading={isLoading}
           />
         </section>
@@ -112,7 +108,7 @@ export const LoginPage: React.FC = () => {
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 space-y-2.5 text-xs text-slate-700">
             <div className="flex items-center gap-2">
               <Mail className="w-4 h-4 text-blue-600 shrink-0" />
-              <span>Support Email: <strong>admin@gocompliances.com</strong></span>
+              <span>Support Email: <strong>research.rnd.gc@gmail.com</strong></span>
             </div>
             <div className="flex items-center gap-2">
               <Phone className="w-4 h-4 text-blue-600 shrink-0" />
@@ -164,58 +160,6 @@ export const LoginPage: React.FC = () => {
             </Button>
           </div>
         </form>
-      </Modal>
-
-      {/* Modal: Privacy Policy */}
-      <Modal
-        isOpen={isPrivacyModalOpen}
-        onClose={() => setIsPrivacyModalOpen(false)}
-        title="Privacy Policy"
-        description="GOCOMPLIANCE CRM Enterprise Data Privacy & Security Commitments."
-      >
-        <div className="space-y-3 text-xs text-slate-600 leading-relaxed max-h-72 overflow-y-auto pr-2">
-          <p className="font-semibold text-slate-800">1. Data Encryption & Storage</p>
-          <p>
-            All corporate compliance records, client data, and user authentication tokens are encrypted at rest using AES-256 and in transit via TLS 1.3.
-          </p>
-          <p className="font-semibold text-slate-800">2. Compliance & Statutory Operations</p>
-          <p>
-            GOCOMPLIANCE CRM supports automated filings, audits, and regulatory tracking across all state and central jurisdictions in India.
-          </p>
-          <p className="font-semibold text-slate-800">3. Audit Logging</p>
-          <p>
-            All access logs, role changes, and compliance approvals are immutably preserved for regulatory reporting.
-          </p>
-        </div>
-        <div className="flex justify-end pt-4">
-          <Button variant="primary" onClick={() => setIsPrivacyModalOpen(false)}>
-            Close
-          </Button>
-        </div>
-      </Modal>
-
-      {/* Modal: Terms of Use */}
-      <Modal
-        isOpen={isTermsModalOpen}
-        onClose={() => setIsTermsModalOpen(false)}
-        title="Terms of Use"
-        description="Terms and conditions for GOCOMPLIANCE CRM system access."
-      >
-        <div className="space-y-3 text-xs text-slate-600 leading-relaxed max-h-72 overflow-y-auto pr-2">
-          <p className="font-semibold text-slate-800">1. Authorized Access</p>
-          <p>
-            Access is restricted to authorized employees and contractors holding valid credentials and compliance training certifications.
-          </p>
-          <p className="font-semibold text-slate-800">2. Confidentiality Obligations</p>
-          <p>
-            Users must safeguard compliance documentation and intellectual property in accordance with enterprise security agreements.
-          </p>
-        </div>
-        <div className="flex justify-end pt-4">
-          <Button variant="primary" onClick={() => setIsTermsModalOpen(false)}>
-            Close
-          </Button>
-        </div>
       </Modal>
     </main>
   );
