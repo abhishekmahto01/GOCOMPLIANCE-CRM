@@ -49,9 +49,9 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             ref={ref}
             className={twMerge(
               clsx(
-                'w-full rounded-2xl border bg-white px-4 py-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600',
-                leftIcon ? 'pl-11' : 'pl-4',
-                rightIcon ? 'pr-11' : 'pr-4',
+                'w-full rounded-2xl border bg-white px-3.5 sm:px-4 py-2.5 sm:py-3 text-sm text-slate-800 placeholder:text-slate-400 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600',
+                leftIcon ? 'pl-10 sm:pl-11' : 'pl-3.5 sm:pl-4',
+                rightIcon ? 'pr-10 sm:pr-11' : 'pr-3.5 sm:pr-4',
                 error
                   ? 'border-red-400 focus:border-red-500 focus:ring-red-500/20'
                   : 'border-slate-200 hover:border-slate-300',

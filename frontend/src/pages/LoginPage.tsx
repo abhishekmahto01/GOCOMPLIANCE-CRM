@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { BrandPanel } from '../components/auth/BrandPanel';
 import { LoginForm } from '../components/auth/LoginForm';
 import { Modal } from '../components/ui/modal';
@@ -10,7 +12,11 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 
 export const LoginPage: React.FC = () => {
+  const { login } = useAuth();
+  const navigate = useNavigate();
+
   const [isLoading, setIsLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | undefined>(undefined);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   
   // Modals
@@ -34,19 +40,31 @@ export const LoginPage: React.FC = () => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  // Login handler
+  // Login handler with static authentication validation
   const handleLogin = (credentials: LoginCredentials) => {
     setIsLoading(true);
+    setAuthError(undefined);
 
-    // Simulate authentication delay for realistic UX
+    // Realistic UI feel with auth validation
     setTimeout(() => {
       setIsLoading(false);
-      addToast(
-        'success',
-        'Signed in successfully!',
-        `Welcome to GOCOMPLIANCE CRM. Authenticated as ${credentials.identifier}.`
-      );
-    }, 1000);
+      const result = login(credentials.identifier, credentials.password);
+
+      if (result.success) {
+        addToast(
+          'success',
+          'Signed in successfully!',
+          `Welcome to GOCOMPLIANCE CRM. Authenticated as ${credentials.identifier}.`
+        );
+        setTimeout(() => {
+          navigate('/dashboard', { replace: true });
+        }, 350);
+      } else {
+        const errorMsg = result.error || 'Invalid User ID or Password';
+        setAuthError(errorMsg);
+        addToast('error', 'Authentication Failed', errorMsg);
+      }
+    }, 400);
   };
 
   // Forgot password submit handler
@@ -67,9 +85,9 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <main className="min-h-screen w-full flex items-center justify-center p-0 sm:p-4 md:p-6 lg:p-8 bg-slate-100/70 font-sans">
+    <main className="min-h-screen lg:h-screen w-full flex items-center justify-center p-0 sm:p-3 md:p-4 lg:p-4 xl:p-8 bg-slate-100/70 font-sans overflow-y-auto lg:overflow-hidden">
       {/* Centered Main 50/50 Container */}
-      <div className="w-full max-w-[1440px] min-h-screen sm:min-h-[750px] lg:min-h-[820px] bg-white sm:rounded-3xl shadow-2xl sm:shadow-card-soft border-0 sm:border border-slate-200/80 grid grid-cols-1 lg:grid-cols-2 overflow-hidden relative">
+      <div className="w-full max-w-[1440px] min-h-screen sm:min-h-[640px] lg:min-h-0 lg:h-[94vh] lg:max-h-[850px] bg-white sm:rounded-3xl shadow-2xl sm:shadow-card-soft border-0 sm:border border-slate-200/80 grid grid-cols-1 lg:grid-cols-2 overflow-hidden relative">
         
         {/* Left Side: Brand Panel */}
         <section className="order-1 lg:order-1 h-full w-full">
@@ -87,6 +105,8 @@ export const LoginPage: React.FC = () => {
             onContactAdmin={() => setIsAdminModalOpen(true)}
             onForgotPassword={() => setIsForgotModalOpen(true)}
             isLoading={isLoading}
+            authError={authError}
+            onClearAuthError={() => setAuthError(undefined)}
           />
         </section>
       </div>

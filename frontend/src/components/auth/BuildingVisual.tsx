@@ -2,16 +2,16 @@ import React from 'react';
 
 export const BuildingVisual: React.FC = () => {
   return (
-    <div className="relative w-full mt-auto pt-6 flex items-end justify-between overflow-hidden">
+    <div className="relative w-full mt-auto pt-2 sm:pt-4 lg:pt-2 xl:pt-4 flex items-end justify-between overflow-hidden">
       {/* Cursive Handwriting Text */}
-      <div className="relative z-10 pb-4 pl-1 select-none pointer-events-none max-w-[270px] sm:max-w-[310px]">
-        <div className="font-handwriting text-2xl sm:text-3xl text-white/95 leading-tight font-normal tracking-wide drop-shadow-md">
+      <div className="relative z-10 pb-1 sm:pb-3 pl-1 select-none pointer-events-none max-w-[240px] sm:max-w-[280px] xl:max-w-[310px]">
+        <div className="font-handwriting text-xl sm:text-2xl lg:text-[21px] xl:text-[28px] text-white/95 leading-tight font-normal tracking-wide drop-shadow-md">
           <p>Built on 25+ Years of</p>
           <div className="relative inline-block">
             <p>Compliance Expertise</p>
             {/* Elegant Hand-drawn swoosh underline */}
             <svg
-              className="absolute -bottom-2.5 left-0 w-36 h-4 text-white/70 overflow-visible"
+              className="absolute -bottom-2 sm:-bottom-2.5 left-0 w-28 sm:w-36 h-3 sm:h-4 text-white/70 overflow-visible"
               viewBox="0 0 120 16"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
@@ -25,13 +25,13 @@ export const BuildingVisual: React.FC = () => {
             </svg>
           </div>
         </div>
-        <p className="text-[11px] sm:text-xs text-blue-100/85 font-normal leading-relaxed mt-2.5 drop-shadow-sm">
+        <p className="text-[10px] sm:text-[11px] xl:text-xs text-blue-100/85 font-normal leading-relaxed mt-1 sm:mt-2 drop-shadow-sm">
           Supporting businesses with sustainable and reliable compliance processes.
         </p>
       </div>
 
       {/* Corporate Glass Building Architectural Graphic */}
-      <div className="relative w-[52%] max-w-[280px] h-[190px] sm:h-[220px] shrink-0 pointer-events-none select-none">
+      <div className="relative w-[48%] sm:w-[50%] max-w-[250px] xl:max-w-[280px] h-[110px] sm:h-[135px] lg:h-[125px] xl:h-[180px] shrink-0 pointer-events-none select-none">
         <svg
           className="w-full h-full object-contain filter drop-shadow-2xl opacity-90"
           viewBox="0 0 320 260"

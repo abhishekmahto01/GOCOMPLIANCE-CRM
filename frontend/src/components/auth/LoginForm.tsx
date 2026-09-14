@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, Lock, Eye, EyeOff, ArrowRight, UserCheck } from 'lucide-react';
+import { User, Lock, Eye, EyeOff, ArrowRight, UserCheck, AlertCircle } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Checkbox } from '../ui/checkbox';
@@ -13,6 +13,8 @@ export interface LoginFormProps {
   onOpenPrivacyPolicy?: () => void;
   onOpenTerms?: () => void;
   isLoading?: boolean;
+  authError?: string;
+  onClearAuthError?: () => void;
 }
 
 export const LoginForm: React.FC<LoginFormProps> = ({
@@ -20,6 +22,8 @@ export const LoginForm: React.FC<LoginFormProps> = ({
   onContactAdmin,
   onForgotPassword,
   isLoading = false,
+  authError,
+  onClearAuthError,
 }) => {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -34,13 +38,11 @@ export const LoginForm: React.FC<LoginFormProps> = ({
     const newErrors: { identifier?: string; password?: string } = {};
 
     if (!identifier.trim()) {
-      newErrors.identifier = 'Please enter your Employee ID (e.g., GC0001, EP0001, BM0001)';
+      newErrors.identifier = 'User ID cannot be empty.';
     }
 
     if (!password) {
-      newErrors.password = 'Please enter your password';
-    } else if (password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
+      newErrors.password = 'Password cannot be empty.';
     }
 
     setErrors(newErrors);
@@ -59,9 +61,9 @@ export const LoginForm: React.FC<LoginFormProps> = ({
   };
 
   return (
-    <div className="w-full h-full min-h-[680px] lg:min-h-[800px] flex flex-col justify-between p-8 sm:p-12 lg:p-14 bg-white text-slate-800">
+    <div className="w-full h-full flex flex-col justify-between p-6 sm:p-8 md:p-9 lg:p-7 xl:p-11 bg-white text-slate-800">
       {/* Top Bar: Contact Admin Link */}
-      <div className="flex justify-end items-center text-sm font-normal text-slate-600">
+      <div className="flex justify-end items-center text-xs sm:text-sm font-normal text-slate-600 shrink-0">
         <span>
           New here?{' '}
           <button
@@ -75,34 +77,42 @@ export const LoginForm: React.FC<LoginFormProps> = ({
       </div>
 
       {/* Main Login Form Container */}
-      <div className="w-full max-w-md mx-auto my-auto py-8 sm:py-10">
+      <div className="w-full max-w-md mx-auto my-auto py-2 sm:py-4 lg:py-2.5 xl:py-5">
         {/* Header */}
-        <div className="mb-8 sm:mb-9">
+        <div className="mb-4 sm:mb-6 lg:mb-3.5 xl:mb-7">
           {/* Mobile-only Emblem */}
-          <div className="lg:hidden mb-4">
-            <BrandEmblem size="lg" />
+          <div className="lg:hidden mb-3">
+            <BrandEmblem size="md" />
           </div>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-[#0a2569] tracking-tight">
+          <h2 className="text-2xl sm:text-3xl lg:text-[28px] xl:text-4xl font-extrabold text-[#0a2569] tracking-tight">
             Welcome Back!
           </h2>
-          <p className="text-sm sm:text-base text-slate-500 mt-2 font-normal">
+          <p className="text-xs sm:text-sm xl:text-base text-slate-500 mt-1 sm:mt-1.5 font-normal">
             Sign in to access your Gocompliances workspace.
           </p>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-6" noValidate>
-          {/* Employee ID Field */}
+        <form onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4 lg:space-y-3.5 xl:space-y-5" noValidate>
+          {/* Static Auth Error Alert */}
+          {authError && (
+            <div className="p-3 rounded-xl bg-red-50 border border-red-200/90 text-red-700 text-xs font-semibold flex items-center gap-2.5 animate-fade-in shadow-sm">
+              <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
+              <span>{authError}</span>
+            </div>
+          )}
+
+          {/* Employee ID / User ID Field */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center justify-between mb-1">
               <label
                 htmlFor="identifier"
-                className="block text-sm font-semibold text-slate-800 tracking-tight"
+                className="block text-xs sm:text-sm font-semibold text-slate-800 tracking-tight"
               >
-                Employee ID
+                User ID / Employee ID
               </label>
               {isEmployeeIdPattern && (
-                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 animate-fade-in">
+                <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 animate-fade-in">
                   <UserCheck className="w-3 h-3" />
                   Employee ID Detected
                 </span>
@@ -112,11 +122,12 @@ export const LoginForm: React.FC<LoginFormProps> = ({
               id="identifier"
               type="text"
               autoComplete="username"
-              placeholder="GC0001"
+              placeholder="admin or GC0001"
               value={identifier}
               onChange={(e) => {
                 setIdentifier(e.target.value);
                 if (errors.identifier) setErrors({ ...errors, identifier: undefined });
+                if (authError && onClearAuthError) onClearAuthError();
               }}
               leftIcon={<User className="w-4 h-4 text-slate-400" />}
               error={errors.identifier}
@@ -127,7 +138,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
           <div>
             <label
               htmlFor="password"
-              className="block text-sm font-semibold text-slate-800 tracking-tight mb-1.5"
+              className="block text-xs sm:text-sm font-semibold text-slate-800 tracking-tight mb-1"
             >
               Password
             </label>
@@ -140,6 +151,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
               onChange={(e) => {
                 setPassword(e.target.value);
                 if (errors.password) setErrors({ ...errors, password: undefined });
+                if (authError && onClearAuthError) onClearAuthError();
               }}
               leftIcon={<Lock className="w-4 h-4 text-slate-400" />}
               rightIcon={
@@ -162,7 +174,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
           </div>
 
           {/* Remember Me & Forgot Password */}
-          <div className="flex items-center justify-between pt-1">
+          <div className="flex items-center justify-between pt-0.5">
             <Checkbox
               id="remember-me"
               label="Remember me"
@@ -172,20 +184,20 @@ export const LoginForm: React.FC<LoginFormProps> = ({
             <button
               type="button"
               onClick={onForgotPassword}
-              className="text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/20 rounded"
+              className="text-xs sm:text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/20 rounded"
             >
               Forgot password?
             </button>
           </div>
 
           {/* Submit Login Button */}
-          <div className="pt-3">
+          <div className="pt-2 sm:pt-2.5">
             <Button
               type="submit"
               variant="primary"
               size="lg"
               isLoading={isLoading}
-              className="w-full h-12 bg-gradient-to-r from-blue-600 via-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-full sm:rounded-2xl shadow-button-glow font-semibold text-base transition-all group"
+              className="w-full h-10.5 sm:h-11 xl:h-12 bg-gradient-to-r from-blue-600 via-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl sm:rounded-2xl shadow-button-glow font-semibold text-sm sm:text-base transition-all group"
               rightIcon={<ArrowRight className="w-4 h-4 ml-1 stroke-[2.5]" />}
             >
               Login
@@ -195,7 +207,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
       </div>
 
       {/* Footer */}
-      <div className="w-full pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2 select-none">
+      <div className="w-full pt-3 sm:pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between text-[11px] sm:text-xs text-slate-500 gap-1 sm:gap-2 select-none shrink-0">
         <div>
           <span>© 2026 Gocompliances. All rights reserved.</span>
         </div>
