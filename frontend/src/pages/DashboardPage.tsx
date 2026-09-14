@@ -24,7 +24,7 @@ export const DashboardPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen w-full bg-slate-50 flex flex-col font-sans text-slate-800">
+    <div className="min-h-screen w-full bg-slate-50 flex flex-col font-sans text-slate-800 animate-fade-in">
       {/* Top Navigation Bar */}
       <header className="sticky top-0 z-30 w-full bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 sm:px-8 py-3.5 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-4">

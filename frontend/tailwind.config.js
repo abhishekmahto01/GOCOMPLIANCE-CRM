@@ -41,6 +41,9 @@ export default {
         'fade-in': 'fadeIn 0.5s ease-out',
         'pulse-subtle': 'pulseSubtle 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'float-slow': 'floatSlow 6s ease-in-out infinite',
+        'airplane-soar': 'airplaneSoar 3.2s ease-in-out infinite',
+        'dash-flow': 'dashFlow 1.2s linear infinite',
+        'cloud-drift': 'cloudDrift 14s ease-in-out infinite alternate',
       },
       keyframes: {
         fadeIn: {
@@ -54,7 +57,21 @@ export default {
         floatSlow: {
           '0%, 100%': { transform: 'translateY(0px)' },
           '50%': { transform: 'translateY(-6px)' },
-        }
+        },
+        airplaneSoar: {
+          '0%, 100%': { transform: 'translate(0px, 0px) rotate(0deg)' },
+          '25%': { transform: 'translate(4px, -8px) rotate(-1.5deg)' },
+          '50%': { transform: 'translate(0px, -14px) rotate(1deg)' },
+          '75%': { transform: 'translate(-4px, -6px) rotate(-0.5deg)' },
+        },
+        dashFlow: {
+          '0%': { strokeDashoffset: '30' },
+          '100%': { strokeDashoffset: '0' },
+        },
+        cloudDrift: {
+          '0%': { transform: 'translateX(-2%)' },
+          '100%': { transform: 'translateX(2%)' },
+        },
       }
     },
   },

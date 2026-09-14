@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { validateStaticCredentials } from '../utils/auth';
 import { BrandPanel } from '../components/auth/BrandPanel';
 import { LoginForm } from '../components/auth/LoginForm';
+import { LoginTransition } from '../components/auth/LoginTransition';
 import { Modal } from '../components/ui/modal';
 import { ToastContainer } from '../components/ui/toast';
 import type { ToastMessage } from '../components/ui/toast';
@@ -12,13 +14,17 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 
 export const LoginPage: React.FC = () => {
-  const { login } = useAuth();
+  const { isAuthenticated, login } = useAuth();
   const navigate = useNavigate();
 
   const [isLoading, setIsLoading] = useState(false);
+  const [showTransition, setShowTransition] = useState(false);
   const [authError, setAuthError] = useState<string | undefined>(undefined);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   
+  // Pending credentials stored during transition (authentication delayed until flight completes)
+  const pendingCredentials = useRef<LoginCredentials | null>(null);
+
   // Modals
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
@@ -26,6 +32,13 @@ export const LoginPage: React.FC = () => {
   // Forgot password form state
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSubmitted, setForgotSubmitted] = useState(false);
+
+  // Redirect already authenticated users who manually visit /login (when not actively transitioning)
+  useEffect(() => {
+    if (isAuthenticated && !showTransition) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, showTransition, navigate]);
 
   // Toast Helper
   const addToast = (type: 'success' | 'error' | 'info', title: string, message: string) => {
@@ -40,31 +53,57 @@ export const LoginPage: React.FC = () => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  // Login handler with static authentication validation
+  // Login handler: validates static credentials first without authenticating globally
   const handleLogin = (credentials: LoginCredentials) => {
+    console.log('LOGIN_CLICKED');
     setIsLoading(true);
     setAuthError(undefined);
 
-    // Realistic UI feel with auth validation
     setTimeout(() => {
       setIsLoading(false);
-      const result = login(credentials.identifier, credentials.password);
+      const result = validateStaticCredentials(
+        credentials.identifier,
+        credentials.password
+      );
 
-      if (result.success) {
-        addToast(
-          'success',
-          'Signed in successfully!',
-          `Welcome to GOCOMPLIANCE CRM. Authenticated as ${credentials.identifier}.`
-        );
-        setTimeout(() => {
-          navigate('/dashboard', { replace: true });
-        }, 350);
-      } else {
+      if (!result.success) {
         const errorMsg = result.error || 'Invalid User ID or Password';
         setAuthError(errorMsg);
         addToast('error', 'Authentication Failed', errorMsg);
+        return;
       }
-    }, 400);
+
+      console.log('CREDENTIALS_VALID');
+      pendingCredentials.current = credentials;
+      console.log('TRANSITION_STARTED');
+      setShowTransition(true);
+    }, 200);
+  };
+
+  // Called when paper airplane transition completes (~2700ms)
+  const handleTransitionComplete = () => {
+    console.log('TRANSITION_COMPLETED');
+    const credentials = pendingCredentials.current;
+
+    if (!credentials) {
+      setShowTransition(false);
+      return;
+    }
+
+    const result = login(
+      credentials.identifier,
+      credentials.password
+    );
+
+    if (!result.success) {
+      setShowTransition(false);
+      setAuthError(result.error || 'Authentication failed');
+      return;
+    }
+
+    console.log('SESSION_CREATED');
+    console.log('NAVIGATING_TO_DASHBOARD');
+    navigate('/dashboard', { replace: true });
   };
 
   // Forgot password submit handler
@@ -83,6 +122,16 @@ export const LoginPage: React.FC = () => {
       setForgotEmail('');
     }, 1200);
   };
+
+  // EARLY RETURN: Full-Screen Login Transition completely replaces login page during flight
+  if (showTransition) {
+    return (
+      <LoginTransition
+        duration={1650}
+        onComplete={handleTransitionComplete}
+      />
+    );
+  }
 
   return (
     <main className="min-h-screen lg:h-screen w-full flex items-center justify-center p-0 sm:p-3 md:p-4 lg:p-4 xl:p-8 bg-slate-100/70 font-sans overflow-y-auto lg:overflow-hidden">

@@ -38,3 +38,102 @@
     text-shadow: 0 0 20px rgba(0, 210, 255, 0.4);
   }
 }
+
+/* ==========================================================================
+   Login Transition Animations (Gocompliances Sunlit Flight Experience)
+   ========================================================================== */
+
+@keyframes airplaneFlight {
+  0% {
+    transform: translate(-32vw, 14vh) rotate(-6deg) scale(0.92);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  48% {
+    transform: translate(0vw, 0vh) rotate(-14deg) scale(1.15);
+    opacity: 1;
+  }
+  78% {
+    transform: translate(16vw, -8vh) rotate(-18deg) scale(1.22);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(45vw, -24vh) rotate(-22deg) scale(1.08);
+    opacity: 0;
+  }
+}
+
+@keyframes loopTrailFlow {
+  0% {
+    stroke-dashoffset: 240;
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.95;
+  }
+  75% {
+    opacity: 0.95;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+
+@keyframes cloudDriftGentle {
+  0% {
+    transform: translateX(-1.2%) translateY(0px);
+  }
+  100% {
+    transform: translateX(1.2%) translateY(-3px);
+  }
+}
+
+@keyframes sunbeamPulse {
+  0%, 100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.75;
+    transform: scale(1.04);
+  }
+}
+
+.login-airplane-flight {
+  animation: airplaneFlight 1.55s cubic-bezier(0.2, 0.8, 0.25, 1) forwards;
+  will-change: transform, opacity;
+}
+
+.login-loop-trail {
+  animation: loopTrailFlow 1.55s ease-out forwards;
+  will-change: stroke-dashoffset, opacity;
+}
+
+.login-cloud-drift {
+  animation: cloudDriftGentle 7s ease-in-out infinite alternate;
+}
+
+.login-sunbeam {
+  animation: sunbeamPulse 5s ease-in-out infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-airplane-flight {
+    animation: none !important;
+    transform: translate(0, 0) rotate(-14deg) scale(1.15) !important;
+    opacity: 1 !important;
+  }
+  .login-loop-trail {
+    animation: none !important;
+    stroke-dashoffset: 0 !important;
+    opacity: 0.9 !important;
+  }
+  .login-cloud-drift,
+  .login-sunbeam {
+    animation: none !important;
+  }
+}
+
