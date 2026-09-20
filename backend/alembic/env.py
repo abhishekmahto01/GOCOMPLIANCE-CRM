@@ -11,6 +11,7 @@ BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
+import app.models  # noqa: F401 - Ensure all models are registered on Base.metadata
 from app.core.config import settings
 from app.database.base import Base
 

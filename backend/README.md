@@ -2,76 +2,75 @@
 
 Production-ready FastAPI backend foundation for Gocompliances CRM.
 
-## Current Stage Scope: Stage 3 (Alembic Migration Infrastructure)
+## Current Stage Scope: Stage 4 (Company Master)
 
-This stage sets up the version-controlled database schema migration framework using **Alembic**:
-- Standard Alembic structure configured under `backend/alembic/`.
-- Dynamic connection binding connecting `alembic/env.py` to `app.database.base.Base.metadata` and `app.core.config.settings.DATABASE_URL`.
-- Empty baseline migration (`f6d28a5264ee_baseline_database.py`) established without creating any business tables.
-- Verification of migration upgrade, downgrade, and re-upgrade lifecycles.
-- Complete automated unit tests for Alembic configuration, metadata integrity, and credential safety.
+This stage establishes the multi-entity company foundation (`company_master`) required for company-specific employee code generation and organization hierarchy:
+- SQLAlchemy 2 typed model `Company` mapped to table `company_master`.
+- Pydantic v2 schemas (`CompanyBase`, `CompanyCreate`, `CompanyUpdate`, `CompanyRead`) with normalization and validation.
+- Alembic schema migration `b445258097c2_create_company_master.py` with unique constraints, check constraints, and indexes.
+- Idempotent database seeding script (`app/scripts/seed_companies.py`) using deterministic UUIDs.
+- Automated unit test suite with full coverage of models, schemas, migration safety, and seeding.
 
-> **Note on Business Tables:**
-> In Stage 3, only the Alembic infrastructure and version-tracking table (`alembic_version`) exist. **No CRM business tables (e.g. `company_master`, `user_master`, permissions, etc.) have been created yet.** Business schema definitions and model migrations will begin in **Stage 4**.
-
----
-
-## What is Alembic & Why is it Needed? (Alembic Kya Hai?)
-
-* **Alembic kya hai?**
-  Alembic Python aur SQLAlchemy ke liye lightweight database migration tool hai. Yeh database schema changes (tables, columns, indexes, constraints) ka version control system hai.
-* **Alembic ki zarurat kyun hai?**
-  Direct database queries (`CREATE TABLE`) chalane se production aur local development environments sync mein nahi rehte. Alembic har change ko ek script (revision) mein record karta hai, taaki changes ko automatically safely apply (`upgrade`) aur revert (`downgrade`) kiya ja sake.
-* **Real `.env` commit kyun nahi karna?**
-  `.env` file mein local database username, host, aur sensitive credentials hote hain. Alembic configuration `alembic.ini` mein database URL blank rehti hai aur runtime par `app.core.config.settings` se safely read hoti hai. Isliye `.env` hamesha Git se ignored rehti hai.
+> **Note on Employee Code Generation & CRUD APIs:**
+> Stage 4 establishes the schema and seed data for the 3 operating companies. **Employee code generation logic, Department/User tables, and Company CRUD/Admin UI endpoints will be implemented in subsequent stages.**
 
 ---
 
-## Alembic Migration Commands Guide
+## Company Master Data Architecture
 
-All commands must be executed from the `backend/` directory with the virtual environment activated:
+Gocompliances CRM currently supports three business entities:
+
+| Company Code | Company Name | Employee Code Prefix | Initial Counter (`next_employee_number`) | Status | Sample Future Employee Code |
+| :--- | :--- | :---: | :---: | :---: | :--- |
+| `GOCOMPLIANCES` | `Gocompliances` | `CG` | `1` | `ACTIVE` | `CG0001`, `CG0002`... |
+| `ENTERPERNERSHIP` | `Enterpernership` | `EP` | `1` | `ACTIVE` | `EP0001`, `EP0002`... |
+| `BRANDMINGO` | `Brandmingo` | `BM` | `1` | `ACTIVE` | `BM0001`, `BM0002`... |
+
+### `company_master` Column Specifications
+
+| Column | Type | Constraints / Defaults | Description |
+| :--- | :--- | :--- | :--- |
+| `company_id` | `UUID` | Primary Key, `NOT NULL` | Unique identifier (UUIDv4/v5) |
+| `company_code` | `VARCHAR(20)` | `UNIQUE`, `NOT NULL`, Index | Uppercase business identifier code |
+| `company_name` | `VARCHAR(150)` | `UNIQUE`, `NOT NULL`, Index | Primary trade / display name |
+| `legal_name` | `VARCHAR(200)` | `NULLABLE` | Registered legal corporate entity name |
+| `employee_code_prefix` | `VARCHAR(5)` | `UNIQUE`, `NOT NULL`, Check Constraint | 2–5 uppercase letters (`^[A-Z]{2,5}$`) |
+| `next_employee_number` | `INTEGER` | `NOT NULL`, Default: `1`, Check: `> 0` | Sequential counter for next employee code |
+| `status` | `VARCHAR(20)` | `NOT NULL`, Default: `'ACTIVE'`, Index | Operational status (`ACTIVE`, `INACTIVE`) |
+| `created_at` | `TIMESTAMPTZ` | `NOT NULL`, Default: `now()` | Record creation timestamp (UTC) |
+| `updated_at` | `TIMESTAMPTZ` | `NOT NULL`, Default: `now()` | Record update timestamp (UTC) |
+
+---
+
+## Database Migration & Seeding Commands
+
+All commands are run from the `backend/` directory with `.venv` activated:
 
 ```bash
 cd backend
 source .venv/bin/activate
 ```
 
-### 1. Check Current Migration Revision
-Check which revision is currently applied to the database:
-```bash
-alembic current
-```
-
-### 2. Check Migration History
-View the complete list and order of migrations:
-```bash
-alembic history
-```
-
-### 3. Apply Latest Migrations (Upgrade to Head)
-Apply all pending revisions up to the latest version:
+### 1. Apply Database Migration
+Apply all pending schema migrations (including `company_master`):
 ```bash
 alembic upgrade head
 ```
 
-### 4. Rollback / Downgrade Migrations
-* **Rollback one revision:**
-  ```bash
-  alembic downgrade -1
-  ```
-* **Rollback to base (empty state):**
-  ```bash
-  alembic downgrade base
-  ```
-
-### 5. Generate New Migration (Stage 4+)
-To create a new migration automatically based on changes in SQLAlchemy models:
+### 2. Seed Initial Companies
+Run the idempotent seeding script:
 ```bash
-alembic revision --autogenerate -m "add_company_master_table"
+python3 -m app.scripts.seed_companies
 ```
 
-> ⚠️ **Important Warning:**
-> Autogenerated migrations must **ALWAYS** be manually inspected and reviewed before running `alembic upgrade head`. Verify that no unexpected tables or columns are modified.
+* **Idempotent Seeding Behavior:**
+  * First run: Inserts the 3 default company entities.
+  * Subsequent runs: Skips existing companies without duplicating or overwriting data.
+
+### 3. Verify Seeded Records via PostgreSQL
+```bash
+psql -d is_gocompliance_db -c "SELECT company_code, company_name, employee_code_prefix, next_employee_number, status FROM company_master ORDER BY company_code;"
+```
 
 ---
 
@@ -99,18 +98,6 @@ Copy `.env.example` to create your local `.env` configuration:
 ```bash
 cp .env.example .env
 ```
-
-#### Database URL Format:
-
-* **With password authentication:**
-  ```env
-  DATABASE_URL=postgresql+psycopg://YOUR_USERNAME:YOUR_PASSWORD@localhost:5432/is_gocompliance_db
-  ```
-
-* **Without password (macOS local / peer trust):**
-  ```env
-  DATABASE_URL=postgresql+psycopg://YOUR_USERNAME@localhost:5432/is_gocompliance_db
-  ```
 
 ---
 
@@ -144,7 +131,7 @@ Execute the full test suite using `pytest`:
 pytest -v
 ```
 
-All 14 tests run in isolation using mocking (no real database connection required for unit tests).
+All 25 unit tests run in isolation using mocking (no real database connection required for unit tests).
 
 ---
 
@@ -154,38 +141,47 @@ All 14 tests run in isolation using mocking (no real database connection require
 backend/
 ├── alembic/
 │   ├── versions/
-│   │   └── f6d28a5264ee_baseline_database.py  # Empty baseline revision
-│   ├── env.py                                 # Alembic environment with Base.metadata & settings binding
-│   ├── script.py.mako                         # Migration template
+│   │   ├── f6d28a5264ee_baseline_database.py       # Empty baseline revision
+│   │   └── b445258097c2_create_company_master.py   # Company Master migration
+│   ├── env.py                                      # Alembic environment with Base.metadata & settings binding
+│   ├── script.py.mako                              # Migration template
 │   └── README
-├── alembic.ini                                # Alembic configuration without secrets
+├── alembic.ini                                     # Alembic configuration without secrets
 ├── app/
 │   ├── __init__.py
-│   ├── main.py                                # Main CRM FastAPI application (Port 8000)
-│   ├── admin_app.py                           # Database Admin placeholder application (Port 8001)
+│   ├── main.py                                     # Main CRM FastAPI application (Port 8000)
+│   ├── admin_app.py                                # Database Admin placeholder application (Port 8001)
 │   ├── api/
 │   │   ├── __init__.py
-│   │   └── health.py                          # Health check endpoints (/api/health, /api/health/database)
+│   │   └── health.py                               # Health check endpoints (/api/health, /api/health/database)
 │   ├── core/
 │   │   ├── __init__.py
-│   │   └── config.py                          # Pydantic BaseSettings with credentials masking
+│   │   └── config.py                               # Pydantic BaseSettings with credentials masking
 │   ├── database/
 │   │   ├── __init__.py
-│   │   ├── base.py                            # SQLAlchemy 2 DeclarativeBase
-│   │   └── session.py                         # Engine, SessionLocal factory, and get_db dependency
+│   │   ├── base.py                                 # SQLAlchemy 2 DeclarativeBase
+│   │   └── session.py                              # Engine, SessionLocal factory, and get_db dependency
 │   ├── models/
-│   │   └── __init__.py                        # Models placeholder (Stage 4)
+│   │   ├── __init__.py                             # Model exports
+│   │   └── company.py                              # Company SQLAlchemy 2 model (company_master)
+│   ├── schemas/
+│   │   ├── __init__.py                             # Schema exports
+│   │   └── company.py                              # Company Pydantic schemas (Base, Create, Update, Read)
+│   ├── scripts/
+│   │   ├── __init__.py
+│   │   └── seed_companies.py                       # Idempotent company seeding script
 │   └── services/
 │       ├── __init__.py
-│       └── database_health.py                 # Safe database health checking service
+│       └── database_health.py                      # Safe database health checking service
 ├── tests/
 │   ├── __init__.py
-│   ├── test_alembic.py                        # Alembic configuration and baseline safety tests
-│   ├── test_database.py                       # Session, config, and database health unit tests
-│   └── test_health.py                         # API and admin health check tests
-├── .env                                       # Local uncommitted environment configuration
-├── .env.example                               # Safe environment variable template
-├── .gitignore                                 # Backend gitignore rules
-├── requirements.txt                           # Backend dependencies
-└── README.md                                  # Backend documentation
+│   ├── test_alembic.py                             # Alembic configuration and baseline safety tests
+│   ├── test_company.py                             # Company model, schemas, migration, and seed tests
+│   ├── test_database.py                            # Session, config, and database health unit tests
+│   └── test_health.py                              # API and admin health check tests
+├── .env                                            # Local uncommitted environment configuration
+├── .env.example                                    # Safe environment variable template
+├── .gitignore                                      # Backend gitignore rules
+├── requirements.txt                                # Backend dependencies
+└── README.md                                       # Backend documentation
 ```

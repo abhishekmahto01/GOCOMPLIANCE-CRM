@@ -54,9 +54,11 @@ def test_config_missing_database_url() -> None:
     assert "DATABASE_URL is not configured" in str(exc_info.value)
 
 
-def test_no_tables_created_in_stage_2() -> None:
-    """Verify that Base.metadata contains no tables in Stage 2."""
-    assert len(Base.metadata.tables) == 0
+def test_registered_tables_in_metadata() -> None:
+    """Verify that only company_master is registered in Base.metadata for Stage 4."""
+    import app.models  # noqa: F401
+    assert "company_master" in Base.metadata.tables
+    assert len(Base.metadata.tables) == 1
 
 
 def test_database_health_service_success() -> None:

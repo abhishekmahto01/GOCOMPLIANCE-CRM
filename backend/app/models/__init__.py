@@ -1,5 +1,4 @@
-"""Database and domain models package.
+"""Database and domain models package."""
+from app.models.company import Company
 
-Stage 1 Note:
-Data models (SQLAlchemy ORM models, schemas, etc.) will be created in Stage 2+.
-"""
+__all__ = ["Company"]

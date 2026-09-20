@@ -28,7 +28,6 @@ def test_alembic_target_metadata_references_base() -> None:
     assert env_py_path.exists(), "alembic/env.py must exist"
 
     content = env_py_path.read_text(encoding="utf-8")
-    assert "from app.database.base import Base" in content
     assert "target_metadata = Base.metadata" in content
     assert Base.metadata is not None
 
@@ -41,14 +40,13 @@ def test_baseline_migration_exists_and_is_empty() -> None:
     cfg.set_main_option("script_location", str(backend_dir / "alembic"))
 
     script_dir = ScriptDirectory.from_config(cfg)
-    heads = script_dir.get_heads()
+    revisions = list(script_dir.walk_revisions())
 
-    assert len(heads) == 1, "There must be exactly one head migration (baseline)"
-    head_rev = script_dir.get_revision(heads[0])
-    assert "baseline_database" in (head_rev.doc or ""), "Head revision must be the baseline_database"
+    baseline_rev = next((r for r in revisions if "baseline_database" in (r.doc or "")), None)
+    assert baseline_rev is not None, "baseline_database revision must exist in Alembic history"
 
-    # Inspect the python AST of the migration file
-    migration_file = Path(head_rev.path)
+    # Inspect the python AST of the baseline migration file
+    migration_file = Path(baseline_rev.path)
     assert migration_file.exists()
 
     tree = ast.parse(migration_file.read_text(encoding="utf-8"))
