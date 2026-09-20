@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -37,3 +39,49 @@ def test_admin_app_health(admin_client: TestClient) -> None:
         "status": "healthy",
         "service": "gocompliance-admin",
     }
+
+
+def test_database_health_success(main_client: TestClient) -> None:
+    """Test GET /api/health/database when database is healthy."""
+    with patch(
+        "app.api.health.check_database_health",
+        return_value=(
+            True,
+            {
+                "status": "healthy",
+                "service": "postgresql",
+                "database": "is_gocompliance_db",
+            },
+        ),
+    ):
+        response = main_client.get("/api/health/database")
+        assert response.status_code == 200
+        assert response.json() == {
+            "status": "healthy",
+            "service": "postgresql",
+            "database": "is_gocompliance_db",
+            "detail": None,
+        }
+
+
+def test_database_health_failure(main_client: TestClient) -> None:
+    """Test GET /api/health/database returns 503 when database is unreachable."""
+    with patch(
+        "app.api.health.check_database_health",
+        return_value=(
+            False,
+            {
+                "status": "unhealthy",
+                "service": "postgresql",
+                "detail": "Database connection unavailable",
+            },
+        ),
+    ):
+        response = main_client.get("/api/health/database")
+        assert response.status_code == 503
+        assert response.json() == {
+            "status": "unhealthy",
+            "service": "postgresql",
+            "database": None,
+            "detail": "Database connection unavailable",
+        }

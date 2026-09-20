@@ -1,4 +1,5 @@
 from typing import List, Union
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -21,12 +22,31 @@ class Settings(BaseSettings):
 
     # Frontend and CORS settings
     FRONTEND_ORIGIN: str = "http://localhost:5173"
-    CORS_ORIGINS: List[str] = ["http://localhost:5173"]
+    CORS_ORIGINS: Union[str, List[str]] = ["http://localhost:5173"]
 
-    # Database URL placeholder (Stage 2 implementation)
-    DATABASE_URL: str | None = None
+    # Database settings
+    DATABASE_URL: str = ""
+    DB_POOL_PRE_PING: bool = True
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 10
+    DB_POOL_TIMEOUT: int = 30
+    DB_CONNECT_TIMEOUT: int = 5
 
-    @field_validator("CORS_ORIGINS", mode="before")
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def validate_database_url(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError(
+                "DATABASE_URL is not configured. Please define DATABASE_URL in your .env file or environment."
+            )
+        url = v.strip()
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql+psycopg://", 1)
+        elif url.startswith("postgresql://") and not url.startswith("postgresql+"):
+            url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+        return url
+
+    @field_validator("CORS_ORIGINS", mode="after")
     @classmethod
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
         if isinstance(v, str):
@@ -40,6 +60,18 @@ class Settings(BaseSettings):
         elif isinstance(v, list):
             return v
         return [str(v)]
+
+    @property
+    def masked_database_url(self) -> str:
+        """Return DATABASE_URL with password masked for safe logging/display."""
+        if not self.DATABASE_URL:
+            return ""
+        try:
+            from sqlalchemy.engine.url import make_url
+            url = make_url(self.DATABASE_URL)
+            return url.render_as_string(hide_password=True)
+        except Exception:
+            return "postgresql+psycopg://***"
 
     model_config = SettingsConfigDict(
         env_file=".env",
