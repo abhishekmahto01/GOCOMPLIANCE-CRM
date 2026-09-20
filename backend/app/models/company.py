@@ -11,6 +11,7 @@ from app.database.base import Base
 
 if TYPE_CHECKING:
     from app.models.department import Department
+    from app.models.designation import Designation
 
 
 class Company(Base):
@@ -103,6 +104,14 @@ class Company(Base):
     # ORM Relationship to Department (Restrictive deletion; no cascade delete)
     departments: Mapped[List["Department"]] = relationship(
         "Department",
+        back_populates="company",
+        cascade="save-update, merge",
+        passive_deletes=True,
+    )
+
+    # ORM Relationship to Designation (Restrictive deletion; no cascade delete)
+    designations: Mapped[List["Designation"]] = relationship(
+        "Designation",
         back_populates="company",
         cascade="save-update, merge",
         passive_deletes=True,

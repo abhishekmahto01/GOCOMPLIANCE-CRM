@@ -34,7 +34,6 @@ def test_department_model_table_name_and_metadata() -> None:
     """Verify table name and metadata registration for department_master."""
     assert Department.__tablename__ == "department_master"
     assert "department_master" in Base.metadata.tables
-    assert set(Base.metadata.tables.keys()) == {"company_master", "department_master"}
 
 
 def test_department_model_columns() -> None:

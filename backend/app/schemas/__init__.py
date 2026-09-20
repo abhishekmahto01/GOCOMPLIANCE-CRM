@@ -11,6 +11,12 @@ from app.schemas.department import (
     DepartmentRead,
     DepartmentUpdate,
 )
+from app.schemas.designation import (
+    DesignationBase,
+    DesignationCreate,
+    DesignationRead,
+    DesignationUpdate,
+)
 
 __all__ = [
     "CompanyBase",
@@ -21,4 +27,8 @@ __all__ = [
     "DepartmentCreate",
     "DepartmentRead",
     "DepartmentUpdate",
+    "DesignationBase",
+    "DesignationCreate",
+    "DesignationRead",
+    "DesignationUpdate",
 ]
