@@ -1,13 +1,16 @@
 """Company Master model definition."""
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import CheckConstraint, DateTime, Integer, String, func, text
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base
+
+if TYPE_CHECKING:
+    from app.models.department import Department
 
 
 class Company(Base):
@@ -95,6 +98,14 @@ class Company(Base):
         server_default=func.now(),
         onupdate=func.now(),
         comment="Timestamp when company record was last updated (UTC)",
+    )
+
+    # ORM Relationship to Department (Restrictive deletion; no cascade delete)
+    departments: Mapped[List["Department"]] = relationship(
+        "Department",
+        back_populates="company",
+        cascade="save-update, merge",
+        passive_deletes=True,
     )
 
     def __repr__(self) -> str:

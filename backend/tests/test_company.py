@@ -28,10 +28,9 @@ from app.scripts.seed_companies import (
 # ==============================================================================
 
 def test_company_model_table_name_and_metadata() -> None:
-    """Verify table name and that only company_master is in Base.metadata for Stage 4."""
+    """Verify table name and metadata registration for company_master."""
     assert Company.__tablename__ == "company_master"
     assert "company_master" in Base.metadata.tables
-    assert len(Base.metadata.tables) == 1, "Only company_master should be registered in Base.metadata in Stage 4"
 
 
 def test_company_model_columns() -> None:
