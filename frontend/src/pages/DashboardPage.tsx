@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { DashboardHeader } from '../components/dashboard/DashboardHeader';
 import { ModuleCard, type ModuleData } from '../components/dashboard/ModuleCard';
 import { ChangePasswordModal } from '../components/dashboard/ChangePasswordModal';
@@ -29,35 +30,8 @@ const MODULES_DATA: ModuleData[] = [
 
 export const DashboardPage: React.FC = () => {
   const { session, user, logout, canAccessModule } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
-
-  // Dark / Light Mode state with localStorage persistence
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    try {
-      const savedTheme = localStorage.getItem('gocompliances-theme');
-      return savedTheme === 'dark' ? 'dark' : 'light';
-    } catch {
-      return 'light';
-    }
-  });
-
-  // Apply 'dark' class to root HTML element
-  useEffect(() => {
-    try {
-      if (theme === 'dark') {
-        document.documentElement.classList.add('dark');
-        localStorage.setItem('gocompliances-theme', 'dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-    } catch (err) {
-      console.error('Error persisting theme:', err);
-    }
-  }, [theme]);
-
-  const toggleTheme = () => {
-    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
-  };
 
   // Toast notification state
   const [toasts, setToasts] = useState<ToastMessage[]>([]);

@@ -31,8 +31,24 @@ export interface Employee {
   designation_code?: string | null;
   manager_name?: string | null;
   manager_employee_code?: string | null;
+  credentials_initialized?: boolean;
+  must_change_password?: boolean;
+  login_status?: string;
+  credentials_initialized_at?: string | null;
+  password_changed_at?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface TrialLoginInitializeResponse {
+  user_id: string;
+  employee_code: string;
+  official_email: string;
+  credentials_initialized: boolean;
+  must_change_password: boolean;
+  login_status: string;
+  credentials_initialized_at?: string | null;
+  message: string;
 }
 
 export interface EmployeeCreatePayload {

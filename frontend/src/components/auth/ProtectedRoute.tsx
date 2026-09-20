@@ -19,7 +19,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   requiredModule,
   requiredAction = 'view',
 }) => {
-  const { isAuthenticated, isLoading, hasPermission } = useAuth();
+  const { isAuthenticated, mustChangePassword, isLoading, hasPermission } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
@@ -37,6 +37,11 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // Force mandatory password change on restricted first-login session
+  if (mustChangePassword) {
+    return <Navigate to="/change-password-required" replace />;
   }
 
   if (requiredModule && !hasPermission(requiredModule, requiredAction)) {

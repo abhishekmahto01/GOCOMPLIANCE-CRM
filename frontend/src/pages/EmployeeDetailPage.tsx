@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import {
   Edit2,
   Building2,
@@ -16,42 +16,13 @@ import { getEmployeeByIdApi, updateEmployeeStatusApi } from '../api/employees';
 import type { Employee, AccountStatus } from '../types/employee';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { ConfirmationModal } from '../components/common/ConfirmationModal';
-import { AdminHeader } from '../components/dashboard/AdminHeader';
 import { Button } from '../components/ui/button';
 import { ToastContainer, type ToastMessage } from '../components/ui/toast';
 import { extractErrorMessage } from '../api/client';
 
 export const EmployeeDetailPage: React.FC = () => {
   const { userId } = useParams<{ userId: string }>();
-  const navigate = useNavigate();
-  const { hasPermission, logout } = useAuth();
-
-  // Dark / Light Theme state
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    try {
-      const saved = localStorage.getItem('gocompliances-theme');
-      return saved === 'dark' ? 'dark' : 'light';
-    } catch {
-      return 'light';
-    }
-  });
-
-  useEffect(() => {
-    try {
-      if (theme === 'dark') {
-        document.documentElement.classList.add('dark');
-        localStorage.setItem('gocompliances-theme', 'dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-    } catch (err) {
-      console.error('Error persisting theme:', err);
-    }
-  }, [theme]);
-
-  const toggleTheme = () => {
-    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
-  };
+  const { hasPermission } = useAuth();
 
   // Toast state
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -134,14 +105,9 @@ export const EmployeeDetailPage: React.FC = () => {
     }
   };
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login', { replace: true });
-  };
-
   if (isLoading) {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+      <div className="min-h-[300px] w-full flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
           <span className="text-sm font-medium text-slate-500 dark:text-slate-400">
@@ -154,7 +120,7 @@ export const EmployeeDetailPage: React.FC = () => {
 
   if (isNotFound) {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4">
+      <div className="min-h-[300px] w-full flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white dark:bg-slate-900 rounded-3xl p-8 border border-slate-200 dark:border-slate-800 shadow-xl text-center space-y-4">
           <AlertCircle className="w-12 h-12 text-rose-500 mx-auto" />
           <h2 className="text-xl font-bold text-slate-900 dark:text-white">
@@ -177,7 +143,7 @@ export const EmployeeDetailPage: React.FC = () => {
 
   if (isForbidden) {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4">
+      <div className="min-h-[300px] w-full flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white dark:bg-slate-900 rounded-3xl p-8 border border-slate-200 dark:border-slate-800 shadow-xl text-center space-y-4">
           <ShieldAlert className="w-12 h-12 text-amber-500 mx-auto" />
           <h2 className="text-xl font-bold text-slate-900 dark:text-white">
@@ -200,7 +166,7 @@ export const EmployeeDetailPage: React.FC = () => {
 
   if (errorMessage) {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4">
+      <div className="min-h-[300px] w-full flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white dark:bg-slate-900 rounded-3xl p-8 border border-slate-200 dark:border-slate-800 shadow-xl text-center space-y-4">
           <AlertCircle className="w-12 h-12 text-rose-500 mx-auto" />
           <h2 className="text-xl font-bold text-slate-900 dark:text-white">
@@ -224,36 +190,9 @@ export const EmployeeDetailPage: React.FC = () => {
   if (!employee) return null;
 
   return (
-    <div
-      className={`min-h-screen w-full flex flex-col font-sans transition-colors duration-300 relative overflow-x-hidden ${
-        theme === 'dark' ? 'dark bg-slate-950 text-slate-100' : 'bg-[#f8faff] text-slate-800'
-      }`}
-    >
-      {/* Ambience */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/3 w-[800px] h-[500px] rounded-full bg-gradient-to-b from-blue-300/20 via-sky-200/10 to-transparent dark:from-blue-900/15 dark:via-indigo-950/10 blur-3xl" />
-        <div className="absolute top-1/3 -left-32 w-[550px] h-[550px] rounded-full bg-cyan-200/15 dark:bg-cyan-900/10 blur-3xl" />
-        <div className="absolute top-1/2 -right-32 w-[550px] h-[550px] rounded-full bg-blue-300/15 dark:bg-indigo-900/10 blur-3xl" />
-      </div>
-
-      {/* Header */}
-      <div className="relative z-20 shrink-0">
-        <AdminHeader
-          breadcrumbs={[
-            { label: 'Administration', href: '/admin' },
-            { label: 'Employee Directory', href: '/admin/employees' },
-            { label: employee.employee_code },
-          ]}
-          theme={theme}
-          onToggleTheme={toggleTheme}
-          onLogout={handleLogout}
-        />
-      </div>
-
-      {/* Main Content */}
-      <main className="relative z-10 flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
-        {/* Top Profile Summary Card */}
-        <div className="p-6 sm:p-8 rounded-3xl bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200/80 dark:border-slate-800 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+    <div className="max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+      {/* Top Profile Summary Card */}
+      <div className="p-6 sm:p-8 rounded-3xl bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200/80 dark:border-slate-800 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
           <div className="flex items-center gap-4 sm:gap-6">
             <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center font-extrabold text-2xl sm:text-3xl shadow-lg shrink-0">
               {employee.first_name.charAt(0)}
@@ -437,7 +376,6 @@ export const EmployeeDetailPage: React.FC = () => {
             </dl>
           </div>
         </div>
-      </main>
 
       {/* Status Modal */}
       <ConfirmationModal

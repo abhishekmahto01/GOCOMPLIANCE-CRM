@@ -6,6 +6,7 @@ import type {
   EmployeeStatusUpdatePayload,
   EmployeeUpdatePayload,
   PaginatedEmployees,
+  TrialLoginInitializeResponse,
 } from '../types/employee';
 
 export async function getEmployeesApi(
@@ -52,3 +53,13 @@ export async function updateEmployeeStatusApi(
   const response = await apiClient.patch<Employee>(`/admin/employees/${userId}/status`, payload);
   return response.data;
 }
+
+export async function initializeTrialLoginApi(
+  userId: string
+): Promise<TrialLoginInitializeResponse> {
+  const response = await apiClient.post<TrialLoginInitializeResponse>(
+    `/admin/employees/${userId}/initialize-trial-login`
+  );
+  return response.data;
+}
+

@@ -100,6 +100,31 @@ def get_current_active_user(
     return current_user
 
 
+def require_fully_activated_user(
+    current_user: User = Depends(get_current_active_user),
+) -> User:
+    """Ensure the user is active AND has completed mandatory first-login password change.
+
+    Users with must_change_password=True are in restricted trial session and cannot access
+    business modules until they establish a new permanent password.
+
+    Args:
+        current_user: Active User instance from get_current_active_user.
+
+    Returns:
+        The validated fully activated User instance.
+
+    Raises:
+        HTTPException: 403 Forbidden if user still must change their temporary password.
+    """
+    if current_user.must_change_password:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Mandatory password change required before accessing CRM modules.",
+        )
+    return current_user
+
+
 def require_module_permission(
     module_code: str,
     action: str = "view",
@@ -118,12 +143,13 @@ def require_module_permission(
         Callable FastAPI dependency that resolves to the UserModulePermission instance.
 
     Raises:
-        HTTPException: 403 Forbidden if the user lacks active permission for the action.
+        HTTPException: 403 Forbidden if the user lacks active permission for the action
+                       or has not completed mandatory password change.
     """
     from app.services import permissions
 
     def _permission_dependency(
-        current_user: User = Depends(get_current_active_user),
+        current_user: User = Depends(require_fully_activated_user),
         session: Session = Depends(get_db),
     ):
         if not permissions.has_permission(session, current_user, module_code, action):
@@ -135,3 +161,4 @@ def require_module_permission(
         return permission
 
     return _permission_dependency
+

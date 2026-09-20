@@ -1,23 +1,28 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider } from './context/AuthContext';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
-import { AdminLandingPage } from './pages/AdminLandingPage';
 import { EmployeeListPage } from './pages/EmployeeListPage';
 import { EmployeeFormPage } from './pages/EmployeeFormPage';
 import { EmployeeDetailPage } from './pages/EmployeeDetailPage';
 import { AdminPlaceholderPage } from './pages/AdminPlaceholderPage';
+import { ChangePasswordRequiredPage } from './pages/ChangePasswordRequiredPage';
+import { LoginCredentialsPage } from './pages/LoginCredentialsPage';
 import { UnauthorizedPage } from './pages/UnauthorizedPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { PublicRoute } from './components/auth/PublicRoute';
+import { AdminLayout } from './components/admin/AdminLayout';
+import { AdminIndexRedirect } from './components/admin/AdminIndexRedirect';
 
 export const App: React.FC = () => {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Routes>
+    <ThemeProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
           {/* Public Login Route */}
           <Route
             path="/login"
@@ -26,6 +31,12 @@ export const App: React.FC = () => {
                 <LoginPage />
               </PublicRoute>
             }
+          />
+
+          {/* Mandatory First-Login Password Change Route */}
+          <Route
+            path="/change-password-required"
+            element={<ChangePasswordRequiredPage />}
           />
 
           {/* Protected Main CRM Dashboard */}
@@ -38,67 +49,74 @@ export const App: React.FC = () => {
             }
           />
 
-          {/* Protected Admin Module Landing Page */}
+          {/* Protected Administration Module (Nested Layout with Collapsible Sidebar) */}
           <Route
             path="/admin"
             element={
               <ProtectedRoute requiredModule="ADMIN" requiredAction="view">
-                <AdminLandingPage />
+                <AdminLayout />
               </ProtectedRoute>
             }
-          />
+          >
+            {/* Index Route redirects to first authorized child */}
+            <Route index element={<AdminIndexRedirect />} />
 
-          {/* Protected Employee Management Routes */}
-          <Route
-            path="/admin/employees"
-            element={
-              <ProtectedRoute requiredModule="ADMIN_EMPLOYEES" requiredAction="view">
-                <EmployeeListPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/employees/new"
-            element={
-              <ProtectedRoute requiredModule="ADMIN_EMPLOYEES" requiredAction="create">
-                <EmployeeFormPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/employees/:userId"
-            element={
-              <ProtectedRoute requiredModule="ADMIN_EMPLOYEES" requiredAction="view">
-                <EmployeeDetailPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/employees/:userId/edit"
-            element={
-              <ProtectedRoute requiredModule="ADMIN_EMPLOYEES" requiredAction="edit">
-                <EmployeeFormPage />
-              </ProtectedRoute>
-            }
-          />
+            {/* Employee Management Routes */}
+            <Route
+              path="employees"
+              element={
+                <ProtectedRoute requiredModule="ADMIN_EMPLOYEES" requiredAction="view">
+                  <EmployeeListPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="employees/new"
+              element={
+                <ProtectedRoute requiredModule="ADMIN_EMPLOYEES" requiredAction="create">
+                  <EmployeeFormPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="employees/:userId"
+              element={
+                <ProtectedRoute requiredModule="ADMIN_EMPLOYEES" requiredAction="view">
+                  <EmployeeDetailPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="employees/:userId/edit"
+              element={
+                <ProtectedRoute requiredModule="ADMIN_EMPLOYEES" requiredAction="edit">
+                  <EmployeeFormPage />
+                </ProtectedRoute>
+              }
+            />
 
-          {/* Protected Admin Placeholder Routes */}
-          <Route
-            path="/admin/access"
-            element={
-              <ProtectedRoute requiredModule="ADMIN" requiredAction="view">
-                <AdminPlaceholderPage featureKey="access" />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/account-activation"
-            element={
-              <ProtectedRoute requiredModule="ADMIN" requiredAction="view">
-                <AdminPlaceholderPage featureKey="activation" />
-              </ProtectedRoute>
-            }
-          />
+            {/* User Control Routes */}
+            <Route
+              path="access"
+              element={
+                <ProtectedRoute requiredModule="ADMIN" requiredAction="view">
+                  <AdminPlaceholderPage featureKey="access" />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="account-activation"
+              element={
+                <ProtectedRoute requiredModule="ADMIN_EMPLOYEES" requiredAction="view">
+                  <LoginCredentialsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="login-credentials"
+              element={<Navigate to="/admin/account-activation" replace />}
+            />
+          </Route>
 
           {/* 403 Forbidden Route */}
           <Route path="/unauthorized" element={<UnauthorizedPage />} />
@@ -111,6 +129,7 @@ export const App: React.FC = () => {
         </Routes>
       </BrowserRouter>
     </AuthProvider>
+  </ThemeProvider>
   );
 };
 

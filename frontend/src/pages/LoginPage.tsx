@@ -14,7 +14,7 @@ import { Input } from '../components/ui/input';
 import { extractErrorMessage } from '../api/client';
 
 export const LoginPage: React.FC = () => {
-  const { isAuthenticated, login } = useAuth();
+  const { isAuthenticated, mustChangePassword, login } = useAuth();
   const navigate = useNavigate();
 
   const [isLoading, setIsLoading] = useState(false);
@@ -33,9 +33,13 @@ export const LoginPage: React.FC = () => {
   // Redirect already authenticated users who manually visit /login (when not actively transitioning)
   useEffect(() => {
     if (isAuthenticated && !showTransition) {
-      navigate('/dashboard', { replace: true });
+      if (mustChangePassword) {
+        navigate('/change-password-required', { replace: true });
+      } else {
+        navigate('/dashboard', { replace: true });
+      }
     }
-  }, [isAuthenticated, showTransition, navigate]);
+  }, [isAuthenticated, mustChangePassword, showTransition, navigate]);
 
   // Toast Helper
   const addToast = (type: 'success' | 'error' | 'info', title: string, message: string) => {
@@ -56,9 +60,13 @@ export const LoginPage: React.FC = () => {
     setAuthError(undefined);
 
     try {
-      await login(credentials);
-      // Login succeeded; start airplane transition
-      setShowTransition(true);
+      const res = await login(credentials);
+      if (res.must_change_password) {
+        navigate('/change-password-required', { replace: true });
+      } else {
+        // Login succeeded normally; start airplane transition
+        setShowTransition(true);
+      }
     } catch (err: unknown) {
       const errorMsg = extractErrorMessage(err);
       setAuthError(errorMsg);

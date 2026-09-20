@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { BrandLogo } from '../auth/BrandLogo';
 import { ThemeToggle } from './ThemeToggle';
 import { LiveClock } from './LiveClock';
-import { LogOut, ChevronRight, Home, KeyRound } from 'lucide-react';
+import { LogOut, ChevronRight, Home, KeyRound, Menu } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 export interface BreadcrumbItem {
@@ -17,6 +17,7 @@ export interface AdminHeaderProps {
   onToggleTheme: () => void;
   onOpenPasswordModal?: () => void;
   onLogout: () => void;
+  onOpenMobileMenu?: () => void;
 }
 
 export const AdminHeader: React.FC<AdminHeaderProps> = ({
@@ -25,6 +26,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
   onToggleTheme,
   onOpenPasswordModal,
   onLogout,
+  onOpenMobileMenu,
 }) => {
   const { session, user } = useAuth();
   const username = session.username || user?.employee_code || 'Admin';
@@ -34,8 +36,19 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
   return (
     <header className="w-full bg-white/80 dark:bg-slate-900/85 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800 px-4 sm:px-8 py-3 transition-colors duration-300">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
-        {/* Left: Brand Identity & Breadcrumbs */}
-        <div className="flex flex-wrap items-center gap-4 self-start md:self-center">
+        {/* Left: Mobile Drawer Trigger + Brand Identity & Breadcrumbs */}
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-4 self-start md:self-center">
+          {onOpenMobileMenu && (
+            <button
+              type="button"
+              onClick={onOpenMobileMenu}
+              className="p-1.5 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden transition border border-slate-200 dark:border-slate-700"
+              aria-label="Open Navigation Menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+          )}
+
           <Link to="/dashboard" className="shrink-0">
             <BrandLogo showTagline={false} theme={isDark ? 'light' : 'dark'} size="sm" />
           </Link>

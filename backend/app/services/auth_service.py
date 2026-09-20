@@ -340,6 +340,14 @@ def change_user_password(
             detail="New password cannot be identical to the current password",
         )
 
+    # Reject setting new password to the temporary trial password
+    trial_pwd = settings.TRIAL_DEFAULT_PASSWORD
+    if (trial_pwd and new_password == trial_pwd.strip()) or new_password == "12345":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password cannot be the trial default temporary password",
+        )
+
     now = datetime.now(timezone.utc)
     user.password_hash = hash_password(new_password)
     user.must_change_password = False

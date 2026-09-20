@@ -11,9 +11,12 @@ interface PublicRouteProps {
  * If the user is already authenticated, redirects them to /dashboard.
  */
 export const PublicRoute: React.FC<PublicRouteProps> = ({ children }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, mustChangePassword } = useAuth();
 
   if (isAuthenticated) {
+    if (mustChangePassword) {
+      return <Navigate to="/change-password-required" replace />;
+    }
     return <Navigate to="/dashboard" replace />;
   }
 

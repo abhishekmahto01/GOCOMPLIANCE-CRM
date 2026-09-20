@@ -16,4 +16,5 @@ export interface AccessibleModule {
   can_delete: boolean;
   can_approve: boolean;
   data_scope: DataScope;
+  child_modules?: AccessibleModule[];
 }

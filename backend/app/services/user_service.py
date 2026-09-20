@@ -1,4 +1,5 @@
 """User / Employee domain service and repository logic."""
+from datetime import datetime, timezone
 import math
 import uuid
 from typing import List, Optional, Tuple
@@ -6,13 +7,32 @@ from typing import List, Optional, Tuple
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.config import settings
+from app.core.security import hash_password
 from app.models.company import Company
 from app.models.department import Department
 from app.models.designation import Designation
 from app.models.user import User
-from app.schemas.user import ALLOWED_ACCOUNT_STATUSES, EmployeeRead, UserCreate, UserUpdate
+from app.schemas.user import (
+    ALLOWED_ACCOUNT_STATUSES,
+    EmployeeRead,
+    TrialLoginInitializeResponse,
+    UserCreate,
+    UserUpdate,
+)
 from app.services.employee_code import generate_employee_code
 from app.services.permissions import DataScopeContext, get_team_user_ids
+
+
+def compute_login_status(user: User) -> str:
+    """Derive human-readable login credential status badge."""
+    if user.account_status in {"INACTIVE", "SUSPENDED"}:
+        return "Disabled"
+    if not user.password_hash:
+        return "Not Initialized"
+    if user.must_change_password:
+        return "Password Change Required"
+    return "Active Login"
 
 
 def validate_user_cross_company_integrity(
@@ -91,12 +111,15 @@ def validate_user_cross_company_integrity(
 def create_user(session: Session, user_in: UserCreate) -> User:
     """Atomically validate, generate employee code, and create a new User record.
 
+    If trial password mode is enabled in configuration, provisions hashed initial password.
+
     Steps:
     1. Cross-company integrity validation (Department, Designation, Manager).
     2. Uniqueness check for official email (case-insensitive).
     3. Row-level locked employee code generation on Company.
-    4. User record insertion.
-    5. Atomic transaction commit.
+    4. Optional trial password hashing if trial mode is enabled.
+    5. User record insertion.
+    6. Atomic transaction commit.
 
     Args:
         session: Active SQLAlchemy session.
@@ -137,7 +160,17 @@ def create_user(session: Session, user_in: UserCreate) -> User:
             company_id=user_in.company_id,
         )
 
-        # Step 4: Create User ORM instance
+        # Step 4: Handle trial credentials provisioning
+        trial_password = settings.get_effective_trial_password()
+        password_hash = None
+        credentials_initialized_at = None
+        must_change_password = True
+        if trial_password:
+            password_hash = hash_password(trial_password)
+            credentials_initialized_at = datetime.now(timezone.utc)
+            must_change_password = True
+
+        # Step 5: Create User ORM instance
         user = User(
             user_id=uuid.uuid4(),
             employee_code=employee_code,
@@ -154,6 +187,9 @@ def create_user(session: Session, user_in: UserCreate) -> User:
             date_of_joining=user_in.date_of_joining,
             employment_type=user_in.employment_type,
             account_status=user_in.account_status,
+            password_hash=password_hash,
+            must_change_password=must_change_password,
+            credentials_initialized_at=credentials_initialized_at,
         )
 
         session.add(user)
@@ -183,7 +219,7 @@ def get_employee_by_id(session: Session, user_id: uuid.UUID) -> Optional[User]:
 
 
 def serialize_employee_read(user: User) -> EmployeeRead:
-    """Convert an ORM User model into an EmployeeRead schema with relation labels."""
+    """Convert an ORM User model into an EmployeeRead schema with relation labels and credential statuses."""
     manager_name = None
     manager_code = None
     if user.manager:
@@ -214,9 +250,78 @@ def serialize_employee_read(user: User) -> EmployeeRead:
         date_of_joining=user.date_of_joining,
         employment_type=user.employment_type,
         account_status=user.account_status,
+        credentials_initialized=bool(user.password_hash is not None),
+        must_change_password=bool(user.must_change_password),
+        login_status=compute_login_status(user),
+        credentials_initialized_at=user.credentials_initialized_at,
+        password_changed_at=user.password_changed_at,
         created_at=user.created_at or datetime.now(timezone.utc),
         updated_at=user.updated_at or datetime.now(timezone.utc),
     )
+
+
+def initialize_trial_login(
+    session: Session,
+    user_id: uuid.UUID,
+    current_user: User,
+    scope_context: DataScopeContext,
+) -> TrialLoginInitializeResponse:
+    """Initialize trial login credentials for an uninitialized employee.
+
+    Requirements:
+    1. Trial mode must be enabled and not in production.
+    2. Target employee must exist and be within the caller's data scope.
+    3. Target employee must be in ACTIVE account_status.
+    4. Target employee must not already have a password.
+    5. Hash configured trial password and set must_change_password = True.
+    6. Record credentials_initialized_at timestamp.
+    7. Commit transaction and return safe TrialLoginInitializeResponse.
+    """
+    trial_password = settings.get_effective_trial_password()
+    if not trial_password:
+        raise ValueError(
+            "Trial password provisioning is currently disabled or not configured in environment settings."
+        )
+
+    target_user = get_employee_by_id(session, user_id)
+    if not target_user:
+        raise ValueError(f"Employee with ID '{user_id}' not found")
+
+    if not scope_context.is_user_permitted(
+        target_user.user_id, target_user.company_id, target_user.department_id
+    ):
+        raise PermissionError("Access denied. Employee is outside your authorized data scope.")
+
+    if target_user.account_status != "ACTIVE":
+        raise ValueError(
+            f"Cannot initialize login credentials for employee with '{target_user.account_status}' status. Employee must be ACTIVE."
+        )
+
+    if target_user.password_hash is not None:
+        raise ValueError(
+            f"Login credentials are already initialized for employee '{target_user.employee_code}'."
+        )
+
+    now = datetime.now(timezone.utc)
+    target_user.password_hash = hash_password(trial_password)
+    target_user.must_change_password = True
+    target_user.credentials_initialized_at = now
+
+    session.flush()
+    session.commit()
+    session.refresh(target_user)
+
+    return TrialLoginInitializeResponse(
+        user_id=target_user.user_id,
+        employee_code=target_user.employee_code,
+        official_email=target_user.official_email,
+        credentials_initialized=True,
+        must_change_password=True,
+        login_status="Password Change Required",
+        credentials_initialized_at=target_user.credentials_initialized_at,
+        message="Trial login credentials have been initialized. The employee must change the temporary password on first login.",
+    )
+
 
 
 def list_employees(

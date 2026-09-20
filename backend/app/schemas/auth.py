@@ -86,6 +86,27 @@ class ChangePasswordRequest(BaseModel):
     )
 
 
+class ChangeInitialPasswordRequest(BaseModel):
+    """Schema for mandatory first-login password change."""
+
+    current_password: Optional[str] = Field(
+        None,
+        max_length=128,
+        description="Current temporary password if supplied",
+    )
+    new_password: str = Field(
+        ...,
+        min_length=10,
+        max_length=128,
+        description="New password meeting complexity criteria",
+    )
+    confirm_password: Optional[str] = Field(
+        None,
+        max_length=128,
+        description="Confirmation of new password",
+    )
+
+
 class CurrentUserRead(BaseModel):
     """Schema for currently authenticated user profile information (/api/auth/me)."""
 

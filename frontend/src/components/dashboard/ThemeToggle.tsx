@@ -1,23 +1,37 @@
 import React from 'react';
 import { Moon, Sun } from 'lucide-react';
+import { useTheme } from '../../context/ThemeContext';
 
 export interface ThemeToggleProps {
-  theme: 'light' | 'dark';
-  onToggle: () => void;
+  theme?: 'light' | 'dark';
+  onToggle?: () => void;
   className?: string;
 }
 
 export const ThemeToggle: React.FC<ThemeToggleProps> = ({
-  theme,
-  onToggle,
+  theme: propTheme,
+  onToggle: propOnToggle,
   className = '',
 }) => {
-  const isDark = theme === 'dark';
+  let contextTheme: 'light' | 'dark' = 'light';
+  let contextToggle = () => {};
+
+  try {
+    const context = useTheme();
+    contextTheme = context.theme;
+    contextToggle = context.toggleTheme;
+  } catch {
+    // Context unavailable, fall back to props or defaults
+  }
+
+  const activeTheme = propTheme ?? contextTheme;
+  const handleToggle = propOnToggle ?? contextToggle;
+  const isDark = activeTheme === 'dark';
 
   return (
     <button
       type="button"
-      onClick={onToggle}
+      onClick={handleToggle}
       className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 select-none
         ${
           isDark

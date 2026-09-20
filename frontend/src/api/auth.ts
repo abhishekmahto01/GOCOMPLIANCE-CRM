@@ -52,3 +52,27 @@ export async function refreshAccessTokenApi(): Promise<AuthTokenResponse> {
   }
   return data;
 }
+
+export async function changeInitialPasswordApi(payload: {
+  current_password?: string;
+  new_password: string;
+  confirm_password?: string;
+}): Promise<{ message: string }> {
+  const response = await apiClient.post<{ message: string }>(
+    '/auth/change-initial-password',
+    payload
+  );
+  return response.data;
+}
+
+export async function changePasswordApi(payload: {
+  current_password: string;
+  new_password: string;
+}): Promise<{ message: string }> {
+  const response = await apiClient.post<{ message: string }>(
+    '/auth/change-password',
+    payload
+  );
+  return response.data;
+}
+

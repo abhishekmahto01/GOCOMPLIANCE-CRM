@@ -534,6 +534,7 @@ def test_require_module_permission_dependency() -> None:
         user_id=test_user_id,
         account_status="ACTIVE",
         employee_code="CG0001",
+        must_change_password=False,
     )
     mock_session = MagicMock(spec=Session)
 

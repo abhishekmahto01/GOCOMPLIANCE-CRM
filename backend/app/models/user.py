@@ -220,6 +220,12 @@ class User(Base):
         comment="Timestamp when password was last changed (UTC)",
     )
 
+    credentials_initialized_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Timestamp when credentials were first provisioned (UTC)",
+    )
+
     token_version: Mapped[int] = mapped_column(
         Integer,
         nullable=False,

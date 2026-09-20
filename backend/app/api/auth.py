@@ -1,13 +1,15 @@
 """Authentication API routes."""
 from typing import Dict, List
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_active_user
+from app.api.deps import get_current_active_user, require_fully_activated_user
+from app.core.config import settings
 from app.database.session import get_db
 from app.models.user import User
 from app.schemas.auth import (
+    ChangeInitialPasswordRequest,
     ChangePasswordRequest,
     CurrentUserRead,
     LoginRequest,
@@ -114,7 +116,7 @@ def get_current_user_profile(
     description="Retrieve the list of accessible modules and granular action permissions for the authenticated employee.",
 )
 def get_current_user_modules(
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_fully_activated_user),
     session: Session = Depends(get_db),
 ) -> List[AccessibleModuleRead]:
     """Return navigation hierarchy and permission flags for the authenticated user."""
@@ -142,3 +144,34 @@ def change_password(
     return {
         "message": "Password changed successfully. All active sessions have been terminated. Please log in with your new password."
     }
+
+
+@router.post(
+    "/change-initial-password",
+    status_code=status.HTTP_200_OK,
+    summary="Change Initial Password",
+    description="Mandatory first-login password change for newly initialized accounts.",
+)
+def change_initial_password(
+    password_data: ChangeInitialPasswordRequest,
+    current_user: User = Depends(get_current_active_user),
+    session: Session = Depends(get_db),
+) -> Dict[str, str]:
+    """Change temporary password on mandatory first login."""
+    if password_data.confirm_password and password_data.new_password != password_data.confirm_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password and password confirmation do not match",
+        )
+
+    current_pwd = password_data.current_password or (settings.TRIAL_DEFAULT_PASSWORD or "12345")
+    change_user_password(
+        session=session,
+        user=current_user,
+        current_password=current_pwd,
+        new_password=password_data.new_password,
+    )
+    return {
+        "message": "Password changed successfully. All active sessions have been terminated. Please log in with your new password."
+    }
+

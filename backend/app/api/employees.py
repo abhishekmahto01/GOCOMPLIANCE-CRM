@@ -12,6 +12,7 @@ from app.schemas.user import (
     EmployeeRead,
     EmployeeStatusUpdate,
     PaginatedEmployeesResponse,
+    TrialLoginInitializeResponse,
     UserCreate,
     UserUpdate,
 )
@@ -194,3 +195,35 @@ def update_employee_status_endpoint(
         return user_service.serialize_employee_read(updated_user)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.post(
+    "/{user_id}/initialize-trial-login",
+    response_model=TrialLoginInitializeResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Initialize Trial Login Credentials",
+    description="Provision temporary hashed trial credentials for an employee whose credentials are not yet initialized.",
+    dependencies=[Depends(require_module_permission("ADMIN_EMPLOYEES", "approve"))],
+)
+def initialize_trial_login_endpoint(
+    user_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_user),
+    session: Session = Depends(get_db),
+) -> TrialLoginInitializeResponse:
+    """Initialize trial login for an active employee without existing credentials."""
+    scope_ctx = permissions.resolve_data_scope_context(session, current_user, "ADMIN_EMPLOYEES")
+    try:
+        return user_service.initialize_trial_login(
+            session=session,
+            user_id=user_id,
+            current_user=current_user,
+            scope_context=scope_ctx,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except ValueError as exc:
+        err_msg = str(exc)
+        if "not found" in err_msg.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=err_msg)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=err_msg)
+

@@ -26,8 +26,9 @@ interface AuthContextType {
   modules: AccessibleModule[];
   session: AuthSession;
   isAuthenticated: boolean;
+  mustChangePassword: boolean;
   isLoading: boolean;
-  login: (credentials: LoginCredentials) => Promise<void>;
+  login: (credentials: LoginCredentials) => Promise<{ must_change_password: boolean }>;
   logout: () => Promise<void>;
   refreshUserProfile: () => Promise<void>;
   hasPermission: (moduleCode: string, action: ActionType) => boolean;
@@ -52,12 +53,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      const [userData, userModules] = await Promise.all([
-        getCurrentUserApi(),
-        getAccessibleModulesApi(),
-      ]);
+      const userData = await getCurrentUserApi();
       setUser(userData);
-      setModules(userModules);
+
+      if (!userData.must_change_password) {
+        try {
+          const userModules = await getAccessibleModulesApi();
+          setModules(userModules);
+        } catch (mErr) {
+          console.error('Failed to load modules:', mErr);
+          setModules([]);
+        }
+      } else {
+        setModules([]);
+      }
     } catch (err) {
       console.error('Failed to load user profile/modules:', err);
       setUser(null);
@@ -74,8 +83,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (credentials: LoginCredentials) => {
     setIsLoading(true);
     try {
-      await loginApi(credentials);
+      const authRes = await loginApi(credentials);
       await loadUserData();
+      return { must_change_password: !!authRes.must_change_password };
     } finally {
       setIsLoading(false);
     }
@@ -94,10 +104,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  function findModuleRecursively(list: AccessibleModule[], code: string): AccessibleModule | null {
+    for (const m of list) {
+      if (m.module_code.toUpperCase() === code) return m;
+      if (m.child_modules && m.child_modules.length > 0) {
+        const found = findModuleRecursively(m.child_modules, code);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
   const hasPermission = useCallback(
     (moduleCode: string, action: ActionType): boolean => {
       const targetCode = moduleCode.trim().toUpperCase();
-      const mod = modules.find((m) => m.module_code.toUpperCase() === targetCode);
+      const mod = findModuleRecursively(modules, targetCode);
       if (!mod || !mod.can_view) return false;
 
       switch (action) {
@@ -121,7 +142,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const getEffectiveScope = useCallback(
     (moduleCode: string): DataScope | null => {
       const targetCode = moduleCode.trim().toUpperCase();
-      const mod = modules.find((m) => m.module_code.toUpperCase() === targetCode);
+      const mod = findModuleRecursively(modules, targetCode);
       if (!mod || !mod.can_view) return null;
       return mod.data_scope;
     },
@@ -153,6 +174,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     modules,
     session,
     isAuthenticated: !!user,
+    mustChangePassword: user?.must_change_password ?? false,
     isLoading,
     login,
     logout,

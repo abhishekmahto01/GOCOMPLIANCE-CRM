@@ -346,3 +346,81 @@ GROUP BY u.employee_code, u.official_email;
 > [!CAUTION]
 > **Password Security Reminder:** Never paste real credentials or password hashes into source code, Git commits, pull requests, terminal screenshots, or chat channels. Run bootstrap only in secure environments.
 
+---
+
+## Test Database Isolation & Cleanup Tooling
+
+### 1. Root Cause of Development Database Pollution
+During previous automated test runs, tests instantiated `SessionLocal()` and `TestClient(app)` which defaulted to `settings.DATABASE_URL` (pointing to `is_gocompliance_db`). Without a global test routing layer (`conftest.py`), test fixtures inserted and committed temporary test companies (`Trial Org ...`) and test users (`...@trialorg.com`) directly into the development PostgreSQL database.
+
+### 2. Dedicated Test Database Configuration
+Automated tests are now permanently isolated using `TEST_DATABASE_URL`. Tests will **never** run against the development or production database.
+
+#### Step 1: Create the Test Database
+```bash
+createdb is_gocompliance_test_db
+```
+
+#### Step 2: Configure `TEST_DATABASE_URL` in `backend/.env`
+```env
+TEST_DATABASE_URL=postgresql+psycopg://YOUR_USERNAME:YOUR_PASSWORD@localhost:5432/is_gocompliance_test_db
+```
+
+#### Safety Rules Enforced by Test Framework:
+- Tests fail immediately if `TEST_DATABASE_URL` is missing.
+- Tests fail if `TEST_DATABASE_URL` matches `DATABASE_URL`.
+- Tests fail if the database name does not contain `_test` or `test_db`.
+- Each test runs inside an isolated transaction that is rolled back after test completion, preventing data persistence.
+
+---
+
+### 3. Safe Cleanup Tool: `app.scripts.cleanup_trial_test_data`
+
+A dedicated CLI script is provided to safely preview and clean test-polluted records from the development database.
+
+#### Primary Target Identifiers:
+- `official_email LIKE '%@trialorg.com'`
+- `company_name LIKE 'Trial Org%'`
+- Dependent departments, designations, permissions, and tokens belonging exclusively to test entities.
+
+#### Protected Legitimate Records (Never Touched):
+- Employees: `CG0001` (Super Admin), `CG0002` (Muskan Gupta)
+- Companies: `GOCOMPLIANCES`, `ENTERPERNERSHIP`, `BRANDMINGO`
+
+#### Mode A: Dry-Run Preview (Default, Non-Destructive)
+```bash
+cd backend
+source .venv/bin/activate
+python -m app.scripts.cleanup_trial_test_data
+# or
+python -m app.scripts.cleanup_trial_test_data --dry-run
+```
+*Makes zero changes to the database. Displays record counts by table and previews exclusions.*
+
+#### Mode B: Explicit Deletion Execution
+```bash
+cd backend
+source .venv/bin/activate
+python -m app.scripts.cleanup_trial_test_data --execute
+```
+*Prompts the operator to confirm by typing `DELETE TRIAL TEST DATA`, runs inside an atomic transaction, deletes child records in foreign-key-safe order, and verifies that test record counts are 0 and legitimate records exist.*
+
+---
+
+### 4. Trial-Login Initialization for Existing Employee `CG0002`
+
+Employee `CG0002` (Muskan Gupta) was preserved during initial creation and migrations with `password_hash = NULL`, resulting in `credentials_initialized = false` and `must_change_password = true` (`Not Initialized` status).
+
+To provision trial credentials for `CG0002`:
+1. Log in to the CRM frontend (`http://localhost:5173/login`) as Super Admin (`CG0001`).
+2. Navigate to **Administration** -> **Login Credentials** (`/admin/account-activation`).
+3. Locate **Muskan Gupta (`CG0002`)** displaying badge `Not Initialized`.
+4. Click **Initialize Trial Login**, review the confirmation dialog, and click **Confirm & Initialize**.
+5. Alternatively, make an authorized API call:
+   ```bash
+   curl -X POST http://localhost:8000/api/admin/employees/<USER_ID>/initialize-trial-login \
+     -H "Authorization: Bearer <SUPER_ADMIN_TOKEN>"
+   ```
+6. The system hashes the locally configured trial default password (`12345`), updates `password_hash`, keeps `must_change_password = true`, and activates mandatory password setup on first login.
+
+

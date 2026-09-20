@@ -15,7 +15,6 @@ import {
   Info,
   AlertCircle,
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
 import {
   createEmployeeApi,
   getEmployeeByIdApi,
@@ -33,7 +32,6 @@ import type {
   DesignationLookup,
   ManagerLookup,
 } from '../types/lookup';
-import { AdminHeader } from '../components/dashboard/AdminHeader';
 import { Button } from '../components/ui/button';
 import { ToastContainer, type ToastMessage } from '../components/ui/toast';
 import { extractErrorMessage } from '../api/client';
@@ -61,7 +59,7 @@ const employeeFormSchema = z.object({
   manager_user_id: z.string().uuid().optional().nullable().or(z.literal('')),
   date_of_joining: z.string().min(1, 'Date of joining is required'),
   employment_type: z.enum(['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN', 'CONSULTANT']),
-  account_status: z.enum(['PENDING', 'ACTIVE', 'INACTIVE', 'SUSPENDED']),
+  account_status: z.enum(['ACTIVE', 'PENDING', 'INACTIVE', 'SUSPENDED']),
 });
 
 type EmployeeFormData = z.infer<typeof employeeFormSchema>;
@@ -70,34 +68,6 @@ export const EmployeeFormPage: React.FC = () => {
   const { userId } = useParams<{ userId: string }>();
   const isEditMode = Boolean(userId);
   const navigate = useNavigate();
-  const { logout } = useAuth();
-
-  // Dark / Light Theme state
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    try {
-      const saved = localStorage.getItem('gocompliances-theme');
-      return saved === 'dark' ? 'dark' : 'light';
-    } catch {
-      return 'light';
-    }
-  });
-
-  useEffect(() => {
-    try {
-      if (theme === 'dark') {
-        document.documentElement.classList.add('dark');
-        localStorage.setItem('gocompliances-theme', 'dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-    } catch (err) {
-      console.error('Error persisting theme:', err);
-    }
-  }, [theme]);
-
-  const toggleTheme = () => {
-    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
-  };
 
   // Toast state
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -247,14 +217,9 @@ export const EmployeeFormPage: React.FC = () => {
     }
   };
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login', { replace: true });
-  };
-
   if (isLoading) {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+      <div className="min-h-[300px] w-full flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
           <span className="text-sm font-medium text-slate-500 dark:text-slate-400">
@@ -266,42 +231,15 @@ export const EmployeeFormPage: React.FC = () => {
   }
 
   return (
-    <div
-      className={`min-h-screen w-full flex flex-col font-sans transition-colors duration-300 relative overflow-x-hidden ${
-        theme === 'dark' ? 'dark bg-slate-950 text-slate-100' : 'bg-[#f8faff] text-slate-800'
-      }`}
-    >
-      {/* Ambience */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/3 w-[800px] h-[500px] rounded-full bg-gradient-to-b from-blue-300/20 via-sky-200/10 to-transparent dark:from-blue-900/15 dark:via-indigo-950/10 blur-3xl" />
-        <div className="absolute top-1/3 -left-32 w-[550px] h-[550px] rounded-full bg-cyan-200/15 dark:bg-cyan-900/10 blur-3xl" />
-        <div className="absolute top-1/2 -right-32 w-[550px] h-[550px] rounded-full bg-blue-300/15 dark:bg-indigo-900/10 blur-3xl" />
-      </div>
-
-      {/* Header */}
-      <div className="relative z-20 shrink-0">
-        <AdminHeader
-          breadcrumbs={[
-            { label: 'Administration', href: '/admin' },
-            { label: 'Employee Directory', href: '/admin/employees' },
-            { label: isEditMode ? `Edit ${employeeCode}` : 'Add Employee' },
-          ]}
-          theme={theme}
-          onToggleTheme={toggleTheme}
-          onLogout={handleLogout}
-        />
-      </div>
-
-      {/* Main Form Content */}
-      <main className="relative z-10 flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
-        {/* Top Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0a2569] dark:text-white tracking-tight">
-                {isEditMode ? `Edit Employee (${employeeCode})` : 'Add New Employee'}
-              </h1>
-            </div>
+    <div className="max-w-4xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+      {/* Top Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0a2569] dark:text-white tracking-tight">
+              {isEditMode ? `Edit Employee (${employeeCode})` : 'Add New Employee'}
+            </h1>
+          </div>
             <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
               {isEditMode
                 ? 'Update organizational assignments, contact information, and reporting details.'
@@ -643,7 +581,6 @@ export const EmployeeFormPage: React.FC = () => {
             </Button>
           </div>
         </form>
-      </main>
 
       {/* Toasts */}
       <ToastContainer toasts={toasts} onDismiss={removeToast} />

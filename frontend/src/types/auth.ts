@@ -42,3 +42,10 @@ export interface FeatureItem {
   subtitle: string;
   iconName: 'Shield' | 'BarChart3' | 'Users' | 'FileCheck2' | string;
 }
+
+export interface ChangeInitialPasswordPayload {
+  current_password?: string;
+  new_password: string;
+  confirm_password?: string;
+}
+

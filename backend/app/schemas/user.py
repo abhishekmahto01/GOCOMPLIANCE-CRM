@@ -308,7 +308,7 @@ class UserRead(UserBase):
 
 
 class EmployeeRead(UserRead):
-    """Rich employee read schema including joined master names and codes."""
+    """Rich employee read schema including joined master names, codes, and safe credential status."""
 
     company_name: Optional[str] = None
     company_code: Optional[str] = None
@@ -318,6 +318,27 @@ class EmployeeRead(UserRead):
     designation_code: Optional[str] = None
     manager_name: Optional[str] = None
     manager_employee_code: Optional[str] = None
+    credentials_initialized: bool = False
+    must_change_password: bool = True
+    login_status: str = "Not Initialized"
+    credentials_initialized_at: Optional[datetime] = None
+    password_changed_at: Optional[datetime] = None
+
+
+class TrialLoginInitializeResponse(BaseModel):
+    """Safe response payload after initializing trial login credentials."""
+
+    user_id: uuid.UUID
+    employee_code: str
+    official_email: str
+    credentials_initialized: bool = True
+    must_change_password: bool = True
+    login_status: str = "Password Change Required"
+    credentials_initialized_at: Optional[datetime] = None
+    message: str = (
+        "Trial login credentials have been initialized. The employee must change the temporary password on first login."
+    )
+
 
 
 class EmployeeStatusUpdate(BaseModel):

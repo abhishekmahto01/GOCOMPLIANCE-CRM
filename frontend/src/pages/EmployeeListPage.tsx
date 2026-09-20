@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   Users,
   UserPlus,
@@ -29,43 +29,13 @@ import type {
 import { StatusBadge } from '../components/common/StatusBadge';
 import { Pagination } from '../components/common/Pagination';
 import { ConfirmationModal } from '../components/common/ConfirmationModal';
-import { AdminHeader } from '../components/dashboard/AdminHeader';
-import { ChangePasswordModal } from '../components/dashboard/ChangePasswordModal';
 import { ToastContainer, type ToastMessage } from '../components/ui/toast';
 import { useDebounce } from '../hooks/useDebounce';
 import { extractErrorMessage } from '../api/client';
 
 export const EmployeeListPage: React.FC = () => {
-  const { hasPermission, logout } = useAuth();
-  const navigate = useNavigate();
+  const { hasPermission } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-
-  // Dark / Light Theme state
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    try {
-      const saved = localStorage.getItem('gocompliances-theme');
-      return saved === 'dark' ? 'dark' : 'light';
-    } catch {
-      return 'light';
-    }
-  });
-
-  useEffect(() => {
-    try {
-      if (theme === 'dark') {
-        document.documentElement.classList.add('dark');
-        localStorage.setItem('gocompliances-theme', 'dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-    } catch (err) {
-      console.error('Error persisting theme:', err);
-    }
-  }, [theme]);
-
-  const toggleTheme = () => {
-    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
-  };
 
   // Toast notifications
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -79,8 +49,6 @@ export const EmployeeListPage: React.FC = () => {
   const removeToast = (id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
-
-  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
 
   // Permissions
   const canCreate = hasPermission('ADMIN_EMPLOYEES', 'create');
@@ -97,84 +65,80 @@ export const EmployeeListPage: React.FC = () => {
   const managerParam = searchParams.get('manager_user_id') || '';
   const statusParam = searchParams.get('account_status') || '';
 
-  const [searchInput, setSearchInput] = useState(searchParam);
-  const debouncedSearch = useDebounce(searchInput, 350);
-
-  // Lookups Data
-  const [companies, setCompanies] = useState<CompanyLookup[]>([]);
-  const [departments, setDepartments] = useState<DepartmentLookup[]>([]);
-  const [designations, setDesignations] = useState<DesignationLookup[]>([]);
-  const [managers, setManagers] = useState<ManagerLookup[]>([]);
-
   // Employee Data & Loading
   const [data, setData] = useState<PaginatedEmployees | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Status Change Dialog State
-  const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [targetStatus, setTargetStatus] = useState<AccountStatus>('ACTIVE');
-  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [statusModalOpen, setStatusModalOpen] = useState<boolean>(false);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState<boolean>(false);
 
-  // Synchronize debounced search with URL searchParams
+  // Dropdown Lookups
+  const [companies, setCompanies] = useState<CompanyLookup[]>([]);
+  const [departments, setDepartments] = useState<DepartmentLookup[]>([]);
+  const [designations, setDesignations] = useState<DesignationLookup[]>([]);
+  const [managers, setManagers] = useState<ManagerLookup[]>([]);
+
+  // Search Input local debounce state
+  const [searchInput, setSearchInput] = useState<string>(searchParam);
+  const debouncedSearch = useDebounce(searchInput, 350);
+
+  // Synchronize debounced search with URL param
   useEffect(() => {
-    const currentSearch = searchParams.get('search') || '';
-    if (debouncedSearch !== currentSearch) {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        if (debouncedSearch.trim()) {
-          next.set('search', debouncedSearch.trim());
-        } else {
-          next.delete('search');
-        }
-        next.set('page', '1');
-        return next;
-      });
+    if (debouncedSearch !== searchParam) {
+      updateFilter('search', debouncedSearch);
     }
-  }, [debouncedSearch, searchParams, setSearchParams]);
+  }, [debouncedSearch]);
 
-  // Load Companies lookup
+  // Load Companies Lookup on mount
   useEffect(() => {
     getLookupCompaniesApi()
       .then(setCompanies)
-      .catch((err) => console.error('Failed to load companies lookup:', err));
+      .catch((err) => console.error('Failed to load companies:', err));
   }, []);
 
-  // Load dependent lookups when companyParam changes
+  // When Company changes, update dependent lookups
   useEffect(() => {
-    getLookupDepartmentsApi(companyParam || undefined)
-      .then(setDepartments)
-      .catch((err) => console.error('Failed to load departments lookup:', err));
+    if (companyParam) {
+      getLookupDepartmentsApi(companyParam)
+        .then(setDepartments)
+        .catch((err) => console.error('Failed to load departments:', err));
 
-    getLookupDesignationsApi(companyParam || undefined)
-      .then(setDesignations)
-      .catch((err) => console.error('Failed to load designations lookup:', err));
+      getLookupDesignationsApi(companyParam)
+        .then(setDesignations)
+        .catch((err) => console.error('Failed to load designations:', err));
 
-    getLookupManagersApi(companyParam || undefined)
-      .then(setManagers)
-      .catch((err) => console.error('Failed to load managers lookup:', err));
+      getLookupManagersApi(companyParam)
+        .then(setManagers)
+        .catch((err) => console.error('Failed to load managers:', err));
+    } else {
+      setDepartments([]);
+      setDesignations([]);
+      setManagers([]);
+    }
   }, [companyParam]);
 
-  // Fetch Employees List from API
+  // Fetch Employees
   const fetchEmployees = useCallback(async () => {
     setIsLoading(true);
     setErrorMessage(null);
     try {
-      const res = await getEmployeesApi({
+      const result = await getEmployeesApi({
         page: pageParam,
         page_size: pageSizeParam,
-        search: searchParam,
+        search: searchParam || undefined,
         company_id: companyParam || undefined,
         department_id: departmentParam || undefined,
         designation_id: designationParam || undefined,
         manager_user_id: managerParam || undefined,
-        account_status: statusParam || undefined,
+        account_status: (statusParam as AccountStatus) || undefined,
       });
-      setData(res);
+      setData(result);
     } catch (err) {
-      const msg = extractErrorMessage(err);
-      setErrorMessage(msg);
+      setErrorMessage(extractErrorMessage(err));
     } finally {
       setIsLoading(false);
     }
@@ -248,11 +212,6 @@ export const EmployeeListPage: React.FC = () => {
     }
   };
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login', { replace: true });
-  };
-
   const hasActiveFilters =
     Boolean(searchParam) ||
     Boolean(companyParam) ||
@@ -262,34 +221,7 @@ export const EmployeeListPage: React.FC = () => {
     Boolean(statusParam);
 
   return (
-    <div
-      className={`min-h-screen w-full flex flex-col font-sans transition-colors duration-300 relative overflow-x-hidden ${
-        theme === 'dark' ? 'dark bg-slate-950 text-slate-100' : 'bg-[#f8faff] text-slate-800'
-      }`}
-    >
-      {/* Background Ambience */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/3 w-[800px] h-[500px] rounded-full bg-gradient-to-b from-blue-300/20 via-sky-200/10 to-transparent dark:from-blue-900/15 dark:via-indigo-950/10 blur-3xl" />
-        <div className="absolute top-1/3 -left-32 w-[550px] h-[550px] rounded-full bg-cyan-200/15 dark:bg-cyan-900/10 blur-3xl" />
-        <div className="absolute top-1/2 -right-32 w-[550px] h-[550px] rounded-full bg-blue-300/15 dark:bg-indigo-900/10 blur-3xl" />
-      </div>
-
-      {/* Header */}
-      <div className="relative z-20 shrink-0">
-        <AdminHeader
-          breadcrumbs={[
-            { label: 'Administration', href: '/admin' },
-            { label: 'Employee Directory' },
-          ]}
-          theme={theme}
-          onToggleTheme={toggleTheme}
-          onOpenPasswordModal={() => setIsPasswordModalOpen(true)}
-          onLogout={handleLogout}
-        />
-      </div>
-
-      {/* Main Container */}
-      <main className="relative z-10 flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+    <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
         {/* Top Title & Actions Bar */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
@@ -621,7 +553,6 @@ export const EmployeeListPage: React.FC = () => {
             />
           )}
         </div>
-      </main>
 
       {/* Status Management Modal */}
       <ConfirmationModal
@@ -667,13 +598,6 @@ export const EmployeeListPage: React.FC = () => {
           </p>
         </div>
       </ConfirmationModal>
-
-      {/* Password Modal */}
-      <ChangePasswordModal
-        isOpen={isPasswordModalOpen}
-        onClose={() => setIsPasswordModalOpen(false)}
-        onSuccessToast={(title, msg) => addToast('success', title, msg)}
-      />
 
       {/* Toasts */}
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
