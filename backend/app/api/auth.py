@@ -1,5 +1,5 @@
 """Authentication API routes."""
-from typing import Dict
+from typing import Dict, List
 
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
@@ -15,6 +15,8 @@ from app.schemas.auth import (
     RefreshTokenRequest,
     TokenResponse,
 )
+from app.schemas.permission import AccessibleModuleRead
+from app.services import permissions
 from app.services.auth_service import (
     authenticate_user,
     change_user_password,
@@ -102,6 +104,21 @@ def get_current_user_profile(
 ) -> CurrentUserRead:
     """Return identity and organizational details of the authenticated user."""
     return CurrentUserRead.model_validate(current_user)
+
+
+@router.get(
+    "/me/modules",
+    response_model=List[AccessibleModuleRead],
+    status_code=status.HTTP_200_OK,
+    summary="Get Current User Accessible Modules",
+    description="Retrieve the list of accessible modules and granular action permissions for the authenticated employee.",
+)
+def get_current_user_modules(
+    current_user: User = Depends(get_current_active_user),
+    session: Session = Depends(get_db),
+) -> List[AccessibleModuleRead]:
+    """Return navigation hierarchy and permission flags for the authenticated user."""
+    return permissions.get_accessible_modules(session, current_user.user_id)
 
 
 @router.post(

@@ -22,7 +22,8 @@ class Settings(BaseSettings):
 
     # Frontend and CORS settings
     FRONTEND_ORIGIN: str = "http://localhost:5173"
-    CORS_ORIGINS: Union[str, List[str]] = ["http://localhost:5173"]
+    ADMIN_FRONTEND_ORIGIN: str = "http://localhost:8001"
+    CORS_ORIGINS: Union[str, List[str]] = ["http://localhost:5173", "http://localhost:8001"]
 
     # Database settings
     DATABASE_URL: str = ""

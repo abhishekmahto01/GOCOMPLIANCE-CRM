@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --brand-primary: #0c38bf;
+    --brand-accent: #00D2FF;
+  }
+
+  body {
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+@layer utilities {
+  .card-border {
+    border: 1px solid rgba(226, 232, 240, 0.8);
+  }
+}

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, employees, health
+from app.api import auth, employees, health, lookup
 from app.core.config import settings
 
 app = FastAPI(
@@ -34,5 +34,9 @@ app.include_router(
 )
 app.include_router(
     employees.router,
+    prefix=settings.API_PREFIX,
+)
+app.include_router(
+    lookup.router,
     prefix=settings.API_PREFIX,
 )
