@@ -2,78 +2,109 @@
 
 Production-ready FastAPI backend foundation for Gocompliances CRM.
 
-## Current Stage Scope: Stage 6 (Designation Master)
+## Current Stage Scope: Stage 7A (User Master Database Foundation & Employee-Code Generation)
 
-This stage establishes the company-specific organizational designation framework (`designation_master`):
-- SQLAlchemy 2 typed model `Designation` mapped to `designation_master` with foreign key `ON DELETE RESTRICT` to `company_master`.
-- Bi-directional ORM relationship `Company.designations` <-> `Designation.company`.
-- Clear conceptual separation between Company, Department, Designation, and Permissions.
-- Composite unique constraints guaranteeing title uniqueness *within* a company while permitting identical titles across companies.
-- Seniority ranking (`level_rank > 0`) and classification metadata (`is_managerial`).
-- Pydantic v2 schemas (`DesignationBase`, `DesignationCreate`, `DesignationUpdate`, `DesignationRead`) with normalization and validation.
-- Alembic schema migration `da18e31ab374_create_designation_master.py`.
-- Idempotent seed script (`app/scripts/seed_designations.py`) seeding 6 standard designations per company (18 total) using deterministic UUIDs.
-- Automated unit test suite with 48 tests covering models, schemas, relationships, migrations, and seeds.
+Stage 7A establishes the fundamental user and employee registry (`user_master`) along with concurrency-safe employee-code generation and cross-company integrity validation:
+- **SQLAlchemy 2 Typed Model `User`** mapped to `user_master` with foreign keys to `company_master`, `department_master`, `designation_master`, and a nullable self-referencing reporting manager foreign key (`user_master.user_id`).
+- **Pydantic v2 Schemas** (`UserBase`, `UserCreate`, `UserUpdate`, `UserRead`) with strict validation for names, normalized lowercased emails, Indian `+91` mobile formats, employment types, and account statuses.
+- **Alembic Schema Migration** `574d1e27cc56_create_user_master.py` with foreign key constraints, check constraints, indexes, and functional unique lower-cased index on `official_email`.
+- **Employee-Code Generation Service** (`app/services/employee_code.py`) using PostgreSQL row-level locking (`SELECT ... FOR UPDATE`) on `company_master` to assign strictly sequential, atomic employee codes (e.g. `CG0001`, `EP0001`, `BM0001`).
+- **User Creation Service & Integrity Validation** (`app/services/user_service.py`) enforcing cross-company consistency (Department, Designation, and Reporting Manager must all belong to the employee's assigned Company).
+- **Automated Unit Test Suite** with 67 tests covering models, constraints, relationships, schema normalization, employee code generation, concurrency locking, cross-company validation, and rollback safety.
 
-> **Note on Permissions & CRUD APIs:**
-> **Designations do NOT grant software access or permissions.** Permissions will be governed separately in future stages. Designation CRUD endpoints and Admin UI will be introduced in subsequent stages.
-
----
-
-## Conceptual Architecture: Company vs Department vs Designation vs Permission
-
-In Gocompliances CRM, organizational concepts are decoupled:
-
-| Concept | Question Answered | Example | Note |
-| :--- | :--- | :--- | :--- |
-| **Company** | Employee kis company mein hai? | `Gocompliances`, `Enterpernership`, `Brandmingo` | Top-level entity |
-| **Department** | Employee kis team/vertical mein kaam karta hai? | `Sales`, `Operations`, `R&D`, `Administration` | Company-specific team |
-| **Designation** | Employee ki official position/seniority kya hai? | `Executive`, `Manager`, `Director` | Company-specific job title |
-| **Permission** | Software mein employee kya access kar sakta hai? | *Can view leads*, *Can approve invoices* | Governed by security roles, **NOT** designation |
-
-$$\text{Employee} = \text{Company} + \text{Department} + \text{Designation} \quad [\text{Permissions via dedicated ACL}]$$
-
-### Initial Standard Designations (6 per company)
-
-| Designation Code | Designation Name | Level Rank | Managerial | Description |
-| :--- | :--- | :---: | :---: | :--- |
-| `EXECUTIVE` | Executive | 10 | No (`false`) | Entry-level operational professional |
-| `SENIOR_EXECUTIVE` | Senior Executive | 20 | No (`false`) | Experienced operational specialist |
-| `ASSISTANT_MANAGER` | Assistant Manager | 30 | Yes (`true`) | Supervisory / junior management |
-| `MANAGER` | Manager | 40 | Yes (`true`) | Functional team leader |
-| `HEAD` | Head | 50 | Yes (`true`) | Departmental head |
-| `DIRECTOR` | Director | 60 | Yes (`true`) | Executive business director |
-
-* **Level Rank Meaning:** Integer counter ($>0$) indicating corporate hierarchy. Higher value represents higher seniority.
-* **`is_managerial` Flag:** Informational metadata only used for organizational charts and reporting. It does **not** grant software permissions.
+> **Note on Stage 7A Boundaries:**
+> - **Zero Seed Employee Records:** `user_master` remains completely empty (0 records) until authorized users create real accounts via the future Admin UI.
+> - **No Passwords / JWT / Authentication Yet:** Authentication, password hashing, and JWT tokens will be introduced in subsequent sub-stages (7B/7C).
+> - **No Public CRUD Endpoints Yet:** HTTP API routes and UI components will be built in sub-stages after authentication and authorization frameworks are complete.
 
 ---
 
-### `designation_master` Column Specifications
+## Employee Profile Scope & Boundaries
+
+### Included Fields (Basic CRM Employee Data)
+- **Auto-generated Employee Code:** Company prefix + 4-digit zero-padded number (e.g., `CG0001`, `EP0001`, `BM0001`, scaling beyond 9999 as `CG10000`).
+- **Employee Name:** `first_name`, `middle_name` (optional), `last_name`.
+- **Official Email:** Corporate email address (case-insensitively unique via PostgreSQL functional index `lower(official_email)`).
+- **Personal Email:** Optional personal email address (lowercased).
+- **Mobile Number:** Primary contact number supporting Indian `+91` format.
+- **Organizational Alignment:** `company_id`, `department_id`, `designation_id`.
+- **Reporting Manager:** `manager_user_id` (nullable self-referencing foreign key).
+- **Joining Date:** `date_of_joining` (`DATE`).
+- **Employment Type:** `FULL_TIME`, `PART_TIME`, `CONTRACT`, `INTERN`, `CONSULTANT`.
+- **Account Status:** `PENDING` (default), `ACTIVE`, `INACTIVE`, `SUSPENDED`.
+
+### Excluded HRMS Fields (Out of Scope for CRM)
+The following sensitive HR fields are intentionally excluded from `user_master` and belong strictly to future HRMS services:
+- Aadhaar number
+- PAN number
+- Salary / compensation structures
+- Bank account details
+- Attendance logs
+- Detailed residential addresses
+- Medical / health information
+
+---
+
+## Organizational Hierarchy & Relationships
+
+In Gocompliances CRM, employees are strictly organized across corporate entities:
+
+```text
+Company (e.g. Gocompliances / CG)
+├── Department (e.g. Sales)
+└── Designation (e.g. Executive, Manager, Director)
+      └── User / Employee (e.g. CG0001 - Amit Sharma)
+            └── Reports to Manager (e.g. CG0002 - Priya Patel)
+```
+
+### Business Rules Enforced by the Service Layer:
+1. **Department Belongs to Company:** An employee's Department must belong to the selected Company and be in `ACTIVE` status.
+2. **Designation Belongs to Company:** An employee's Designation must belong to the selected Company and be in `ACTIVE` status.
+3. **Manager Belongs to Same Company:** A reporting manager must belong to the same Company as the employee.
+4. **Self-Manager Prohibition:** An employee cannot report to themselves (enforced both at the database level via `chk_user_self_manager` check constraint and at the service validation layer).
+
+---
+
+## Employee-Code Generation & Concurrency Locking
+
+To ensure collision-free, sequential employee IDs in high-concurrency environments:
+1. A transaction acquires an exclusive row lock on the parent company using `SELECT ... FOR UPDATE` on `company_master`.
+2. The current `next_employee_number` is read and formatted with the company's `employee_code_prefix` and 4-digit zero padding:
+   - `CG` + `1` $\rightarrow$ `CG0001`
+   - `EP` + `1` $\rightarrow$ `EP0001`
+   - `BM` + `1` $\rightarrow$ `BM0001`
+   - Counters exceeding 9999 expand dynamically (e.g. `CG10000`).
+3. The counter `company.next_employee_number` is incremented by 1.
+4. The user record is inserted and committed in the **same transaction**.
+5. If any validation or database error occurs during creation, the transaction is completely rolled back, ensuring sequence numbers are never wasted or skipped.
+
+---
+
+## `user_master` Column Specifications
 
 | Column | Type | Constraints / Defaults | Description |
 | :--- | :--- | :--- | :--- |
-| `designation_id` | `UUID` | Primary Key, `NOT NULL` | Unique identifier (UUIDv4/v5) |
-| `company_id` | `UUID` | Foreign Key (`company_master.company_id`), `ON DELETE RESTRICT`, `NOT NULL`, Index | Parent company reference |
-| `designation_code` | `VARCHAR(50)` | `NOT NULL`, Check Constraint (`^[A-Z_]+$`) | Uppercase code unique per company |
-| `designation_name` | `VARCHAR(100)` | `NOT NULL` | Display title unique per company |
-| `level_rank` | `INTEGER` | `NOT NULL`, Index, Check: `level_rank > 0` | Seniority level counter |
-| `is_managerial` | `BOOLEAN` | `NOT NULL`, Default: `false` | Managerial classification indicator |
-| `description` | `VARCHAR(500)` | `NULLABLE` | Optional description of responsibilities |
-| `status` | `VARCHAR(20)` | `NOT NULL`, Default: `'ACTIVE'`, Index | Operational status (`ACTIVE`, `INACTIVE`) |
+| `user_id` | `UUID` | Primary Key, `NOT NULL` | Unique user identifier (UUIDv4) |
+| `employee_code` | `VARCHAR(20)` | `NOT NULL`, Unique Index | Uppercase unique code (e.g. `CG0001`) |
+| `company_id` | `UUID` | Foreign Key (`company_master.company_id`), `ON DELETE RESTRICT`, `NOT NULL`, Index | Company reference |
+| `department_id` | `UUID` | Foreign Key (`department_master.department_id`), `ON DELETE RESTRICT`, `NOT NULL`, Index | Department reference |
+| `designation_id` | `UUID` | Foreign Key (`designation_master.designation_id`), `ON DELETE RESTRICT`, `NOT NULL`, Index | Designation reference |
+| `manager_user_id` | `UUID` | Foreign Key (`user_master.user_id`), `ON DELETE SET NULL`, `NULLABLE`, Index | Reporting manager reference |
+| `first_name` | `VARCHAR(100)` | `NOT NULL` | Employee first name |
+| `middle_name` | `VARCHAR(100)` | `NULLABLE` | Employee middle name (optional) |
+| `last_name` | `VARCHAR(100)` | `NOT NULL` | Employee last name |
+| `official_email` | `VARCHAR(255)` | `NOT NULL`, Unique Index on `lower(official_email)` | Corporate email address |
+| `personal_email` | `VARCHAR(255)` | `NULLABLE` | Personal contact email |
+| `mobile_number` | `VARCHAR(20)` | `NOT NULL` | Contact number (+91 format) |
+| `date_of_joining` | `DATE` | `NOT NULL` | Official joining date |
+| `employment_type` | `VARCHAR(20)` | `NOT NULL`, Check Constraint | `FULL_TIME`, `PART_TIME`, `CONTRACT`, `INTERN`, `CONSULTANT` |
+| `account_status` | `VARCHAR(20)` | `NOT NULL`, Default: `'PENDING'`, Index, Check Constraint | `PENDING`, `ACTIVE`, `INACTIVE`, `SUSPENDED` |
 | `created_at` | `TIMESTAMPTZ` | `NOT NULL`, Default: `now()` | Record creation timestamp (UTC) |
 | `updated_at` | `TIMESTAMPTZ` | `NOT NULL`, Default: `now()` | Record update timestamp (UTC) |
 
-**Composite Constraints:**
-* `UNIQUE(company_id, designation_code)`
-* `UNIQUE(company_id, designation_name)`
-* `CHECK(level_rank > 0)`
-* `CHECK(status IN ('ACTIVE', 'INACTIVE'))`
-* `CHECK(designation_code ~ '^[A-Z_]+$')`
-
 ---
 
-## Database Migration & Seeding Commands
+## Database Migration & Verification Commands
 
 All commands are run from the `backend/` directory with `.venv` activated:
 
@@ -83,68 +114,24 @@ source .venv/bin/activate
 ```
 
 ### 1. Apply Database Migration
-Apply all pending schema migrations (including `designation_master`):
 ```bash
 alembic upgrade head
 ```
 
-### 2. Seed Initial Records
-1. **Seed Companies (3 records):**
-   ```bash
-   python3 -m app.scripts.seed_companies
-   ```
-2. **Seed Departments (12 records):**
-   ```bash
-   python3 -m app.scripts.seed_departments
-   ```
-3. **Seed Designations (18 records):**
-   ```bash
-   python3 -m app.scripts.seed_designations
-   ```
-
-* **Idempotent Seeding Behavior:**
-  * First run: Inserts 18 default designations (6 per company).
-  * Subsequent runs: Skips existing designations without creating duplicates or modifying existing data.
-  * Dependency Guard: Fails safely and rolls back completely if any required company is missing.
-
-### 3. Verify Seeded Records via PostgreSQL
-
-* **List all designations with rank and managerial flag:**
-  ```bash
-  psql -d is_gocompliance_db -c "SELECT c.company_code, d.designation_code, d.designation_name, d.level_rank, d.is_managerial, d.status FROM designation_master d JOIN company_master c ON c.company_id = d.company_id ORDER BY c.company_code, d.level_rank;"
-  ```
-
-* **Count total designations (Expected: 18):**
-  ```bash
-  psql -d is_gocompliance_db -c "SELECT COUNT(*) FROM designation_master;"
-  ```
-
-* **Verify company-wise distribution (Expected: 6 each):**
-  ```bash
-  psql -d is_gocompliance_db -c "SELECT c.company_code, COUNT(*) AS designation_count FROM designation_master d JOIN company_master c ON c.company_id = d.company_id GROUP BY c.company_code ORDER BY c.company_code;"
-  ```
-
----
-
-## Running the Applications
-
-### 1. Main CRM API (Port 8000)
-
+### 2. Verify Database Tables & Row Counts
 ```bash
-uvicorn app.main:app --reload --port 8000
+psql -d is_gocompliance_db -c "
+SELECT count(*) AS companies FROM company_master;
+SELECT count(*) AS departments FROM department_master;
+SELECT count(*) AS designations FROM designation_master;
+SELECT count(*) AS users FROM user_master;
+"
 ```
-
-- **API Health Check Endpoint:** [http://localhost:8000/api/health](http://localhost:8000/api/health)
-- **Database Health Endpoint:** [http://localhost:8000/api/health/database](http://localhost:8000/api/health/database)
-- **Interactive Swagger Docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
-
-### 2. Admin Panel Placeholder (Port 8001)
-
-```bash
-uvicorn app.admin_app:app --reload --port 8001
-```
-
-- **Health Check Endpoint:** [http://localhost:8001/health](http://localhost:8001/health)
+**Expected Counts:**
+- `company_master` = 3
+- `department_master` = 12
+- `designation_master` = 18
+- `user_master` = 0 (empty table)
 
 ---
 
@@ -156,67 +143,11 @@ Execute the full test suite using `pytest`:
 pytest -v
 ```
 
-All 48 unit tests run in isolation using mocking (no real database connection required for unit tests).
+All 67 unit tests run in isolation using mocking (no destructive database mutations).
 
 ---
 
-## Project Structure
-
-```text
-backend/
-├── alembic/
-│   ├── versions/
-│   │   ├── f6d28a5264ee_baseline_database.py             # Baseline revision
-│   │   ├── b445258097c2_create_company_master.py         # Company Master migration
-│   │   ├── 38b03f32afa9_create_department_master.py      # Department Master migration
-│   │   └── da18e31ab374_create_designation_master.py     # Designation Master migration
-│   ├── env.py                                            # Alembic environment with Base.metadata & settings binding
-│   ├── script.py.mako                                    # Migration template
-│   └── README
-├── alembic.ini                                           # Alembic configuration without secrets
-├── app/
-│   ├── __init__.py
-│   ├── main.py                                           # Main CRM FastAPI application (Port 8000)
-│   ├── admin_app.py                                      # Database Admin placeholder application (Port 8001)
-│   ├── api/
-│   │   ├── __init__.py
-│   │   └── health.py                                     # Health check endpoints (/api/health, /api/health/database)
-│   ├── core/
-│   │   ├── __init__.py
-│   │   └── config.py                                     # Pydantic BaseSettings with credentials masking
-│   ├── database/
-│   │   ├── __init__.py
-│   │   ├── base.py                                       # SQLAlchemy 2 DeclarativeBase
-│   │   └── session.py                                    # Engine, SessionLocal factory, and get_db dependency
-│   ├── models/
-│   │   ├── __init__.py                                   # Model exports (Company, Department, Designation)
-│   │   ├── company.py                                    # Company model (company_master)
-│   │   ├── department.py                                 # Department model (department_master)
-│   │   └── designation.py                                # Designation model (designation_master)
-│   ├── schemas/
-│   │   ├── __init__.py                                   # Schema exports
-│   │   ├── company.py                                    # Company schemas
-│   │   ├── department.py                                 # Department schemas
-│   │   └── designation.py                                # Designation schemas (Base, Create, Update, Read)
-│   ├── scripts/
-│   │   ├── __init__.py
-│   │   ├── seed_companies.py                             # Idempotent company seeding script (3 records)
-│   │   ├── seed_departments.py                           # Idempotent department seeding script (12 records)
-│   │   └── seed_designations.py                          # Idempotent designation seeding script (18 records)
-│   └── services/
-│       ├── __init__.py
-│       └── database_health.py                            # Safe database health checking service
-├── tests/
-│   ├── __init__.py
-│   ├── test_alembic.py                                   # Alembic configuration and baseline safety tests
-│   ├── test_company.py                                   # Company model, schemas, migration, and seed tests
-│   ├── test_database.py                                  # Session, config, and database health unit tests
-│   ├── test_department.py                                # Department model, schemas, migration, and seed tests
-│   ├── test_designation.py                               # Designation model, schemas, migration, and seed tests
-│   └── test_health.py                                    # API and admin health check tests
-├── .env                                                  # Local uncommitted environment configuration
-├── .env.example                                          # Safe environment variable template
-├── .gitignore                                            # Backend gitignore rules
-├── requirements.txt                                      # Backend dependencies
-└── README.md                                             # Backend documentation
-```
+## Roadmap / Upcoming Stages
+- **Stage 7B:** User Authentication, Password Hashing (Argon2id/Bcrypt), and JWT Token Architecture.
+- **Stage 7C:** Role-Based Access Control (RBAC), Permissions Framework, and Security Dependencies.
+- **Stage 7D:** Employee Management HTTP CRUD APIs, Admin UI, and Profile Management.

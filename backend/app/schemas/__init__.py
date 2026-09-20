@@ -17,6 +17,12 @@ from app.schemas.designation import (
     DesignationRead,
     DesignationUpdate,
 )
+from app.schemas.user import (
+    UserBase,
+    UserCreate,
+    UserRead,
+    UserUpdate,
+)
 
 __all__ = [
     "CompanyBase",
@@ -31,4 +37,8 @@ __all__ = [
     "DesignationCreate",
     "DesignationRead",
     "DesignationUpdate",
+    "UserBase",
+    "UserCreate",
+    "UserRead",
+    "UserUpdate",
 ]

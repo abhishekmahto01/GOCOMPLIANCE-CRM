@@ -1,7 +1,7 @@
 """Designation Master model definition."""
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import (
     Boolean,
@@ -21,6 +21,7 @@ from app.database.base import Base
 
 if TYPE_CHECKING:
     from app.models.company import Company
+    from app.models.user import User
 
 
 class Designation(Base):
@@ -132,6 +133,14 @@ class Designation(Base):
     company: Mapped["Company"] = relationship(
         "Company",
         back_populates="designations",
+    )
+
+    # ORM Relationship to User (Restrictive deletion; no cascade delete)
+    users: Mapped[List["User"]] = relationship(
+        "User",
+        back_populates="designation",
+        cascade="save-update, merge",
+        passive_deletes=True,
     )
 
     def __repr__(self) -> str:

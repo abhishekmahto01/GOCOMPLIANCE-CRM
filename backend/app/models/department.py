@@ -1,7 +1,7 @@
 """Department Master model definition."""
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import (
     CheckConstraint,
@@ -19,6 +19,7 @@ from app.database.base import Base
 
 if TYPE_CHECKING:
     from app.models.company import Company
+    from app.models.user import User
 
 
 class Department(Base):
@@ -112,6 +113,14 @@ class Department(Base):
     company: Mapped["Company"] = relationship(
         "Company",
         back_populates="departments",
+    )
+
+    # ORM Relationship to User (Restrictive deletion; no cascade delete)
+    users: Mapped[List["User"]] = relationship(
+        "User",
+        back_populates="department",
+        cascade="save-update, merge",
+        passive_deletes=True,
     )
 
     def __repr__(self) -> str:
