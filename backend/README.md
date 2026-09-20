@@ -161,5 +161,188 @@ alembic current
 
 ---
 
-## Upcoming Stages
-- **Stage 7D:** Manager & Employee Management React UI integration.
+---
+
+## Stage 10A: Secure First Super Admin Bootstrap CLI
+
+### Security Rationale: Why Bootstrap is CLI-Only
+Normal CRM employee creation APIs (`POST /api/admin/employees`) strictly prohibit accepting or exposing client passwords to ensure zero secret leakage and separation of concerns. However, the very first administrator requires initial credentials and full permissions to log into the Admin Panel (`http://localhost:8001`) and configure the CRM.
+
+To maintain strict security:
+- **No Public HTTP Endpoint:** Bootstrap is strictly accessible via backend command-line invocation (`python -m app.scripts.bootstrap_super_admin`).
+- **No Hardcoded/Default Credentials:** Credentials must never exist in repository code, migration scripts, or configuration files.
+- **Secure Password Prompting:** Passwords are requested interactively via `getpass.getpass` with mandatory confirmation and password policy enforcement (Argon2id hashing). Passwords and password hashes are never logged or printed to stdout.
+- **Atomic Operations:** Super Admin creation and module permission grants occur within a single database transaction with complete rollback on any error.
+- **Safety Guard Against Accidental Duplicate Super Admins:** If an active Super Admin already exists in the system, execution halts by default unless `--allow-additional-super-admin` is explicitly supplied.
+
+---
+
+### Prerequisites
+Before running the bootstrap script, ensure the database is up-to-date and all master datasets are populated:
+
+```bash
+cd backend
+source .venv/bin/activate
+alembic upgrade head
+python -m app.scripts.seed_companies
+python -m app.scripts.seed_departments
+python -m app.scripts.seed_designations
+python -m app.scripts.seed_modules
+```
+
+---
+
+### CLI Command Reference
+
+#### 1. Display Help
+```bash
+python -m app.scripts.bootstrap_super_admin --help
+python -m app.scripts.bootstrap_super_admin create --help
+python -m app.scripts.bootstrap_super_admin promote --help
+```
+
+#### 2. Mode 1: Create a New Super Admin Employee (`create`)
+Creates an active employee record with an atomic employee code (`CG0001`, `EP0001`, etc.), prompts securely for an Argon2 password, and assigns full `ALL` data scope across all active modules.
+
+**Dry-run Validation (No DB writes or password prompt):**
+```bash
+python -m app.scripts.bootstrap_super_admin create \
+  --email admin@gocompliances.in \
+  --first-name Admin \
+  --last-name User \
+  --phone 9876543210 \
+  --company-code CG \
+  --department-code ADMINISTRATION \
+  --designation-code DIRECTOR \
+  --dry-run
+```
+
+**Interactive Execution:**
+```bash
+python -m app.scripts.bootstrap_super_admin create \
+  --email admin@gocompliances.in \
+  --first-name Admin \
+  --last-name User \
+  --phone 9876543210 \
+  --company-code CG \
+  --department-code ADMINISTRATION \
+  --designation-code DIRECTOR
+```
+
+**Non-Interactive / Automation Execution (with confirmation flag):**
+```bash
+python -m app.scripts.bootstrap_super_admin create \
+  --email admin@gocompliances.in \
+  --first-name Admin \
+  --last-name User \
+  --phone 9876543210 \
+  --company-code CG \
+  --department-code ADMINISTRATION \
+  --designation-code DIRECTOR \
+  --yes
+```
+
+#### 3. Mode 2: Promote an Existing Employee (`promote`)
+Promotes an active employee (located via email or employee code) to Super Admin.
+- If the employee does not have a password hash, securely prompts for initial credentials.
+- If the employee already has a login password, preserves it untouched.
+
+**Dry-run Validation:**
+```bash
+python -m app.scripts.bootstrap_super_admin promote \
+  --email rohan.verma@gocompliances.in \
+  --dry-run
+```
+
+**Execution:**
+```bash
+python -m app.scripts.bootstrap_super_admin promote \
+  --email rohan.verma@gocompliances.in
+```
+
+Or by employee code:
+```bash
+python -m app.scripts.bootstrap_super_admin promote \
+  --employee-code CG0001
+```
+
+---
+
+### Advanced Flags & Safety Controls
+
+| Flag | Applicable Mode | Description |
+| :--- | :--- | :--- |
+| `--dry-run` | `create`, `promote` | Runs all master integrity validations, checks conflicts, and outputs safe summary without mutating the database or prompting for passwords. |
+| `--allow-additional-super-admin` | `create`, `promote` | Bypasses safety block when one or more active Super Admins already exist with full `ALL` access to all active modules. |
+| `--update-existing-permissions` | `create`, `promote` | Explicitly updates existing `user_module_permission` rows instead of raising a conflict error. |
+| `--yes`, `--non-interactive` | `create`, `promote` | Bypasses interactive confirmation typing (`CREATE SUPER ADMIN` / `PROMOTE SUPER ADMIN`). Note: Does NOT bypass password entry. |
+
+---
+
+### Super Admin Permissions & Self-Granting Rationale
+For every active module in `module_master`, the bootstrap tool provisions a `UserModulePermission` record configured with:
+- `can_view = True`
+- `can_create = True`
+- `can_edit = True`
+- `can_delete = True`
+- `can_approve = True`
+- `data_scope = "ALL"`
+- `status = "ACTIVE"`
+- `granted_by_user_id = user.user_id` (Self-referential assignment is valid in the database schema as `user_master` row is flushed prior to permission creation).
+
+---
+
+### Database Verification Queries (Safe & Non-Sensitive)
+
+To verify bootstrap results directly in PostgreSQL without exposing password hashes:
+
+#### 1. Verify Super Admin Employee Record
+```sql
+SELECT
+    employee_code,
+    first_name,
+    last_name,
+    official_email,
+    mobile_number,
+    employment_type,
+    account_status,
+    created_at
+FROM user_master
+WHERE official_email = 'admin@gocompliances.in';
+```
+
+#### 2. Verify Full Module Permissions & Data Scope
+```sql
+SELECT
+    m.module_code,
+    m.module_name,
+    ump.can_view,
+    ump.can_create,
+    ump.can_edit,
+    ump.can_delete,
+    ump.can_approve,
+    ump.data_scope,
+    ump.status
+FROM user_module_permission ump
+JOIN module_master m ON m.module_id = ump.module_id
+JOIN user_master u ON u.user_id = ump.user_id
+WHERE u.official_email = 'admin@gocompliances.in'
+ORDER BY m.display_order ASC;
+```
+
+#### 3. Aggregate Permission Count Check
+```sql
+SELECT
+    u.employee_code,
+    u.official_email,
+    COUNT(ump.permission_id) AS total_permissions,
+    SUM(CASE WHEN ump.data_scope = 'ALL' AND ump.can_view AND ump.can_create AND ump.can_edit AND ump.can_delete AND ump.can_approve THEN 1 ELSE 0 END) AS full_all_permissions
+FROM user_master u
+LEFT JOIN user_module_permission ump ON u.user_id = ump.user_id AND ump.status = 'ACTIVE'
+WHERE u.official_email = 'admin@gocompliances.in'
+GROUP BY u.employee_code, u.official_email;
+```
+
+> [!CAUTION]
+> **Password Security Reminder:** Never paste real credentials or password hashes into source code, Git commits, pull requests, terminal screenshots, or chat channels. Run bootstrap only in secure environments.
+
