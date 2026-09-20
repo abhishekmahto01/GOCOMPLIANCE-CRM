@@ -1,16 +1,18 @@
 """User / Employee domain service and repository logic."""
+import math
 import uuid
-from typing import Optional
+from typing import List, Optional, Tuple
 
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import func, or_, select
+from sqlalchemy.orm import Session, joinedload
 
 from app.models.company import Company
 from app.models.department import Department
 from app.models.designation import Designation
 from app.models.user import User
-from app.schemas.user import UserCreate
+from app.schemas.user import ALLOWED_ACCOUNT_STATUSES, EmployeeRead, UserCreate, UserUpdate
 from app.services.employee_code import generate_employee_code
+from app.services.permissions import DataScopeContext, get_team_user_ids
 
 
 def validate_user_cross_company_integrity(
@@ -82,6 +84,8 @@ def validate_user_cross_company_integrity(
             raise ValueError(
                 f"Reporting manager '{manager.first_name} {manager.last_name}' does not belong to the selected company"
             )
+        if manager.account_status != "ACTIVE":
+            raise ValueError(f"Reporting manager '{manager.first_name} {manager.last_name}' is not in ACTIVE status")
 
 
 def create_user(session: Session, user_in: UserCreate) -> User:
@@ -157,6 +161,299 @@ def create_user(session: Session, user_in: UserCreate) -> User:
         session.commit()
         session.refresh(user)
         return user
+
+    except Exception:
+        session.rollback()
+        raise
+
+
+def get_employee_by_id(session: Session, user_id: uuid.UUID) -> Optional[User]:
+    """Retrieve an employee by primary key user_id with eager joinedload of related entities."""
+    stmt = (
+        select(User)
+        .options(
+            joinedload(User.company),
+            joinedload(User.department),
+            joinedload(User.designation),
+            joinedload(User.manager),
+        )
+        .where(User.user_id == user_id)
+    )
+    return session.execute(stmt).unique().scalar_one_or_none()
+
+
+def serialize_employee_read(user: User) -> EmployeeRead:
+    """Convert an ORM User model into an EmployeeRead schema with relation labels."""
+    manager_name = None
+    manager_code = None
+    if user.manager:
+        manager_name = f"{user.manager.first_name} {user.manager.last_name}".strip()
+        manager_code = user.manager.employee_code
+
+    return EmployeeRead(
+        user_id=user.user_id,
+        employee_code=user.employee_code,
+        company_id=user.company_id,
+        company_name=user.company.company_name if user.company else None,
+        company_code=user.company.company_code if user.company else None,
+        department_id=user.department_id,
+        department_name=user.department.department_name if user.department else None,
+        department_code=user.department.department_code if user.department else None,
+        designation_id=user.designation_id,
+        designation_name=user.designation.designation_name if user.designation else None,
+        designation_code=user.designation.designation_code if user.designation else None,
+        manager_user_id=user.manager_user_id,
+        manager_name=manager_name,
+        manager_employee_code=manager_code,
+        first_name=user.first_name,
+        middle_name=user.middle_name,
+        last_name=user.last_name,
+        official_email=user.official_email,
+        personal_email=user.personal_email,
+        mobile_number=user.mobile_number,
+        date_of_joining=user.date_of_joining,
+        employment_type=user.employment_type,
+        account_status=user.account_status,
+        created_at=user.created_at or datetime.now(timezone.utc),
+        updated_at=user.updated_at or datetime.now(timezone.utc),
+    )
+
+
+def list_employees(
+    session: Session,
+    current_user: User,
+    scope_context: DataScopeContext,
+    page: int = 1,
+    page_size: int = 20,
+    search: Optional[str] = None,
+    company_id: Optional[uuid.UUID] = None,
+    department_id: Optional[uuid.UUID] = None,
+    designation_id: Optional[uuid.UUID] = None,
+    manager_user_id: Optional[uuid.UUID] = None,
+    account_status: Optional[str] = None,
+) -> Tuple[List[User], int, int]:
+    """Retrieve paginated employees enforcing server-side data scoping and optional filters.
+
+    Args:
+        session: Active SQLAlchemy session.
+        current_user: Authenticated caller User instance.
+        scope_context: Evaluated DataScopeContext for ADMIN_EMPLOYEES module.
+        page: 1-indexed page number.
+        page_size: Page size limit.
+        search: Optional search term (employee_code, name, email).
+        company_id: Optional filter for company.
+        department_id: Optional filter for department.
+        designation_id: Optional filter for designation.
+        manager_user_id: Optional filter for reporting manager.
+        account_status: Optional filter for account status.
+
+    Returns:
+        Tuple of (items, total_count, total_pages).
+    """
+    base_query = select(User)
+
+    # 1. Apply Server-Side Data Scope
+    if scope_context.scope == "SELF":
+        base_query = base_query.where(User.user_id == current_user.user_id)
+    elif scope_context.scope == "TEAM":
+        base_query = base_query.where(User.user_id.in_(scope_context.team_user_ids))
+    elif scope_context.scope == "DEPARTMENT":
+        base_query = base_query.where(
+            User.company_id == current_user.company_id,
+            User.department_id == current_user.department_id,
+        )
+    elif scope_context.scope == "COMPANY":
+        base_query = base_query.where(User.company_id == current_user.company_id)
+    elif scope_context.scope == "ALL":
+        pass  # No scope restriction
+
+    # 2. Apply User-Specified Filters
+    if company_id:
+        base_query = base_query.where(User.company_id == company_id)
+    if department_id:
+        base_query = base_query.where(User.department_id == department_id)
+    if designation_id:
+        base_query = base_query.where(User.designation_id == designation_id)
+    if manager_user_id:
+        base_query = base_query.where(User.manager_user_id == manager_user_id)
+    if account_status:
+        base_query = base_query.where(User.account_status == account_status.strip().upper())
+
+    # 3. Apply Search Filter
+    if search and search.strip():
+        term = f"%{search.strip()}%"
+        full_name = func.concat(User.first_name, " ", User.last_name)
+        base_query = base_query.where(
+            or_(
+                User.employee_code.ilike(term),
+                User.official_email.ilike(term),
+                User.first_name.ilike(term),
+                User.last_name.ilike(term),
+                full_name.ilike(term),
+            )
+        )
+
+    # 4. Count total matching records
+    count_query = select(func.count()).select_from(base_query.subquery())
+    total = session.execute(count_query).scalar_one()
+
+    # 5. Apply pagination & eager loading with deterministic ordering
+    offset = (page - 1) * page_size
+    query = (
+        base_query.options(
+            joinedload(User.company),
+            joinedload(User.department),
+            joinedload(User.designation),
+            joinedload(User.manager),
+        )
+        .order_by(User.created_at.desc(), User.employee_code.asc())
+        .offset(offset)
+        .limit(page_size)
+    )
+
+    items = list(session.execute(query).unique().scalars().all())
+    pages = math.ceil(total / page_size) if total > 0 else 0
+
+    return items, total, pages
+
+
+def update_employee(
+    session: Session,
+    target_user: User,
+    update_data: UserUpdate,
+) -> User:
+    """Partially update an existing employee record with validation and hierarchy cycle prevention.
+
+    Args:
+        session: Active SQLAlchemy session.
+        target_user: User instance to update.
+        update_data: UserUpdate schema payload.
+
+    Returns:
+        The refreshed User instance.
+
+    Raises:
+        ValueError: For validation failures (duplicate email, circular hierarchy, cross-company mismatch).
+    """
+    try:
+        # Check company immutability
+        if update_data.company_id is not None and update_data.company_id != target_user.company_id:
+            raise ValueError("Company cannot be modified for an existing employee")
+
+        # Check official email uniqueness if changed
+        if update_data.official_email is not None:
+            norm_email = update_data.official_email.lower()
+            if norm_email != target_user.official_email.lower():
+                existing = session.execute(
+                    select(User.user_id).where(
+                        func.lower(User.official_email) == norm_email,
+                        User.user_id != target_user.user_id,
+                    )
+                ).scalar_one_or_none()
+                if existing:
+                    raise ValueError(f"Official email '{update_data.official_email}' is already registered")
+                target_user.official_email = norm_email
+
+        # Determine if organization structure fields changed
+        is_dept_changed = update_data.department_id is not None and update_data.department_id != target_user.department_id
+        is_desig_changed = update_data.designation_id is not None and update_data.designation_id != target_user.designation_id
+        is_mgr_changed = "manager_user_id" in update_data.model_fields_set and update_data.manager_user_id != target_user.manager_user_id
+
+        if is_dept_changed or is_desig_changed or is_mgr_changed:
+            effective_dept_id = update_data.department_id or target_user.department_id
+            effective_desig_id = update_data.designation_id or target_user.designation_id
+            new_manager_id = target_user.manager_user_id
+            if "manager_user_id" in update_data.model_fields_set:
+                new_manager_id = update_data.manager_user_id
+
+            # Validate cross-company integrity
+            validate_user_cross_company_integrity(
+                session=session,
+                company_id=target_user.company_id,
+                department_id=effective_dept_id,
+                designation_id=effective_desig_id,
+                manager_user_id=new_manager_id,
+                current_user_id=target_user.user_id,
+            )
+
+            # Check circular hierarchy if manager is changed
+            if new_manager_id is not None and new_manager_id != target_user.manager_user_id:
+                if new_manager_id == target_user.user_id:
+                    raise ValueError("An employee cannot be their own reporting manager")
+                subordinates = get_team_user_ids(session, target_user.user_id)
+                if new_manager_id in subordinates:
+                    raise ValueError(
+                        "Circular reporting hierarchy detected: the selected manager reports to this employee"
+                    )
+
+        # Apply updates
+        if update_data.department_id is not None:
+            target_user.department_id = update_data.department_id
+        if update_data.designation_id is not None:
+            target_user.designation_id = update_data.designation_id
+        if "manager_user_id" in update_data.model_fields_set:
+            target_user.manager_user_id = update_data.manager_user_id
+        if update_data.first_name is not None:
+            target_user.first_name = update_data.first_name
+        if "middle_name" in update_data.model_fields_set:
+            target_user.middle_name = update_data.middle_name
+        if update_data.last_name is not None:
+            target_user.last_name = update_data.last_name
+        if "personal_email" in update_data.model_fields_set:
+            target_user.personal_email = update_data.personal_email.lower() if update_data.personal_email else None
+        if update_data.mobile_number is not None:
+            target_user.mobile_number = update_data.mobile_number
+        if update_data.date_of_joining is not None:
+            target_user.date_of_joining = update_data.date_of_joining
+        if update_data.employment_type is not None:
+            target_user.employment_type = update_data.employment_type
+
+        session.flush()
+        session.commit()
+        session.refresh(target_user)
+        return get_employee_by_id(session, target_user.user_id) or target_user
+
+    except Exception:
+        session.rollback()
+        raise
+
+
+def update_employee_status(
+    session: Session,
+    target_user: User,
+    new_status: str,
+) -> User:
+    """Update employee account operational status.
+
+    If status is changed to INACTIVE or SUSPENDED, increments token_version to invalidate active sessions.
+
+    Args:
+        session: Active SQLAlchemy session.
+        target_user: User instance to update.
+        new_status: Target status ('PENDING', 'ACTIVE', 'INACTIVE', 'SUSPENDED').
+
+    Returns:
+        The refreshed User instance.
+
+    Raises:
+        ValueError: If status is invalid.
+    """
+    status_norm = new_status.strip().upper()
+    if status_norm not in ALLOWED_ACCOUNT_STATUSES:
+        raise ValueError(
+            f"Invalid account status '{new_status}'. Must be one of {sorted(ALLOWED_ACCOUNT_STATUSES)}"
+        )
+
+    try:
+        # Invalidate active JWT sessions when transitioning away from ACTIVE
+        if status_norm in {"INACTIVE", "SUSPENDED"} and target_user.account_status == "ACTIVE":
+            target_user.token_version += 1
+
+        target_user.account_status = status_norm
+        session.flush()
+        session.commit()
+        session.refresh(target_user)
+        return get_employee_by_id(session, target_user.user_id) or target_user
 
     except Exception:
         session.rollback()

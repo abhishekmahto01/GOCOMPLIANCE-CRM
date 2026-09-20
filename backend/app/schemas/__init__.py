@@ -40,6 +40,9 @@ from app.schemas.permission import (
     UserModulePermissionUpdate,
 )
 from app.schemas.user import (
+    EmployeeRead,
+    EmployeeStatusUpdate,
+    PaginatedEmployeesResponse,
     UserBase,
     UserCreate,
     UserRead,
@@ -62,6 +65,8 @@ __all__ = [
     "DesignationCreate",
     "DesignationRead",
     "DesignationUpdate",
+    "EmployeeRead",
+    "EmployeeStatusUpdate",
     "LoginRequest",
     "LogoutRequest",
     "ModuleBase",
@@ -69,6 +74,7 @@ __all__ = [
     "ModuleRead",
     "ModuleTreeRead",
     "ModuleUpdate",
+    "PaginatedEmployeesResponse",
     "RefreshTokenRequest",
     "TokenResponse",
     "UserBase",

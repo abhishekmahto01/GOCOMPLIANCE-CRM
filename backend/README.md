@@ -2,143 +2,164 @@
 
 Production-ready FastAPI backend foundation for Gocompliances CRM.
 
-## Current Stage Scope: Stage 9 (Per-User Module Permissions and Data Scopes)
+## Current Stage Scope: Stage 7C (Authorized Employee CRUD API)
 
-Stage 9 implements granular, per-user authorization matrix and data scope visibility boundaries:
-- **SQLAlchemy 2 Typed Model `UserModulePermission`** mapped to `user_module_permission` table.
-- **Granular Action Flags:** Independent boolean switches (`can_view`, `can_create`, `can_edit`, `can_delete`, `can_approve`) with enforced prerequisite (`can_view=True` required for any action).
-- **Multi-Tier Data Scopes:** `SELF`, `TEAM`, `DEPARTMENT`, `COMPANY`, `ALL`.
-- **Recursive CTE Hierarchy Resolution:** Cycle-safe PostgreSQL CTE query to resolve complete reporting lines with depth limits for `TEAM` scope.
-- **Pydantic v2 Validation Schemas** (`UserModulePermissionBase`, `UserModulePermissionCreate`, `UserModulePermissionUpdate`, `UserModulePermissionRead`, `AccessibleModuleRead`).
-- **Alembic Schema Migration** `65ff8484468e_create_user_module_permission.py` with unique user/module constraints, check constraints (`chk_permission_data_scope_valid`, `chk_permission_status_valid`, `chk_permission_action_requires_view`, `chk_permission_expires_after_granted`), and indexes.
-- **Permission Evaluation Service & FastAPI Dependency** (`require_module_permission`, `has_permission`, `get_accessible_modules`, `resolve_data_scope_context`).
-- **Bootstrap CLI Utility** (`app/scripts/grant_bootstrap_permissions.py`) for one-time administrative provisioning (unexecuted during Stage 9).
-- **Automated Unit & Integration Test Suite** with 126 passing tests.
-
----
-
-## Core Security & Permission Principles
-
-1. **Default Deny:** Users have zero access until an explicit, active, and non-expired permission row is assigned.
-2. **Action Flag Invariant:** Non-view actions (`can_create`, `can_edit`, `can_delete`, `can_approve`) strictly require `can_view=True`. Enforced both at schema validation and PostgreSQL database constraint levels.
-3. **No Role-Based Implicit Access:** Designations and Departments never automatically grant module permissions. Every permission is explicitly bound to a user.
-4. **Grantor Escalation Prevention:** Users cannot grant permissions or broader data scopes than they themselves possess.
-5. **Temporary Expiration:** Permissions with an `expires_at` timestamp in the past are automatically denied access.
-6. **Parent-Child Navigation Preservation:** In `get_accessible_modules`, parent modules are included for UI navigation structure when an accessible child exists, without granting child actions or unrelated submodules.
+Stage 7C delivers authorized Employee Management HTTP APIs governed by granular `ADMIN_EMPLOYEES` module permissions and server-enforced data scoping:
+- **FastAPI Router `/api/admin/employees`** with full CRUD and operational lifecycle control.
+- **Granular Permission Checks:** All endpoints enforced with `require_module_permission("ADMIN_EMPLOYEES", action)`:
+  - `POST /api/admin/employees` (`create` action)
+  - `GET /api/admin/employees` (`view` action)
+  - `GET /api/admin/employees/{user_id}` (`view` action)
+  - `PATCH /api/admin/employees/{user_id}` (`edit` action)
+  - `PATCH /api/admin/employees/{user_id}/status` (`approve` action)
+- **Multi-Tier Data Scopes:** Server-side evaluation of `SELF`, `TEAM` (recursive hierarchy via cycle-safe PostgreSQL CTE), `DEPARTMENT`, `COMPANY`, and `ALL`.
+- **Atomic Code Generation:** Automatic company-prefix based employee code assignment on creation (`CG0001`, `EP0001`, `BM0001`). Client-supplied codes are forbidden.
+- **Strict Organizational Integrity:** Server validates that department, designation, and reporting manager exist, are `ACTIVE`, and belong to the employee's company.
+- **Hierarchy Loop Prevention:** Ensures employees cannot report to themselves or to any subordinate in their reporting subtree.
+- **Zero Secret/Password Exposure:** Response schemas strictly exclude `password_hash`, reset tokens, and sensitive authentication internals. Plaintext passwords are never accepted or stored.
+- **Automated Unit & Integration Test Suite:** 140 passing tests.
 
 ---
 
-## Data Scope Definitions
+## Employee Management Endpoints
+
+All endpoints are mounted under `/api/admin/employees`:
+
+| Method | Route | Required Module & Action | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/admin/employees` | `ADMIN_EMPLOYEES:create` | Create a new employee with an auto-generated employee code. |
+| `GET` | `/api/admin/employees` | `ADMIN_EMPLOYEES:view` | List paginated employees within the user's data scope. |
+| `GET` | `/api/admin/employees/{user_id}` | `ADMIN_EMPLOYEES:view` | Retrieve detailed employee profile. Returns `404` if not found, `403` if out-of-scope. |
+| `PATCH` | `/api/admin/employees/{user_id}` | `ADMIN_EMPLOYEES:edit` | Partially update employee profile with integrity & cycle prevention. |
+| `PATCH` | `/api/admin/employees/{user_id}/status` | `ADMIN_EMPLOYEES:approve` | Update employee operational status (`PENDING`, `ACTIVE`, `INACTIVE`, `SUSPENDED`). |
+
+*Note: There is no `DELETE` endpoint. Employee accounts are deactivated or suspended via the status update endpoint.*
+
+---
+
+## Data Scope Visibility Matrix
 
 | Data Scope | Meaning & Record Access Boundary | Resolution Strategy |
 | :--- | :--- | :--- |
-| `SELF` | Records owned by or associated with the current user. | `user_id == current_user.user_id` |
-| `TEAM` | Records owned by the current user and all direct/indirect recursive subordinates. | PostgreSQL Recursive CTE on `user_master` (`manager_user_id`) with cycle path tracking and depth bounds. |
-| `DEPARTMENT` | Records within the user's company and assigned department. | `company_id == user.company_id AND department_id == user.department_id` |
-| `COMPANY` | Records within the user's assigned company. | `company_id == user.company_id` |
-| `ALL` | All records across permitted company and system scopes. | Global / administrative access. |
+| `SELF` | Only the authenticated user's own employee record. | `user_id == current_user.user_id` |
+| `TEAM` | Current user and all direct/indirect recursive subordinates. | PostgreSQL Recursive CTE on `user_master` (`manager_user_id`) with cycle tracking and depth limit. |
+| `DEPARTMENT` | Employees belonging to the same company and department. | `company_id == user.company_id AND department_id == user.department_id` |
+| `COMPANY` | Employees belonging to the same company. | `company_id == user.company_id` |
+| `ALL` | All employees across all companies and departments. | Global administrative access. |
 
 ---
 
-## `user_module_permission` Column Specifications
+## Available Query Filters for Listing (`GET /api/admin/employees`)
 
-| Column | Type | Constraints / Defaults | Description |
-| :--- | :--- | :--- | :--- |
-| `permission_id` | `UUID` | Primary Key, `NOT NULL` | Unique permission grant ID (UUIDv4) |
-| `user_id` | `UUID` | Foreign Key (`user_master.user_id`), `ON DELETE CASCADE`, `NOT NULL`, Index | Target employee user ID |
-| `module_id` | `UUID` | Foreign Key (`module_master.module_id`), `ON DELETE RESTRICT`, `NOT NULL`, Index | Target module ID |
-| `can_view` | `BOOLEAN` | `NOT NULL`, Default: `false` | Read/view access to module records |
-| `can_create` | `BOOLEAN` | `NOT NULL`, Default: `false` | Creation rights (requires `can_view=true`) |
-| `can_edit` | `BOOLEAN` | `NOT NULL`, Default: `false` | Update rights (requires `can_view=true`) |
-| `can_delete` | `BOOLEAN` | `NOT NULL`, Default: `false` | Delete/deactivate rights (requires `can_view=true`) |
-| `can_approve` | `BOOLEAN` | `NOT NULL`, Default: `false` | Workflow approval rights (requires `can_view=true`) |
-| `data_scope` | `VARCHAR(20)` | `NOT NULL`, Default: `'SELF'`, Check Constraint | `SELF`, `TEAM`, `DEPARTMENT`, `COMPANY`, `ALL` |
-| `status` | `VARCHAR(20)` | `NOT NULL`, Default: `'ACTIVE'`, Index, Check Constraint | `ACTIVE`, `INACTIVE` |
-| `granted_by_user_id` | `UUID` | Foreign Key (`user_master.user_id`), `ON DELETE SET NULL`, `NULLABLE`, Index | Grantor user audit reference |
-| `granted_at` | `TIMESTAMPTZ` | `NOT NULL`, Default: `now()` | Timestamp when permission was assigned (UTC) |
-| `expires_at` | `TIMESTAMPTZ` | `NULLABLE`, Index, Check: `expires_at > granted_at` | Optional future expiration timestamp (UTC) |
-| `updated_at` | `TIMESTAMPTZ` | `NOT NULL`, Default: `now()` | Timestamp when permission was updated (UTC) |
-
-Unique constraint: `UNIQUE(user_id, module_id)` (`uq_user_module_permission_user_module`).
+- `page` (integer, default: 1): 1-indexed page number.
+- `page_size` (integer, default: 20, max: 100): Items per page.
+- `search` (string): Case-insensitive search on employee code, official email, first name, last name, or full name.
+- `company_id` (UUID): Filter by company.
+- `department_id` (UUID): Filter by department.
+- `designation_id` (UUID): Filter by designation.
+- `manager_user_id` (UUID): Filter by direct reporting manager.
+- `account_status` (string): Filter by `PENDING`, `ACTIVE`, `INACTIVE`, `SUSPENDED`.
 
 ---
 
-## FastAPI Authorization Dependency Usage
+## Example Request & Response Payloads
 
-```python
-from fastapi import APIRouter, Depends
-from app.api.deps import require_module_permission
-from app.models.user_module_permission import UserModulePermission
+### 1. Create Employee (`POST /api/admin/employees`)
 
-router = APIRouter(prefix="/employees", tags=["Employees"])
-
-@router.get(
-    "/",
-    dependencies=[Depends(require_module_permission("ADMIN_EMPLOYEES", "view"))],
-)
-def list_employees():
-    return {"message": "Access granted"}
-
-@router.post(
-    "/",
-    dependencies=[Depends(require_module_permission("ADMIN_EMPLOYEES", "create"))],
-)
-def create_employee():
-    return {"message": "Employee created"}
+**Request:**
+```json
+{
+  "company_id": "07dc4671-4240-4add-bce6-67e3d2bd45c9",
+  "department_id": "ff903dd1-eaf1-4da5-8f7b-83f3ca227195",
+  "designation_id": "832bb14a-b45b-4833-8db9-d3b3937bb77e",
+  "manager_user_id": "18f507b9-f7cf-4513-bfa1-d68a9b1c7dc4",
+  "first_name": "Rohan",
+  "middle_name": "Kumar",
+  "last_name": "Verma",
+  "official_email": "rohan.verma@gocompliances.in",
+  "personal_email": "rohan.v@example.com",
+  "mobile_number": "+919876543210",
+  "date_of_joining": "2026-03-01",
+  "employment_type": "FULL_TIME",
+  "account_status": "ACTIVE"
+}
 ```
 
-- Unauthenticated requests receive `401 Unauthorized`.
-- Authenticated requests lacking the required permission or action receive `403 Forbidden`.
-
----
-
-## Administrative Bootstrap CLI Utility
-
-When a real Director / Super Admin employee is provisioned in `user_master`, initial permissions can be granted using:
-
-```bash
-cd backend
-source .venv/bin/activate
-
-# Grant ALL scope and view/create/edit/approve access across all active modules:
-python3 -m app.scripts.grant_bootstrap_permissions --employee-code CG0001 --scope ALL
-
-# Optionally grant delete rights as well:
-python3 -m app.scripts.grant_bootstrap_permissions --employee-code CG0001 --scope ALL --allow-delete
+**Response (HTTP 201 Created):**
+```json
+{
+  "user_id": "9a7d341b-4f9e-4a6c-94fb-741982b6c12d",
+  "employee_code": "CG0002",
+  "company_id": "07dc4671-4240-4add-bce6-67e3d2bd45c9",
+  "company_name": "Gocompliances",
+  "company_code": "GOCOMPLIANCES",
+  "department_id": "ff903dd1-eaf1-4da5-8f7b-83f3ca227195",
+  "department_name": "Sales",
+  "department_code": "SALES",
+  "designation_id": "832bb14a-b45b-4833-8db9-d3b3937bb77e",
+  "designation_name": "Executive",
+  "designation_code": "EXECUTIVE",
+  "manager_user_id": "18f507b9-f7cf-4513-bfa1-d68a9b1c7dc4",
+  "manager_name": "Amit Sharma",
+  "manager_employee_code": "CG0001",
+  "first_name": "Rohan",
+  "middle_name": "Kumar",
+  "last_name": "Verma",
+  "official_email": "rohan.verma@gocompliances.in",
+  "personal_email": "rohan.v@example.com",
+  "mobile_number": "+919876543210",
+  "date_of_joining": "2026-03-01",
+  "employment_type": "FULL_TIME",
+  "account_status": "ACTIVE",
+  "created_at": "2026-09-20T20:10:00Z",
+  "updated_at": "2026-09-20T20:10:00Z"
+}
 ```
 
-> **IMPORTANT:**
-> - The bootstrap script is an administrative tool only. It was **NOT** executed during Stage 9.
-> - No test or fake permission records exist in the production database.
+### 2. Paginated List (`GET /api/admin/employees?page=1&page_size=20`)
+
+**Response (HTTP 200 OK):**
+```json
+{
+  "items": [
+    {
+      "user_id": "9a7d341b-4f9e-4a6c-94fb-741982b6c12d",
+      "employee_code": "CG0002",
+      "company_name": "Gocompliances",
+      "department_name": "Sales",
+      "designation_name": "Executive",
+      "first_name": "Rohan",
+      "last_name": "Verma",
+      "official_email": "rohan.verma@gocompliances.in",
+      "mobile_number": "+919876543210",
+      "date_of_joining": "2026-03-01",
+      "employment_type": "FULL_TIME",
+      "account_status": "ACTIVE",
+      "created_at": "2026-09-20T20:10:00Z",
+      "updated_at": "2026-09-20T20:10:00Z"
+    }
+  ],
+  "page": 1,
+  "page_size": 20,
+  "total": 1,
+  "pages": 1
+}
+```
 
 ---
 
-## Verification & Test Commands
+## Running Verification & Tests
 
-Run the complete test suite:
+Run all unit and integration tests:
 
 ```bash
 cd backend
 source .venv/bin/activate
 pytest -v
+alembic current
 ```
-
-Verify table counts in PostgreSQL:
-
-```bash
-psql -d is_gocompliance_db -c "
-SELECT COUNT(*) AS total_permissions FROM user_module_permission;
-SELECT COUNT(*) AS total_users FROM user_master;
-SELECT COUNT(*) AS total_modules FROM module_master;
-"
-```
-**Expected Output:**
-- `total_permissions` = 0
-- `total_users` = 0
-- `total_modules` = 8
 
 ---
 
 ## Upcoming Stages
-- **Stage 7C:** Employee Management HTTP CRUD APIs with permission enforcement and data scoping.
 - **Stage 7D:** Manager & Employee Management React UI integration.

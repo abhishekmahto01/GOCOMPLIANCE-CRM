@@ -2,7 +2,7 @@
 import re
 import uuid
 from datetime import date, datetime
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -305,3 +305,49 @@ class UserRead(UserBase):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class EmployeeRead(UserRead):
+    """Rich employee read schema including joined master names and codes."""
+
+    company_name: Optional[str] = None
+    company_code: Optional[str] = None
+    department_name: Optional[str] = None
+    department_code: Optional[str] = None
+    designation_name: Optional[str] = None
+    designation_code: Optional[str] = None
+    manager_name: Optional[str] = None
+    manager_employee_code: Optional[str] = None
+
+
+class EmployeeStatusUpdate(BaseModel):
+    """Schema for updating employee operational status."""
+
+    account_status: str = Field(
+        ...,
+        description="Target status: PENDING, ACTIVE, INACTIVE, SUSPENDED",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("account_status", mode="before")
+    @classmethod
+    def validate_account_status(cls, v: str) -> str:
+        if isinstance(v, str):
+            v = v.strip().upper()
+            if v not in ALLOWED_ACCOUNT_STATUSES:
+                raise ValueError(
+                    f"account_status must be one of: {', '.join(sorted(ALLOWED_ACCOUNT_STATUSES))}"
+                )
+            return v
+        return v
+
+
+class PaginatedEmployeesResponse(BaseModel):
+    """Paginated list envelope for employee records."""
+
+    items: List[EmployeeRead]
+    page: int = Field(..., ge=1, description="Current page number")
+    page_size: int = Field(..., ge=1, description="Page size limit")
+    total: int = Field(..., ge=0, description="Total matching record count")
+    pages: int = Field(..., ge=0, description="Total calculated page count")
