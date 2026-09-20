@@ -1,81 +1,174 @@
-import React, { createContext, useContext, useState, useEffect, useTransition } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import type { CurrentUser, LoginCredentials } from '../types/auth';
+import type { AccessibleModule, ActionType, DataScope } from '../types/permission';
 import {
-  getStoredAuthSession,
-  setStoredAuthSession,
-  clearStoredAuthSession,
-  validateStaticCredentials,
-} from '../utils/auth';
-import type { AuthSession } from '../utils/auth';
+  getCurrentUserApi,
+  getAccessibleModulesApi,
+  loginApi,
+  logoutApi,
+} from '../api/auth';
+import { ACCESS_TOKEN_KEY } from '../api/client';
+
+export interface AuthSession {
+  isAuthenticated: boolean;
+  username: string;
+  userRole: string;
+  employeeCode?: string;
+  email?: string;
+  department?: string;
+  designation?: string;
+  company?: string;
+  authTimestamp?: string;
+}
 
 interface AuthContextType {
+  user: CurrentUser | null;
+  modules: AccessibleModule[];
   session: AuthSession;
   isAuthenticated: boolean;
-  login: (userId: string, password: string) => { success: boolean; error?: string };
-  logout: () => void;
+  isLoading: boolean;
+  login: (credentials: LoginCredentials) => Promise<void>;
+  logout: () => Promise<void>;
+  refreshUserProfile: () => Promise<void>;
+  hasPermission: (moduleCode: string, action: ActionType) => boolean;
+  getEffectiveScope: (moduleCode: string) => DataScope | null;
+  canAccessModule: (moduleCode: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [session, setSession] = useState<AuthSession>(() => getStoredAuthSession());
-  const [, startTransition] = useTransition();
+  const [user, setUser] = useState<CurrentUser | null>(null);
+  const [modules, setModules] = useState<AccessibleModule[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Listen for storage changes across tabs/windows
-  useEffect(() => {
-    const handleStorageChange = () => {
-      startTransition(() => {
-        setSession(getStoredAuthSession());
-      });
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
-
-  const login = (userId: string, password: string): { success: boolean; error?: string } => {
-    const result = validateStaticCredentials(userId, password);
-
-    if (result.success) {
-      setStoredAuthSession(userId.trim(), 'admin');
-      setSession({
-        isAuthenticated: true,
-        username: userId.trim(),
-        userRole: 'admin',
-        authTimestamp: new Date().toISOString(),
-      });
-      return { success: true };
+  const loadUserData = useCallback(async () => {
+    const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+    if (!token) {
+      setUser(null);
+      setModules([]);
+      setIsLoading(false);
+      return;
     }
 
-    return { success: false, error: result.error || 'Invalid User ID or Password' };
+    try {
+      const [userData, userModules] = await Promise.all([
+        getCurrentUserApi(),
+        getAccessibleModulesApi(),
+      ]);
+      setUser(userData);
+      setModules(userModules);
+    } catch (err) {
+      console.error('Failed to load user profile/modules:', err);
+      setUser(null);
+      setModules([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadUserData();
+  }, [loadUserData]);
+
+  const login = async (credentials: LoginCredentials) => {
+    setIsLoading(true);
+    try {
+      await loginApi(credentials);
+      await loadUserData();
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const logout = (): void => {
-    clearStoredAuthSession();
-    setSession({
-      isAuthenticated: false,
-      username: '',
-      userRole: '',
-    });
+  const logout = async () => {
+    setIsLoading(true);
+    try {
+      await logoutApi();
+    } catch (err) {
+      console.error('Error during logout:', err);
+    } finally {
+      setUser(null);
+      setModules([]);
+      setIsLoading(false);
+    }
   };
 
-  return (
-    <AuthContext.Provider
-      value={{
-        session,
-        isAuthenticated: session.isAuthenticated,
-        login,
-        logout,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  const hasPermission = useCallback(
+    (moduleCode: string, action: ActionType): boolean => {
+      const targetCode = moduleCode.trim().toUpperCase();
+      const mod = modules.find((m) => m.module_code.toUpperCase() === targetCode);
+      if (!mod || !mod.can_view) return false;
+
+      switch (action) {
+        case 'view':
+          return mod.can_view;
+        case 'create':
+          return mod.can_create;
+        case 'edit':
+          return mod.can_edit;
+        case 'delete':
+          return mod.can_delete;
+        case 'approve':
+          return mod.can_approve;
+        default:
+          return false;
+      }
+    },
+    [modules]
   );
+
+  const getEffectiveScope = useCallback(
+    (moduleCode: string): DataScope | null => {
+      const targetCode = moduleCode.trim().toUpperCase();
+      const mod = modules.find((m) => m.module_code.toUpperCase() === targetCode);
+      if (!mod || !mod.can_view) return null;
+      return mod.data_scope;
+    },
+    [modules]
+  );
+
+  const canAccessModule = useCallback(
+    (moduleCode: string): boolean => {
+      return hasPermission(moduleCode, 'view');
+    },
+    [hasPermission]
+  );
+
+  const session: AuthSession = {
+    isAuthenticated: !!user,
+    username: user
+      ? `${user.first_name} ${user.last_name}`.trim() || user.employee_code
+      : '',
+    userRole: user?.designation_name || user?.account_status || '',
+    employeeCode: user?.employee_code || '',
+    email: user?.official_email || '',
+    department: user?.department_name || '',
+    designation: user?.designation_name || '',
+    company: user?.company_name || '',
+  };
+
+  const value: AuthContextType = {
+    user,
+    modules,
+    session,
+    isAuthenticated: !!user,
+    isLoading,
+    login,
+    logout,
+    refreshUserProfile: loadUserData,
+    hasPermission,
+    getEffectiveScope,
+    canAccessModule,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-export const useAuth = (): AuthContextType => {
+export function useAuth(): AuthContextType {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-};
+}

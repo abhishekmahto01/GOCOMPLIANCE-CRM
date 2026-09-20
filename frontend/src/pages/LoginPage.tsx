@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { validateStaticCredentials } from '../utils/auth';
 import { BrandPanel } from '../components/auth/BrandPanel';
 import { LoginForm } from '../components/auth/LoginForm';
 import { LoginTransition } from '../components/auth/LoginTransition';
@@ -12,6 +11,7 @@ import type { LoginCredentials } from '../types/auth';
 import { Mail, Phone, Building2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { extractErrorMessage } from '../api/client';
 
 export const LoginPage: React.FC = () => {
   const { isAuthenticated, login } = useAuth();
@@ -21,9 +21,6 @@ export const LoginPage: React.FC = () => {
   const [showTransition, setShowTransition] = useState(false);
   const [authError, setAuthError] = useState<string | undefined>(undefined);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  
-  // Pending credentials stored during transition (authentication delayed until flight completes)
-  const pendingCredentials = useRef<LoginCredentials | null>(null);
 
   // Modals
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
@@ -53,56 +50,26 @@ export const LoginPage: React.FC = () => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  // Login handler: validates static credentials first without authenticating globally
-  const handleLogin = (credentials: LoginCredentials) => {
-    console.log('LOGIN_CLICKED');
+  // Login handler: authenticates against FastAPI backend
+  const handleLogin = async (credentials: LoginCredentials) => {
     setIsLoading(true);
     setAuthError(undefined);
 
-    setTimeout(() => {
-      setIsLoading(false);
-      const result = validateStaticCredentials(
-        credentials.identifier,
-        credentials.password
-      );
-
-      if (!result.success) {
-        const errorMsg = result.error || 'Invalid User ID or Password';
-        setAuthError(errorMsg);
-        addToast('error', 'Authentication Failed', errorMsg);
-        return;
-      }
-
-      console.log('CREDENTIALS_VALID');
-      pendingCredentials.current = credentials;
-      console.log('TRANSITION_STARTED');
+    try {
+      await login(credentials);
+      // Login succeeded; start airplane transition
       setShowTransition(true);
-    }, 200);
+    } catch (err: unknown) {
+      const errorMsg = extractErrorMessage(err);
+      setAuthError(errorMsg);
+      addToast('error', 'Authentication Failed', errorMsg);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  // Called when paper airplane transition completes (~2700ms)
+  // Called when paper airplane transition completes (~1650ms)
   const handleTransitionComplete = () => {
-    console.log('TRANSITION_COMPLETED');
-    const credentials = pendingCredentials.current;
-
-    if (!credentials) {
-      setShowTransition(false);
-      return;
-    }
-
-    const result = login(
-      credentials.identifier,
-      credentials.password
-    );
-
-    if (!result.success) {
-      setShowTransition(false);
-      setAuthError(result.error || 'Authentication failed');
-      return;
-    }
-
-    console.log('SESSION_CREATED');
-    console.log('NAVIGATING_TO_DASHBOARD');
     navigate('/dashboard', { replace: true });
   };
 
@@ -123,7 +90,7 @@ export const LoginPage: React.FC = () => {
     }, 1200);
   };
 
-  // EARLY RETURN: Full-Screen Login Transition completely replaces login page during flight
+  // Full-Screen Login Transition during airplane flight
   if (showTransition) {
     return (
       <LoginTransition
@@ -185,7 +152,7 @@ export const LoginPage: React.FC = () => {
             </div>
             <div className="flex items-center gap-2">
               <Building2 className="w-4 h-4 text-blue-600 shrink-0" />
-              <span>Supported ID Formats: <strong>GC0001, EP0001, BM0001</strong></span>
+              <span>Supported ID Formats: <strong>CG0001, EP0001, BM0001, or email</strong></span>
             </div>
           </div>
           <div className="flex justify-end pt-2">
@@ -209,7 +176,7 @@ export const LoginPage: React.FC = () => {
         <form onSubmit={handleForgotSubmit} className="space-y-4">
           <Input
             label="Employee ID / Work Email"
-            placeholder="GC0001 or name@gocompliances.com"
+            placeholder="CG0001 or name@gocompliances.in"
             type="text"
             required
             value={forgotEmail}

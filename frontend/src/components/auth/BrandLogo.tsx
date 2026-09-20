@@ -35,7 +35,7 @@ export const BrandEmblem: React.FC<{ size?: 'sm' | 'md' | 'lg' | 'xl'; className
             d="M 100, 100 m 0, -73 a 73,73 0 1,1 0,146 a 73,73 0 1,1 0,-146"
           />
           <filter id="emblemShadow" x="-10%" y="-10%" width="125%" height="125%" filterUnits="userSpaceOnUse">
-            <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.15" />
+            <feDropShadow dx="0" dy="2" stdDeviation="4" floodColor="#0f172a" floodOpacity="0.15" />
           </filter>
         </defs>
 

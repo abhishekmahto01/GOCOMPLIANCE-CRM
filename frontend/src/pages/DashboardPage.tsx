@@ -28,7 +28,7 @@ const MODULES_DATA: ModuleData[] = [
 ];
 
 export const DashboardPage: React.FC = () => {
-  const { session, logout } = useAuth();
+  const { session, user, logout, canAccessModule } = useAuth();
   const navigate = useNavigate();
 
   // Dark / Light Mode state with localStorage persistence
@@ -49,7 +49,6 @@ export const DashboardPage: React.FC = () => {
         localStorage.setItem('gocompliances-theme', 'dark');
       } else {
         document.documentElement.classList.remove('dark');
-        localStorage.setItem('gocompliances-theme', 'light');
       }
     } catch (err) {
       console.error('Error persisting theme:', err);
@@ -78,8 +77,8 @@ export const DashboardPage: React.FC = () => {
   // Password Modal state
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
 
-  // Department field (structured for future backend integration)
-  const userDepartment = 'Admin Department';
+  // Department field
+  const userDepartment = session.department || user?.department_name || 'Administration';
 
   // Logout handler
   const handleLogout = () => {
@@ -89,7 +88,20 @@ export const DashboardPage: React.FC = () => {
 
   // Module Card selection handler
   const handleModuleClick = (selectedModule: ModuleData) => {
-    console.log('Selected module:', selectedModule.id);
+    if (selectedModule.id === 'admin') {
+      if (canAccessModule('ADMIN')) {
+        navigate('/admin');
+      } else {
+        addToast(
+          'error',
+          'Access Restricted',
+          'You do not have permission to access the Administration module.'
+        );
+      }
+      return;
+    }
+
+    // Sales & Operations feedback
     addToast(
       'info',
       `${selectedModule.title} Module`,
@@ -97,18 +109,22 @@ export const DashboardPage: React.FC = () => {
     );
   };
 
+  // Filter modules based on user permissions if desired, or keep all 3 visible with permission guard
+  // As per instruction: "The Admin card must appear only when the authenticated user has access to the ADMIN module or be hidden/disabled according to product conventions"
+  const visibleModules = MODULES_DATA.filter((mod) => {
+    if (mod.id === 'admin') {
+      return canAccessModule('ADMIN');
+    }
+    return true;
+  });
+
   return (
     <div className={`min-h-screen w-full flex flex-col font-sans transition-colors duration-300 relative overflow-x-hidden ${theme === 'dark' ? 'dark bg-slate-950 text-slate-100' : 'bg-[#f8faff] text-slate-800'}`}>
       
-      {/* Abstract Soft Ambient Background Gradients matching Image 2 */}
+      {/* Abstract Soft Ambient Background Gradients */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-        {/* Top-Center Soft Glow */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/3 w-[800px] h-[500px] rounded-full bg-gradient-to-b from-blue-300/20 via-sky-200/10 to-transparent dark:from-blue-900/15 dark:via-indigo-950/10 blur-3xl" />
-        
-        {/* Left Side Ambient Orb */}
         <div className="absolute top-1/3 -left-32 w-[550px] h-[550px] rounded-full bg-cyan-200/15 dark:bg-cyan-900/10 blur-3xl" />
-        
-        {/* Right Side Ambient Orb */}
         <div className="absolute top-1/2 -right-32 w-[550px] h-[550px] rounded-full bg-blue-300/15 dark:bg-indigo-900/10 blur-3xl" />
       </div>
 
@@ -126,9 +142,9 @@ export const DashboardPage: React.FC = () => {
 
       {/* Main Module Selection Body */}
       <main className="relative z-10 flex-1 flex flex-col items-center justify-center max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 lg:py-16">
-        {/* 3 Module Cards Grid (Desktop: 3 in 1 row, Tablet: 2+1, Mobile: 1 column) */}
+        {/* Module Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-7 lg:gap-8 w-full max-w-6xl">
-          {MODULES_DATA.map((module) => (
+          {visibleModules.map((module) => (
             <ModuleCard
               key={module.id}
               module={module}
