@@ -2,105 +2,97 @@
 
 Production-ready FastAPI backend foundation for Gocompliances CRM.
 
-## Current Stage Scope: Stage 7A (User Master Database Foundation & Employee-Code Generation)
+## Current Stage Scope: Stage 7B (Secure Authentication Foundation)
 
-Stage 7A establishes the fundamental user and employee registry (`user_master`) along with concurrency-safe employee-code generation and cross-company integrity validation:
-- **SQLAlchemy 2 Typed Model `User`** mapped to `user_master` with foreign keys to `company_master`, `department_master`, `designation_master`, and a nullable self-referencing reporting manager foreign key (`user_master.user_id`).
-- **Pydantic v2 Schemas** (`UserBase`, `UserCreate`, `UserUpdate`, `UserRead`) with strict validation for names, normalized lowercased emails, Indian `+91` mobile formats, employment types, and account statuses.
-- **Alembic Schema Migration** `574d1e27cc56_create_user_master.py` with foreign key constraints, check constraints, indexes, and functional unique lower-cased index on `official_email`.
-- **Employee-Code Generation Service** (`app/services/employee_code.py`) using PostgreSQL row-level locking (`SELECT ... FOR UPDATE`) on `company_master` to assign strictly sequential, atomic employee codes (e.g. `CG0001`, `EP0001`, `BM0001`).
-- **User Creation Service & Integrity Validation** (`app/services/user_service.py`) enforcing cross-company consistency (Department, Designation, and Reporting Manager must all belong to the employee's assigned Company).
-- **Automated Unit Test Suite** with 67 tests covering models, constraints, relationships, schema normalization, employee code generation, concurrency locking, cross-company validation, and rollback safety.
+Stage 7B establishes the enterprise authentication and session architecture:
+- **Argon2id Password Hashing:** Modern, secure password hashing using `pwdlib[argon2]` with constant-time verification to prevent timing side-channel attacks.
+- **Signed JWT Access Tokens:** Issued with 15-minute expiration, containing `sub` (User UUID), `token_version`, and unique `jti`.
+- **Rotating Refresh Tokens:** 7-day expiration, stored only as cryptographic SHA-256 hashes in `auth_refresh_token`. Old tokens are revoked upon rotation, and token replay/reuse automatically terminates all active sessions.
+- **Account Lockout Protection:** 5 consecutive failed attempts trigger a 15-minute temporary lockout.
+- **Dual Identifier Login:** Accepts either corporate `official_email` or `employee_code` (case-insensitive) with generic 401 responses to prevent account enumeration.
+- **Authentication Endpoints:** `/api/auth/login`, `/api/auth/refresh`, `/api/auth/logout`, `/api/auth/me`, and `/api/auth/change-password`.
+- **Global Session Invalidation:** Changing password or detecting token reuse increments `token_version` and revokes all active database sessions.
+- **Bootstrap Admin Script (`app/scripts/bootstrap_admin.py`):** Interactive CLI utility using `getpass.getpass()` for initial Director account creation (never executed automatically).
+- **Automated Unit Test Suite:** 89 passing unit tests covering all cryptographic, validation, lockout, rotation, and API operations.
 
-> **Note on Stage 7A Boundaries:**
-> - **Zero Seed Employee Records:** `user_master` remains completely empty (0 records) until authorized users create real accounts via the future Admin UI.
-> - **No Passwords / JWT / Authentication Yet:** Authentication, password hashing, and JWT tokens will be introduced in subsequent sub-stages (7B/7C).
-> - **No Public CRUD Endpoints Yet:** HTTP API routes and UI components will be built in sub-stages after authentication and authorization frameworks are complete.
-
----
-
-## Employee Profile Scope & Boundaries
-
-### Included Fields (Basic CRM Employee Data)
-- **Auto-generated Employee Code:** Company prefix + 4-digit zero-padded number (e.g., `CG0001`, `EP0001`, `BM0001`, scaling beyond 9999 as `CG10000`).
-- **Employee Name:** `first_name`, `middle_name` (optional), `last_name`.
-- **Official Email:** Corporate email address (case-insensitively unique via PostgreSQL functional index `lower(official_email)`).
-- **Personal Email:** Optional personal email address (lowercased).
-- **Mobile Number:** Primary contact number supporting Indian `+91` format.
-- **Organizational Alignment:** `company_id`, `department_id`, `designation_id`.
-- **Reporting Manager:** `manager_user_id` (nullable self-referencing foreign key).
-- **Joining Date:** `date_of_joining` (`DATE`).
-- **Employment Type:** `FULL_TIME`, `PART_TIME`, `CONTRACT`, `INTERN`, `CONSULTANT`.
-- **Account Status:** `PENDING` (default), `ACTIVE`, `INACTIVE`, `SUSPENDED`.
-
-### Excluded HRMS Fields (Out of Scope for CRM)
-The following sensitive HR fields are intentionally excluded from `user_master` and belong strictly to future HRMS services:
-- Aadhaar number
-- PAN number
-- Salary / compensation structures
-- Bank account details
-- Attendance logs
-- Detailed residential addresses
-- Medical / health information
+> **Note on Stage 7B Boundaries:**
+> - **Zero Default / Seed Admin Records:** `user_master` remains completely empty (0 records) until authorized users create real accounts via the bootstrap script or future UI.
+> - **No Roles / Permissions Yet:** RBAC, permissions, and access control matrices will be established in Stage 7C.
+> - **No Employee CRUD Endpoints / Frontend Yet:** Admin UI and employee management routes will be added in Stage 7D.
 
 ---
 
-## Organizational Hierarchy & Relationships
+## Authentication Flow & Security Architecture
 
-In Gocompliances CRM, employees are strictly organized across corporate entities:
+### 1. Dual Identifier Login
+Users may log in with either:
+- **Official Corporate Email:** (e.g. `director@gocompliances.in`) - automatically lowercased.
+- **Employee Code:** (e.g. `CG0001`, `EP0001`, `BM0001`) - automatically uppercased.
 
-```text
-Company (e.g. Gocompliances / CG)
-├── Department (e.g. Sales)
-└── Designation (e.g. Executive, Manager, Director)
-      └── User / Employee (e.g. CG0001 - Amit Sharma)
-            └── Reports to Manager (e.g. CG0002 - Priya Patel)
+```http
+POST /api/auth/login
+Content-Type: application/json
+
+{
+  "identifier": "director@gocompliances.in",
+  "password": "ValidComplexPassword123!@"
+}
 ```
 
-### Business Rules Enforced by the Service Layer:
-1. **Department Belongs to Company:** An employee's Department must belong to the selected Company and be in `ACTIVE` status.
-2. **Designation Belongs to Company:** An employee's Designation must belong to the selected Company and be in `ACTIVE` status.
-3. **Manager Belongs to Same Company:** A reporting manager must belong to the same Company as the employee.
-4. **Self-Manager Prohibition:** An employee cannot report to themselves (enforced both at the database level via `chk_user_self_manager` check constraint and at the service validation layer).
+**Response:**
+```json
+{
+  "access_token": "eyJhbGciOi...",
+  "refresh_token": "eyJhbGciOi...",
+  "token_type": "bearer",
+  "expires_in": 900,
+  "must_change_password": true
+}
+```
+
+### 2. Token Lifetimes & Rotation Policy
+- **Access Token:** 15 minutes default lifetime (`ACCESS_TOKEN_EXPIRE_MINUTES=15`).
+- **Refresh Token:** 7 days default lifetime (`REFRESH_TOKEN_EXPIRE_DAYS=7`).
+- **Token Rotation:** Every call to `POST /api/auth/refresh` revokes the old refresh token and issues a brand-new token pair.
+- **Replay Attack Detection:** If a previously revoked refresh token is presented again, the system detects a token reuse attack, increments the user's `token_version`, and immediately invalidates all active sessions.
+
+### 3. Password Complexity Policy
+All user passwords must satisfy:
+- Minimum 10 characters, maximum 128 characters
+- At least one uppercase letter (`A-Z`)
+- At least one lowercase letter (`a-z`)
+- At least one digit (`0-9`)
+- At least one special symbol (`!@#$%^&*()_+-=[]{};':"|,.<>/?~`)
+- No leading or trailing whitespace
+
+### 4. Account Lockout Rules
+- 5 consecutive failed login attempts lock the account for 15 minutes.
+- Successful login clears failed attempt counters and removes any lockout.
 
 ---
 
-## Employee-Code Generation & Concurrency Locking
+## Required Environment Variables
 
-To ensure collision-free, sequential employee IDs in high-concurrency environments:
-1. A transaction acquires an exclusive row lock on the parent company using `SELECT ... FOR UPDATE` on `company_master`.
-2. The current `next_employee_number` is read and formatted with the company's `employee_code_prefix` and 4-digit zero padding:
-   - `CG` + `1` $\rightarrow$ `CG0001`
-   - `EP` + `1` $\rightarrow$ `EP0001`
-   - `BM` + `1` $\rightarrow$ `BM0001`
-   - Counters exceeding 9999 expand dynamically (e.g. `CG10000`).
-3. The counter `company.next_employee_number` is incremented by 1.
-4. The user record is inserted and committed in the **same transaction**.
-5. If any validation or database error occurs during creation, the transaction is completely rolled back, ensuring sequence numbers are never wasted or skipped.
+Configure these variables in your local `backend/.env`:
 
----
+```bash
+# Security & JWT Configuration
+JWT_SECRET_KEY="YOUR_CRYPTO_SECURE_SECRET_MINIMUM_32_CHARACTERS"
+JWT_ALGORITHM="HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES=15
+REFRESH_TOKEN_EXPIRE_DAYS=7
+MAX_FAILED_LOGIN_ATTEMPTS=5
+LOGIN_LOCK_MINUTES=15
+```
 
-## `user_master` Column Specifications
+### Generating a Secure JWT Secret
+```bash
+# Using OpenSSL:
+openssl rand -base64 48
 
-| Column | Type | Constraints / Defaults | Description |
-| :--- | :--- | :--- | :--- |
-| `user_id` | `UUID` | Primary Key, `NOT NULL` | Unique user identifier (UUIDv4) |
-| `employee_code` | `VARCHAR(20)` | `NOT NULL`, Unique Index | Uppercase unique code (e.g. `CG0001`) |
-| `company_id` | `UUID` | Foreign Key (`company_master.company_id`), `ON DELETE RESTRICT`, `NOT NULL`, Index | Company reference |
-| `department_id` | `UUID` | Foreign Key (`department_master.department_id`), `ON DELETE RESTRICT`, `NOT NULL`, Index | Department reference |
-| `designation_id` | `UUID` | Foreign Key (`designation_master.designation_id`), `ON DELETE RESTRICT`, `NOT NULL`, Index | Designation reference |
-| `manager_user_id` | `UUID` | Foreign Key (`user_master.user_id`), `ON DELETE SET NULL`, `NULLABLE`, Index | Reporting manager reference |
-| `first_name` | `VARCHAR(100)` | `NOT NULL` | Employee first name |
-| `middle_name` | `VARCHAR(100)` | `NULLABLE` | Employee middle name (optional) |
-| `last_name` | `VARCHAR(100)` | `NOT NULL` | Employee last name |
-| `official_email` | `VARCHAR(255)` | `NOT NULL`, Unique Index on `lower(official_email)` | Corporate email address |
-| `personal_email` | `VARCHAR(255)` | `NULLABLE` | Personal contact email |
-| `mobile_number` | `VARCHAR(20)` | `NOT NULL` | Contact number (+91 format) |
-| `date_of_joining` | `DATE` | `NOT NULL` | Official joining date |
-| `employment_type` | `VARCHAR(20)` | `NOT NULL`, Check Constraint | `FULL_TIME`, `PART_TIME`, `CONTRACT`, `INTERN`, `CONSULTANT` |
-| `account_status` | `VARCHAR(20)` | `NOT NULL`, Default: `'PENDING'`, Index, Check Constraint | `PENDING`, `ACTIVE`, `INACTIVE`, `SUSPENDED` |
-| `created_at` | `TIMESTAMPTZ` | `NOT NULL`, Default: `now()` | Record creation timestamp (UTC) |
-| `updated_at` | `TIMESTAMPTZ` | `NOT NULL`, Default: `now()` | Record update timestamp (UTC) |
+# Using Python secrets:
+python3 -c "import secrets; print(secrets.token_urlsafe(48))"
+```
 
 ---
 
@@ -125,13 +117,27 @@ SELECT count(*) AS companies FROM company_master;
 SELECT count(*) AS departments FROM department_master;
 SELECT count(*) AS designations FROM designation_master;
 SELECT count(*) AS users FROM user_master;
+SELECT count(*) AS refresh_tokens FROM auth_refresh_token;
 "
 ```
 **Expected Counts:**
 - `company_master` = 3
 - `department_master` = 12
 - `designation_master` = 18
-- `user_master` = 0 (empty table)
+- `user_master` = 0
+- `auth_refresh_token` = 0
+
+---
+
+## First Director Account Bootstrap (Manual Execution)
+
+When approved real Director details are ready, run the interactive utility:
+
+```bash
+python3 -m app.scripts.bootstrap_admin
+```
+
+This utility will prompt interactively for Company Code, Department Code, Designation Code, Name, Official Email, Mobile, Joining Date, and Password (masked input).
 
 ---
 
@@ -143,11 +149,10 @@ Execute the full test suite using `pytest`:
 pytest -v
 ```
 
-All 67 unit tests run in isolation using mocking (no destructive database mutations).
+All 89 unit tests run in isolation using mocking (no destructive database mutations).
 
 ---
 
 ## Roadmap / Upcoming Stages
-- **Stage 7B:** User Authentication, Password Hashing (Argon2id/Bcrypt), and JWT Token Architecture.
 - **Stage 7C:** Role-Based Access Control (RBAC), Permissions Framework, and Security Dependencies.
 - **Stage 7D:** Employee Management HTTP CRUD APIs, Admin UI, and Profile Management.

@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     DB_POOL_TIMEOUT: int = 30
     DB_CONNECT_TIMEOUT: int = 5
 
+    # JWT Authentication & Security settings
+    JWT_SECRET_KEY: str = ""
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    MAX_FAILED_LOGIN_ATTEMPTS: int = 5
+    LOGIN_LOCK_MINUTES: int = 15
+
     @field_validator("DATABASE_URL")
     @classmethod
     def validate_database_url(cls, v: str) -> str:
@@ -45,6 +53,20 @@ class Settings(BaseSettings):
         elif url.startswith("postgresql://") and not url.startswith("postgresql+"):
             url = url.replace("postgresql://", "postgresql+psycopg://", 1)
         return url
+
+    @field_validator("JWT_SECRET_KEY")
+    @classmethod
+    def validate_jwt_secret_key(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError(
+                "JWT_SECRET_KEY is not configured. Please define JWT_SECRET_KEY in your .env file or environment."
+            )
+        secret = v.strip()
+        if len(secret) < 32:
+            raise ValueError(
+                "JWT_SECRET_KEY is too short. It must be at least 32 characters long for security."
+            )
+        return secret
 
     @field_validator("CORS_ORIGINS", mode="after")
     @classmethod

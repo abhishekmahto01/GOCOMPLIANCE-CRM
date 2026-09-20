@@ -4,11 +4,13 @@ from datetime import date, datetime
 from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     String,
     func,
     text,
@@ -22,6 +24,7 @@ if TYPE_CHECKING:
     from app.models.company import Company
     from app.models.department import Department
     from app.models.designation import Designation
+    from app.models.refresh_token import RefreshToken
 
 
 class User(Base):
@@ -40,6 +43,14 @@ class User(Base):
         CheckConstraint(
             "account_status IN ('PENDING', 'ACTIVE', 'INACTIVE', 'SUSPENDED')",
             name="chk_user_account_status_valid",
+        ),
+        CheckConstraint(
+            "failed_login_attempts >= 0",
+            name="chk_user_failed_login_attempts_non_negative",
+        ),
+        CheckConstraint(
+            "token_version > 0",
+            name="chk_user_token_version_positive",
         ),
         Index(
             "ix_user_master_official_email_lower",
@@ -169,6 +180,52 @@ class User(Base):
         comment="Account/employment status: PENDING, ACTIVE, INACTIVE, SUSPENDED",
     )
 
+    # Security & Authentication fields (Stage 7B)
+    password_hash: Mapped[Optional[str]] = mapped_column(
+        String(255),
+        nullable=True,
+        comment="Argon2id password hash (nullable until user activates account)",
+    )
+
+    must_change_password: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("true"),
+        comment="Flag indicating if password change is required on next login",
+    )
+
+    failed_login_attempts: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default=text("0"),
+        comment="Counter for consecutive failed login attempts",
+    )
+
+    locked_until: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Timestamp until which account is locked due to failed login attempts",
+    )
+
+    last_login_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Timestamp of most recent successful login (UTC)",
+    )
+
+    password_changed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Timestamp when password was last changed (UTC)",
+    )
+
+    token_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default=text("1"),
+        comment="Session token version for global revocation",
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -209,6 +266,13 @@ class User(Base):
     direct_reports: Mapped[List["User"]] = relationship(
         "User",
         back_populates="manager",
+    )
+
+    refresh_tokens: Mapped[List["RefreshToken"]] = relationship(
+        "RefreshToken",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
     def __repr__(self) -> str:

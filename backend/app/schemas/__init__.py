@@ -1,4 +1,12 @@
 """Pydantic schemas package."""
+from app.schemas.auth import (
+    ChangePasswordRequest,
+    CurrentUserRead,
+    LoginRequest,
+    LogoutRequest,
+    RefreshTokenRequest,
+    TokenResponse,
+)
 from app.schemas.company import (
     CompanyBase,
     CompanyCreate,
@@ -25,10 +33,12 @@ from app.schemas.user import (
 )
 
 __all__ = [
+    "ChangePasswordRequest",
     "CompanyBase",
     "CompanyCreate",
     "CompanyRead",
     "CompanyUpdate",
+    "CurrentUserRead",
     "DepartmentBase",
     "DepartmentCreate",
     "DepartmentRead",
@@ -37,6 +47,10 @@ __all__ = [
     "DesignationCreate",
     "DesignationRead",
     "DesignationUpdate",
+    "LoginRequest",
+    "LogoutRequest",
+    "RefreshTokenRequest",
+    "TokenResponse",
     "UserBase",
     "UserCreate",
     "UserRead",
