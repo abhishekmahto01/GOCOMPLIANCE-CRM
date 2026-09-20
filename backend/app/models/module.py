@@ -1,7 +1,7 @@
 """Module Master model definition."""
 import uuid
 from datetime import datetime
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import (
     Boolean,
@@ -17,6 +17,9 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base
+
+if TYPE_CHECKING:
+    from app.models.user_module_permission import UserModulePermission
 
 
 class Module(Base):
@@ -143,6 +146,13 @@ class Module(Base):
     children: Mapped[List["Module"]] = relationship(
         "Module",
         back_populates="parent",
+        cascade="save-update, merge",
+        passive_deletes=True,
+    )
+
+    user_permissions: Mapped[List["UserModulePermission"]] = relationship(
+        "UserModulePermission",
+        back_populates="module",
         cascade="save-update, merge",
         passive_deletes=True,
     )

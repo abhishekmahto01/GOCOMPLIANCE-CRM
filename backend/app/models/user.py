@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from app.models.department import Department
     from app.models.designation import Designation
     from app.models.refresh_token import RefreshToken
+    from app.models.user_module_permission import UserModulePermission
 
 
 class User(Base):
@@ -273,6 +274,20 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
         passive_deletes=True,
+    )
+
+    module_permissions: Mapped[List["UserModulePermission"]] = relationship(
+        "UserModulePermission",
+        foreign_keys="[UserModulePermission.user_id]",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    permissions_granted: Mapped[List["UserModulePermission"]] = relationship(
+        "UserModulePermission",
+        foreign_keys="[UserModulePermission.granted_by_user_id]",
+        back_populates="granted_by",
     )
 
     def __repr__(self) -> str:

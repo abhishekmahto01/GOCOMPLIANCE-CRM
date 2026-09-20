@@ -2,116 +2,143 @@
 
 Production-ready FastAPI backend foundation for Gocompliances CRM.
 
-## Current Stage Scope: Stage 8 (Module Master)
+## Current Stage Scope: Stage 9 (Per-User Module Permissions and Data Scopes)
 
-Stage 8 establishes the central module and navigation framework (`module_master`) to govern system features, navigation hierarchy, and access boundaries:
-- **SQLAlchemy 2 Typed Model `Module`** mapped to `module_master` with self-referencing foreign key (`fk_module_parent_module_id`) with `ON DELETE RESTRICT`.
-- **Hierarchical Module Support:** Self-referencing bi-directional ORM relationships (`Module.parent` <-> `Module.children`).
-- **Pydantic v2 Schemas** (`ModuleBase`, `ModuleCreate`, `ModuleUpdate`, `ModuleRead`, `ModuleTreeRead`) with route format validation, uppercase code normalization, and recursive tree serialization.
-- **Alembic Schema Migration** `f46f50205034_create_module_master.py` with unique constraints, indexes on routes/codes, and check constraints (`chk_module_self_parent`, `chk_module_route_format`, `chk_module_code_format`, `chk_module_display_order_non_negative`, `chk_module_status_valid`).
-- **Idempotent Initial Seeding Script** (`app/scripts/seed_modules.py`) that provisions the 8 core system modules (3 top-level, 5 sub-modules) with deterministic UUIDv5 identifiers.
-- **Automated Unit Test Suite** with 104 passing tests covering models, constraints, tree serialization, migrations, and seeding idempotency.
-
-> **Note on Stage 8 Scope & Access Boundaries:**
-> - **Navigation vs Access:** The `is_navigation` flag indicates whether a module appears in UI navigation; it **does NOT** grant user permissions.
-> - **Permissions in Stage 9:** User-specific module permissions (`user_module_permission`) and access matrices will be implemented in Stage 9.
-> - **Employee UI & Module CRUD Endpoints:** Administrative UI and module CRUD endpoints will be delivered in subsequent sub-stages.
+Stage 9 implements granular, per-user authorization matrix and data scope visibility boundaries:
+- **SQLAlchemy 2 Typed Model `UserModulePermission`** mapped to `user_module_permission` table.
+- **Granular Action Flags:** Independent boolean switches (`can_view`, `can_create`, `can_edit`, `can_delete`, `can_approve`) with enforced prerequisite (`can_view=True` required for any action).
+- **Multi-Tier Data Scopes:** `SELF`, `TEAM`, `DEPARTMENT`, `COMPANY`, `ALL`.
+- **Recursive CTE Hierarchy Resolution:** Cycle-safe PostgreSQL CTE query to resolve complete reporting lines with depth limits for `TEAM` scope.
+- **Pydantic v2 Validation Schemas** (`UserModulePermissionBase`, `UserModulePermissionCreate`, `UserModulePermissionUpdate`, `UserModulePermissionRead`, `AccessibleModuleRead`).
+- **Alembic Schema Migration** `65ff8484468e_create_user_module_permission.py` with unique user/module constraints, check constraints (`chk_permission_data_scope_valid`, `chk_permission_status_valid`, `chk_permission_action_requires_view`, `chk_permission_expires_after_granted`), and indexes.
+- **Permission Evaluation Service & FastAPI Dependency** (`require_module_permission`, `has_permission`, `get_accessible_modules`, `resolve_data_scope_context`).
+- **Bootstrap CLI Utility** (`app/scripts/grant_bootstrap_permissions.py`) for one-time administrative provisioning (unexecuted during Stage 9).
+- **Automated Unit & Integration Test Suite** with 126 passing tests.
 
 ---
 
-## Initial System Module Hierarchy (8 Records)
+## Core Security & Permission Principles
 
-| Module Code | Module Name | Parent Module | Route | Display Order | Navigation | Description |
-| :--- | :--- | :---: | :--- | :---: | :---: | :--- |
-| `ADMIN` | Admin | *None* | `/admin` | 10 | `true` | Administrative settings, company management, and access controls |
-| `ADMIN_COMPANIES` | Companies | `ADMIN` | `/admin/companies` | 10 | `true` | Corporate entities and company code prefixes |
-| `ADMIN_DEPARTMENTS` | Departments | `ADMIN` | `/admin/departments` | 20 | `true` | Company-specific department configuration |
-| `ADMIN_DESIGNATIONS` | Designations | `ADMIN` | `/admin/designations` | 30 | `true` | Company-specific employee designations and seniority ranks |
-| `ADMIN_EMPLOYEES` | Employees | `ADMIN` | `/admin/employees` | 40 | `true` | Employee master records and organizational hierarchy |
-| `ADMIN_ACCESS` | Access Control | `ADMIN` | `/admin/access` | 50 | `true` | User module permissions and role authorization |
-| `SALES` | Sales | *None* | `/sales` | 20 | `true` | Sales pipeline, lead management, and customer conversions |
-| `OPERATIONS` | Operations | *None* | `/operations` | 30 | `true` | Client compliance workflows, task execution, and delivery |
+1. **Default Deny:** Users have zero access until an explicit, active, and non-expired permission row is assigned.
+2. **Action Flag Invariant:** Non-view actions (`can_create`, `can_edit`, `can_delete`, `can_approve`) strictly require `can_view=True`. Enforced both at schema validation and PostgreSQL database constraint levels.
+3. **No Role-Based Implicit Access:** Designations and Departments never automatically grant module permissions. Every permission is explicitly bound to a user.
+4. **Grantor Escalation Prevention:** Users cannot grant permissions or broader data scopes than they themselves possess.
+5. **Temporary Expiration:** Permissions with an `expires_at` timestamp in the past are automatically denied access.
+6. **Parent-Child Navigation Preservation:** In `get_accessible_modules`, parent modules are included for UI navigation structure when an accessible child exists, without granting child actions or unrelated submodules.
 
 ---
 
-## `module_master` Column Specifications
+## Data Scope Definitions
+
+| Data Scope | Meaning & Record Access Boundary | Resolution Strategy |
+| :--- | :--- | :--- |
+| `SELF` | Records owned by or associated with the current user. | `user_id == current_user.user_id` |
+| `TEAM` | Records owned by the current user and all direct/indirect recursive subordinates. | PostgreSQL Recursive CTE on `user_master` (`manager_user_id`) with cycle path tracking and depth bounds. |
+| `DEPARTMENT` | Records within the user's company and assigned department. | `company_id == user.company_id AND department_id == user.department_id` |
+| `COMPANY` | Records within the user's assigned company. | `company_id == user.company_id` |
+| `ALL` | All records across permitted company and system scopes. | Global / administrative access. |
+
+---
+
+## `user_module_permission` Column Specifications
 
 | Column | Type | Constraints / Defaults | Description |
 | :--- | :--- | :--- | :--- |
-| `module_id` | `UUID` | Primary Key, `NOT NULL` | Unique module identifier (UUIDv4/v5) |
-| `module_code` | `VARCHAR(60)` | `NOT NULL`, Unique Index, Check Constraint (`^[A-Z_]+$`) | Uppercase immutable system identifier |
-| `module_name` | `VARCHAR(100)` | `NOT NULL` | Human-readable module name |
-| `parent_module_id` | `UUID` | Foreign Key (`module_master.module_id`), `ON DELETE RESTRICT`, `NULLABLE`, Index | Parent module reference (null for root) |
-| `route` | `VARCHAR(200)` | `NULLABLE`, Unique Index, Check Constraint (`^/.*`) | Frontend route path starting with `/` |
-| `description` | `VARCHAR(500)` | `NULLABLE` | Optional description of module features |
-| `display_order` | `INTEGER` | `NOT NULL`, Default: `0`, Index, Check: `>= 0` | UI display sorting order |
-| `is_navigation` | `BOOLEAN` | `NOT NULL`, Default: `true` | Navigation visibility indicator |
+| `permission_id` | `UUID` | Primary Key, `NOT NULL` | Unique permission grant ID (UUIDv4) |
+| `user_id` | `UUID` | Foreign Key (`user_master.user_id`), `ON DELETE CASCADE`, `NOT NULL`, Index | Target employee user ID |
+| `module_id` | `UUID` | Foreign Key (`module_master.module_id`), `ON DELETE RESTRICT`, `NOT NULL`, Index | Target module ID |
+| `can_view` | `BOOLEAN` | `NOT NULL`, Default: `false` | Read/view access to module records |
+| `can_create` | `BOOLEAN` | `NOT NULL`, Default: `false` | Creation rights (requires `can_view=true`) |
+| `can_edit` | `BOOLEAN` | `NOT NULL`, Default: `false` | Update rights (requires `can_view=true`) |
+| `can_delete` | `BOOLEAN` | `NOT NULL`, Default: `false` | Delete/deactivate rights (requires `can_view=true`) |
+| `can_approve` | `BOOLEAN` | `NOT NULL`, Default: `false` | Workflow approval rights (requires `can_view=true`) |
+| `data_scope` | `VARCHAR(20)` | `NOT NULL`, Default: `'SELF'`, Check Constraint | `SELF`, `TEAM`, `DEPARTMENT`, `COMPANY`, `ALL` |
 | `status` | `VARCHAR(20)` | `NOT NULL`, Default: `'ACTIVE'`, Index, Check Constraint | `ACTIVE`, `INACTIVE` |
-| `created_at` | `TIMESTAMPTZ` | `NOT NULL`, Default: `now()` | Record creation timestamp (UTC) |
-| `updated_at` | `TIMESTAMPTZ` | `NOT NULL`, Default: `now()` | Record update timestamp (UTC) |
+| `granted_by_user_id` | `UUID` | Foreign Key (`user_master.user_id`), `ON DELETE SET NULL`, `NULLABLE`, Index | Grantor user audit reference |
+| `granted_at` | `TIMESTAMPTZ` | `NOT NULL`, Default: `now()` | Timestamp when permission was assigned (UTC) |
+| `expires_at` | `TIMESTAMPTZ` | `NULLABLE`, Index, Check: `expires_at > granted_at` | Optional future expiration timestamp (UTC) |
+| `updated_at` | `TIMESTAMPTZ` | `NOT NULL`, Default: `now()` | Timestamp when permission was updated (UTC) |
+
+Unique constraint: `UNIQUE(user_id, module_id)` (`uq_user_module_permission_user_module`).
 
 ---
 
-## Database Migration & Seeding Commands
+## FastAPI Authorization Dependency Usage
 
-All commands are run from the `backend/` directory with `.venv` activated:
+```python
+from fastapi import APIRouter, Depends
+from app.api.deps import require_module_permission
+from app.models.user_module_permission import UserModulePermission
+
+router = APIRouter(prefix="/employees", tags=["Employees"])
+
+@router.get(
+    "/",
+    dependencies=[Depends(require_module_permission("ADMIN_EMPLOYEES", "view"))],
+)
+def list_employees():
+    return {"message": "Access granted"}
+
+@router.post(
+    "/",
+    dependencies=[Depends(require_module_permission("ADMIN_EMPLOYEES", "create"))],
+)
+def create_employee():
+    return {"message": "Employee created"}
+```
+
+- Unauthenticated requests receive `401 Unauthorized`.
+- Authenticated requests lacking the required permission or action receive `403 Forbidden`.
+
+---
+
+## Administrative Bootstrap CLI Utility
+
+When a real Director / Super Admin employee is provisioned in `user_master`, initial permissions can be granted using:
 
 ```bash
 cd backend
 source .venv/bin/activate
+
+# Grant ALL scope and view/create/edit/approve access across all active modules:
+python3 -m app.scripts.grant_bootstrap_permissions --employee-code CG0001 --scope ALL
+
+# Optionally grant delete rights as well:
+python3 -m app.scripts.grant_bootstrap_permissions --employee-code CG0001 --scope ALL --allow-delete
 ```
 
-### 1. Apply Database Migration
-```bash
-alembic upgrade head
-```
-
-### 2. Seed Initial System Modules (8 records)
-```bash
-python3 -m app.scripts.seed_modules
-```
-
-### 3. Verify Database Records in PostgreSQL
-```bash
-psql -d is_gocompliance_db -c "
-SELECT
-    child.module_code,
-    child.module_name,
-    parent.module_code AS parent_code,
-    child.route,
-    child.display_order,
-    child.status
-FROM module_master child
-LEFT JOIN module_master parent
-    ON parent.module_id = child.parent_module_id
-ORDER BY
-    COALESCE(parent.module_code, child.module_code),
-    child.display_order;
-
-SELECT COUNT(*) AS total_modules FROM module_master;
-SELECT COUNT(*) AS root_modules FROM module_master WHERE parent_module_id IS NULL;
-SELECT COUNT(*) AS admin_children FROM module_master child JOIN module_master parent ON parent.module_id = child.parent_module_id WHERE parent.module_code = 'ADMIN';
-"
-```
-**Expected Counts:**
-- `total_modules` = 8
-- `root_modules` = 3 (`ADMIN`, `SALES`, `OPERATIONS`)
-- `admin_children` = 5 (`ADMIN_COMPANIES`, `ADMIN_DEPARTMENTS`, `ADMIN_DESIGNATIONS`, `ADMIN_EMPLOYEES`, `ADMIN_ACCESS`)
+> **IMPORTANT:**
+> - The bootstrap script is an administrative tool only. It was **NOT** executed during Stage 9.
+> - No test or fake permission records exist in the production database.
 
 ---
 
-## Running Automated Tests
+## Verification & Test Commands
 
-Execute the full test suite using `pytest`:
+Run the complete test suite:
 
 ```bash
+cd backend
+source .venv/bin/activate
 pytest -v
 ```
 
-All 104 unit tests run in isolation using mocking (no destructive database mutations).
+Verify table counts in PostgreSQL:
+
+```bash
+psql -d is_gocompliance_db -c "
+SELECT COUNT(*) AS total_permissions FROM user_module_permission;
+SELECT COUNT(*) AS total_users FROM user_master;
+SELECT COUNT(*) AS total_modules FROM module_master;
+"
+```
+**Expected Output:**
+- `total_permissions` = 0
+- `total_users` = 0
+- `total_modules` = 8
 
 ---
 
-## Roadmap / Upcoming Stages
-- **Stage 9:** User Module Permissions (`user_module_permission`), Granular Access Control, and Permission Evaluation Dependencies.
-- **Stage 10:** Employee Management HTTP CRUD APIs, Admin UI, and Navigation Integration.
+## Upcoming Stages
+- **Stage 7C:** Employee Management HTTP CRUD APIs with permission enforcement and data scoping.
+- **Stage 7D:** Manager & Employee Management React UI integration.

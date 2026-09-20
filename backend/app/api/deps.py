@@ -98,3 +98,40 @@ def get_current_active_user(
             detail="Account is inactive or suspended",
         )
     return current_user
+
+
+def require_module_permission(
+    module_code: str,
+    action: str = "view",
+):
+    """FastAPI authorization dependency factory enforcing per-user module permissions.
+
+    Usage:
+        @router.get("/employees", dependencies=[Depends(require_module_permission("ADMIN_EMPLOYEES", "view"))])
+        def list_employees(...): ...
+
+    Args:
+        module_code: The uppercase code of the module (e.g., 'ADMIN_EMPLOYEES', 'SALES').
+        action: The requested action ('view', 'create', 'edit', 'delete', 'approve').
+
+    Returns:
+        Callable FastAPI dependency that resolves to the UserModulePermission instance.
+
+    Raises:
+        HTTPException: 403 Forbidden if the user lacks active permission for the action.
+    """
+    from app.services import permissions
+
+    def _permission_dependency(
+        current_user: User = Depends(get_current_active_user),
+        session: Session = Depends(get_db),
+    ):
+        if not permissions.has_permission(session, current_user, module_code, action):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied for module '{module_code}'. Insufficient privileges.",
+            )
+        permission = permissions.get_user_module_permission(session, current_user.user_id, module_code)
+        return permission
+
+    return _permission_dependency

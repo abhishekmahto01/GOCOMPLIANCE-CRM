@@ -32,6 +32,13 @@ from app.schemas.module import (
     ModuleTreeRead,
     ModuleUpdate,
 )
+from app.schemas.permission import (
+    AccessibleModuleRead,
+    UserModulePermissionBase,
+    UserModulePermissionCreate,
+    UserModulePermissionRead,
+    UserModulePermissionUpdate,
+)
 from app.schemas.user import (
     UserBase,
     UserCreate,
@@ -40,6 +47,7 @@ from app.schemas.user import (
 )
 
 __all__ = [
+    "AccessibleModuleRead",
     "ChangePasswordRequest",
     "CompanyBase",
     "CompanyCreate",
@@ -65,6 +73,10 @@ __all__ = [
     "TokenResponse",
     "UserBase",
     "UserCreate",
+    "UserModulePermissionBase",
+    "UserModulePermissionCreate",
+    "UserModulePermissionRead",
+    "UserModulePermissionUpdate",
     "UserRead",
     "UserUpdate",
 ]
