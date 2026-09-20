@@ -40,6 +40,7 @@ def test_designation_model_table_name_and_metadata() -> None:
         "designation_master",
         "user_master",
         "auth_refresh_token",
+        "module_master",
     }
 
 

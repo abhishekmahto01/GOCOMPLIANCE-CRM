@@ -25,6 +25,13 @@ from app.schemas.designation import (
     DesignationRead,
     DesignationUpdate,
 )
+from app.schemas.module import (
+    ModuleBase,
+    ModuleCreate,
+    ModuleRead,
+    ModuleTreeRead,
+    ModuleUpdate,
+)
 from app.schemas.user import (
     UserBase,
     UserCreate,
@@ -49,6 +56,11 @@ __all__ = [
     "DesignationUpdate",
     "LoginRequest",
     "LogoutRequest",
+    "ModuleBase",
+    "ModuleCreate",
+    "ModuleRead",
+    "ModuleTreeRead",
+    "ModuleUpdate",
     "RefreshTokenRequest",
     "TokenResponse",
     "UserBase",
