@@ -1,0 +1,10 @@
+{
+  "name": "gocompliance-crm",
+  "private": true,
+  "version": "1.0.0",
+  "description": "GOCOMPLIANCE CRM root orchestration workspace",
+  "scripts": {
+    "dev": "bash scripts/dev.sh",
+    "dev:check": "bash scripts/dev.sh --check"
+  }
+}
