@@ -384,3 +384,105 @@ def test_bootstrap_admin_script_import_safety() -> None:
     """Verify bootstrap_admin script imports safely without executing automatically."""
     import app.scripts.bootstrap_admin as bootstrap_module
     assert hasattr(bootstrap_module, "bootstrap_admin")
+
+
+def test_auth_me_returns_department_info() -> None:
+    """Verify /api/auth/me returns resolved department, company, and designation info."""
+    from app.api.deps import get_current_active_user, get_db
+    from app.models.company import Company
+    from app.models.department import Department
+    from app.models.designation import Designation
+
+    dept_id = uuid.uuid4()
+    comp_id = uuid.uuid4()
+    desig_id = uuid.uuid4()
+
+    mock_dept = Department(department_id=dept_id, department_code="SALES", department_name="Sales")
+    mock_comp = Company(company_id=comp_id, company_code="GOCOMP", company_name="GoCompliance")
+    mock_desig = Designation(designation_id=desig_id, designation_code="SR_EXEC", designation_name="Senior Executive")
+
+    mock_user = User(
+        user_id=uuid.uuid4(),
+        employee_code="CG0004",
+        first_name="Karishma",
+        last_name="Upadhyay",
+        official_email="karishma@gocompliances.in",
+        department_id=dept_id,
+        company_id=comp_id,
+        designation_id=desig_id,
+        account_status="ACTIVE",
+        must_change_password=False,
+    )
+
+    mock_session = MagicMock()
+    def mock_get(entity, entity_id):
+        if entity == Department and entity_id == dept_id:
+            return mock_dept
+        if entity == Company and entity_id == comp_id:
+            return mock_comp
+        if entity == Designation and entity_id == desig_id:
+            return mock_desig
+        return None
+
+    mock_session.get.side_effect = mock_get
+
+    app.dependency_overrides[get_current_active_user] = lambda: mock_user
+    app.dependency_overrides[get_db] = lambda: mock_session
+
+    try:
+        response = client.get("/api/auth/me")
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["employee_code"] == "CG0004"
+        assert data["first_name"] == "Karishma"
+        assert data["last_name"] == "Upadhyay"
+        assert data["department_name"] == "Sales"
+        assert data["department_code"] == "SALES"
+        assert data["department"] == {
+            "id": str(dept_id),
+            "code": "SALES",
+            "name": "Sales",
+        }
+        assert data["company"]["name"] == "GoCompliance"
+        assert data["designation"]["name"] == "Senior Executive"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_auth_me_missing_department_returns_null_safe() -> None:
+    """Verify /api/auth/me returns null for department when unassigned, never defaulting to Administration."""
+    from app.api.deps import get_current_active_user, get_db
+
+    mock_user = User(
+        user_id=uuid.uuid4(),
+        employee_code="CG9999",
+        first_name="Unassigned",
+        last_name="Employee",
+        official_email="unassigned@gocompliances.in",
+        department_id=None,
+        company_id=None,
+        designation_id=None,
+        account_status="ACTIVE",
+        must_change_password=False,
+    )
+
+    mock_session = MagicMock()
+    mock_session.get.return_value = None
+
+    app.dependency_overrides[get_current_active_user] = lambda: mock_user
+    app.dependency_overrides[get_db] = lambda: mock_session
+
+    try:
+        response = client.get("/api/auth/me")
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["employee_code"] == "CG9999"
+        assert data["department"] is None
+        assert data["department_name"] is None
+        assert data["department_code"] is None
+        assert data["company"] is None
+        assert data["designation"] is None
+    finally:
+        app.dependency_overrides.clear()

@@ -7,7 +7,7 @@ import {
   REFRESH_TOKEN_KEY,
 } from '../api/client';
 
-describe('API Client & Error Handling', () => {
+describe('Frontend API Client & Error Handling', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.restoreAllMocks();
@@ -35,7 +35,6 @@ describe('API Client & Error Handling', () => {
   it('attaches Bearer token in request headers when available in localStorage', async () => {
     localStorage.setItem(ACCESS_TOKEN_KEY, 'sample_bearer_token');
 
-    // Test the request interceptor handler directly
     const anyClient = apiClient as unknown as {
       interceptors: {
         request: {

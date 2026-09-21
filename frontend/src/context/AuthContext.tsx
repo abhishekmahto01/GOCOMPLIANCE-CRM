@@ -304,12 +304,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     username: user
       ? `${user.first_name} ${user.last_name}`.trim() || user.employee_code
       : '',
-    userRole: user?.designation_name || user?.account_status || '',
+    userRole: user?.designation?.name || user?.designation_name || user?.account_status || '',
     employeeCode: user?.employee_code || '',
     email: user?.official_email || '',
-    department: user?.department_name || '',
-    designation: user?.designation_name || '',
-    company: user?.company_name || '',
+    department: user?.department?.name || user?.department_name || '',
+    designation: user?.designation?.name || user?.designation_name || '',
+    company: user?.company?.name || user?.company_name || '',
   };
 
   const value: AuthContextType = {

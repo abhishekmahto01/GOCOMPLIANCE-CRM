@@ -16,15 +16,16 @@ export interface DashboardHeaderProps {
 
 export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   session,
-  department = 'Admin Department',
+  department = 'Department Not Assigned',
   theme,
   onToggleTheme,
   onOpenPasswordModal,
   onLogout,
 }) => {
-  const username = session.username || 'admin';
-  const initial = username.charAt(0).toUpperCase() || 'A';
+  const username = session.username || 'Employee';
+  const initial = username.charAt(0).toUpperCase() || 'E';
   const isDark = theme === 'dark';
+  const displayDepartment = department || session.department || 'Department Not Assigned';
 
   return (
     <header className="w-full bg-white/80 dark:bg-slate-900/85 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800 px-4 sm:px-8 py-3.5 sm:py-4 transition-colors duration-300">
@@ -58,11 +59,11 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
 
             {/* User Info */}
             <div className="flex flex-col text-left pr-1 sm:pr-2 leading-tight">
-              <span className="text-xs sm:text-[13px] font-bold text-slate-900 dark:text-white capitalize">
+              <span data-testid="header-user-name" className="text-xs sm:text-[13px] font-bold text-slate-900 dark:text-white capitalize">
                 {username}
               </span>
-              <span className="text-[10px] sm:text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                {department}
+              <span data-testid="header-user-department" className="text-[10px] sm:text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                {displayDepartment}
               </span>
             </div>
           </div>

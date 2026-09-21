@@ -103,11 +103,11 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
               {initial}
             </div>
             <div className="flex flex-col text-left pr-1 leading-tight">
-              <span className="text-xs font-bold text-slate-900 dark:text-white capitalize">
+              <span data-testid="header-user-name" className="text-xs font-bold text-slate-900 dark:text-white capitalize">
                 {username}
               </span>
-              <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
-                {session.department || user?.department_name || 'Administration'}
+              <span data-testid="header-user-department" className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                {session.department || user?.department?.name || user?.department_name || 'Department Not Assigned'}
               </span>
             </div>
           </div>

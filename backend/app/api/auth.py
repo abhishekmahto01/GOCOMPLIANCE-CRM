@@ -7,11 +7,17 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_active_user, require_fully_activated_user
 from app.core.config import settings
 from app.database.session import get_db
+from app.models.company import Company
+from app.models.department import Department
+from app.models.designation import Designation
 from app.models.user import User
 from app.schemas.auth import (
     ChangeInitialPasswordRequest,
     ChangePasswordRequest,
+    CompanyInfo,
     CurrentUserRead,
+    DepartmentInfo,
+    DesignationInfo,
     LoginRequest,
     LogoutRequest,
     RefreshTokenRequest,
@@ -103,9 +109,71 @@ def logout(
 )
 def get_current_user_profile(
     current_user: User = Depends(get_current_active_user),
+    session: Session = Depends(get_db),
 ) -> CurrentUserRead:
     """Return identity and organizational details of the authenticated user."""
-    return CurrentUserRead.model_validate(current_user)
+    dept = session.get(Department, current_user.department_id) if current_user.department_id else None
+    comp = session.get(Company, current_user.company_id) if current_user.company_id else None
+    desig = session.get(Designation, current_user.designation_id) if current_user.designation_id else None
+
+    dept_info = (
+        DepartmentInfo(
+            id=dept.department_id,
+            code=dept.department_code,
+            name=dept.department_name,
+        )
+        if dept
+        else None
+    )
+    comp_info = (
+        CompanyInfo(
+            id=comp.company_id,
+            code=comp.company_code,
+            name=comp.company_name,
+        )
+        if comp
+        else None
+    )
+    desig_info = (
+        DesignationInfo(
+            id=desig.designation_id,
+            code=desig.designation_code,
+            name=desig.designation_name,
+        )
+        if desig
+        else None
+    )
+
+    return CurrentUserRead(
+        user_id=current_user.user_id,
+        employee_code=current_user.employee_code,
+        first_name=current_user.first_name,
+        middle_name=current_user.middle_name,
+        last_name=current_user.last_name,
+        official_email=current_user.official_email,
+        personal_email=current_user.personal_email,
+        mobile_number=current_user.mobile_number,
+        company_id=current_user.company_id,
+        department_id=current_user.department_id,
+        designation_id=current_user.designation_id,
+        manager_user_id=current_user.manager_user_id,
+        account_status=current_user.account_status,
+        must_change_password=current_user.must_change_password,
+        is_hod=bool(getattr(current_user, "is_hod", False)),
+        is_reporting_manager=bool(getattr(current_user, "is_reporting_manager", False)),
+        primary_location=getattr(current_user, "primary_location", None),
+        last_login_at=current_user.last_login_at,
+        department_name=dept.department_name if dept else None,
+        department_code=dept.department_code if dept else None,
+        company_name=comp.company_name if comp else None,
+        company_code=comp.company_code if comp else None,
+        designation_name=desig.designation_name if desig else None,
+        designation_code=desig.designation_code if desig else None,
+        department=dept_info,
+        company=comp_info,
+        designation=desig_info,
+    )
+
 
 
 @router.get(

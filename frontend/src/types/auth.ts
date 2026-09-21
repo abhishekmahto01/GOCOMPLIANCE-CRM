@@ -12,6 +12,24 @@ export interface AuthTokenResponse {
   must_change_password: boolean;
 }
 
+export interface DepartmentInfo {
+  id: string;
+  code: string;
+  name: string;
+}
+
+export interface CompanyInfo {
+  id: string;
+  code: string;
+  name: string;
+}
+
+export interface DesignationInfo {
+  id: string;
+  code: string;
+  name: string;
+}
+
 export interface CurrentUser {
   user_id: string;
   employee_code: string;
@@ -20,10 +38,10 @@ export interface CurrentUser {
   last_name: string;
   official_email: string;
   personal_email?: string | null;
-  mobile_number: string;
-  company_id: string;
-  department_id: string;
-  designation_id: string;
+  mobile_number?: string | null;
+  company_id?: string | null;
+  department_id?: string | null;
+  designation_id?: string | null;
   manager_user_id?: string | null;
   account_status: 'PENDING' | 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
   must_change_password: boolean;
@@ -36,6 +54,9 @@ export interface CurrentUser {
   department_code?: string | null;
   designation_name?: string | null;
   designation_code?: string | null;
+  department?: DepartmentInfo | null;
+  company?: CompanyInfo | null;
+  designation?: DesignationInfo | null;
 }
 
 export interface FeatureItem {

@@ -1,12 +1,27 @@
 import axios, { AxiosError } from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-
 export const ACCESS_TOKEN_KEY = 'gocompliance_crm_access_token';
 export const REFRESH_TOKEN_KEY = 'gocompliance_crm_refresh_token';
 
+/**
+ * Resolves the base API URL:
+ * - When envBaseUrl / VITE_API_BASE_URL is a non-empty string, normalizes it and appends '/api'.
+ * - When VITE_API_BASE_URL is explicitly empty string '' (demo/relative mode) or unset/undefined, returns '/api' for same-origin proxying.
+ */
+export function getApiBaseUrl(envBaseUrl?: string): string {
+  const rawUrl = arguments.length > 0 ? envBaseUrl : import.meta.env.VITE_API_BASE_URL;
+  if (typeof rawUrl === 'string') {
+    const trimmed = rawUrl.trim();
+    if (trimmed === '' || trimmed === '/') {
+      return '/api';
+    }
+    return `${trimmed.replace(/\/+$/, '')}/api`;
+  }
+  return '/api';
+}
+
 export const apiClient = axios.create({
-  baseURL: `${API_BASE_URL}/api`,
+  baseURL: getApiBaseUrl(),
   headers: {
     'Content-Type': 'application/json',
   },

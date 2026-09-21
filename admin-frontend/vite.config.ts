@@ -14,10 +14,24 @@ export default defineConfig({
     port: 8001,
     strictPort: true,
     host: true,
+    allowedHosts: ['.trycloudflare.com'],
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+    },
   },
   preview: {
     port: 8001,
     strictPort: true,
+    allowedHosts: ['.trycloudflare.com'],
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+    },
   },
   // @ts-expect-error vitest config extension
   test: {

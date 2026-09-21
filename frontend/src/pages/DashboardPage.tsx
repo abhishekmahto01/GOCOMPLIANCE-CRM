@@ -52,8 +52,12 @@ export const DashboardPage: React.FC = () => {
   // Password Modal state
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
 
-  // Department field
-  const userDepartment = session.department || user?.department_name || 'Administration';
+  // Department field from authenticated employee profile
+  const userDepartment =
+    session.department ||
+    user?.department?.name ||
+    user?.department_name ||
+    'Department Not Assigned';
 
   // Logout handler
   const handleLogout = () => {

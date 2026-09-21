@@ -10,6 +10,27 @@ export default defineConfig({
       '@': path.resolve(import.meta.dirname || '.', './src'),
     },
   },
+  server: {
+    port: 5173,
+    host: true,
+    allowedHosts: ['.trycloudflare.com'],
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+    },
+  },
+  preview: {
+    port: 5173,
+    allowedHosts: ['.trycloudflare.com'],
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+    },
+  },
   // @ts-expect-error vitest config extension
   test: {
     globals: true,

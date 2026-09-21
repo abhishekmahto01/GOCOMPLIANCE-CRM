@@ -5,6 +5,11 @@ export interface AuthSession {
   username: string;
   userRole: string;
   authTimestamp?: string;
+  employeeCode?: string;
+  email?: string;
+  department?: string;
+  designation?: string;
+  company?: string;
 }
 
 /**

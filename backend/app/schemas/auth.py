@@ -107,6 +107,36 @@ class ChangeInitialPasswordRequest(BaseModel):
     )
 
 
+class DepartmentInfo(BaseModel):
+    """Safe department information."""
+
+    id: uuid.UUID
+    code: str
+    name: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CompanyInfo(BaseModel):
+    """Safe company information."""
+
+    id: uuid.UUID
+    code: str
+    name: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DesignationInfo(BaseModel):
+    """Safe designation information."""
+
+    id: uuid.UUID
+    code: str
+    name: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class CurrentUserRead(BaseModel):
     """Schema for currently authenticated user profile information (/api/auth/me)."""
 
@@ -117,13 +147,27 @@ class CurrentUserRead(BaseModel):
     last_name: str
     official_email: str
     personal_email: Optional[str] = None
-    mobile_number: str
-    company_id: uuid.UUID
-    department_id: uuid.UUID
-    designation_id: uuid.UUID
+    mobile_number: Optional[str] = None
+    company_id: Optional[uuid.UUID] = None
+    department_id: Optional[uuid.UUID] = None
+    designation_id: Optional[uuid.UUID] = None
     manager_user_id: Optional[uuid.UUID] = None
     account_status: str
     must_change_password: bool
+    is_hod: bool = False
+    is_reporting_manager: bool = False
+    primary_location: Optional[str] = None
     last_login_at: Optional[datetime] = None
+
+    department_name: Optional[str] = None
+    department_code: Optional[str] = None
+    company_name: Optional[str] = None
+    company_code: Optional[str] = None
+    designation_name: Optional[str] = None
+    designation_code: Optional[str] = None
+
+    department: Optional[DepartmentInfo] = None
+    company: Optional[CompanyInfo] = None
+    designation: Optional[DesignationInfo] = None
 
     model_config = ConfigDict(from_attributes=True)

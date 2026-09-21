@@ -5,6 +5,8 @@
   "description": "GOCOMPLIANCE CRM root orchestration workspace",
   "scripts": {
     "dev": "bash scripts/dev.sh",
-    "dev:check": "bash scripts/dev.sh --check"
+    "dev:check": "bash scripts/dev.sh --check",
+    "demo": "bash scripts/demo.sh",
+    "demo:check": "bash scripts/demo.sh --check"
   }
 }
