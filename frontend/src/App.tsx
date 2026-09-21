@@ -7,7 +7,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { EmployeeListPage } from './pages/EmployeeListPage';
 import { EmployeeFormPage } from './pages/EmployeeFormPage';
 import { EmployeeDetailPage } from './pages/EmployeeDetailPage';
-import { AdminPlaceholderPage } from './pages/AdminPlaceholderPage';
+import { UserPermissionsPage } from './pages/UserPermissionsPage';
 import { ChangePasswordRequiredPage } from './pages/ChangePasswordRequiredPage';
 import { LoginCredentialsPage } from './pages/LoginCredentialsPage';
 import { UnauthorizedPage } from './pages/UnauthorizedPage';
@@ -95,12 +95,20 @@ export const App: React.FC = () => {
               }
             />
 
-            {/* User Control Routes */}
+            {/* User Permissions Routes */}
             <Route
               path="access"
               element={
                 <ProtectedRoute requiredModule="ADMIN" requiredAction="view">
-                  <AdminPlaceholderPage featureKey="access" />
+                  <UserPermissionsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="permissions"
+              element={
+                <ProtectedRoute requiredModule="ADMIN" requiredAction="view">
+                  <UserPermissionsPage />
                 </ProtectedRoute>
               }
             />

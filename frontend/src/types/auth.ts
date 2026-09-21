@@ -27,7 +27,9 @@ export interface CurrentUser {
   manager_user_id?: string | null;
   account_status: 'PENDING' | 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
   must_change_password: boolean;
-  last_login_at?: string | null;
+  is_hod?: boolean;
+  is_reporting_manager?: boolean;
+  primary_location?: string | null;
   company_name?: string | null;
   company_code?: string | null;
   department_name?: string | null;

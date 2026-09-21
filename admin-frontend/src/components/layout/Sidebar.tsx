@@ -35,13 +35,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onCloseMobile }) => {
       icon: <Users className="w-5 h-5" />,
       allowed: canViewEmployees,
     },
+    {
+      name: 'User Permissions',
+      path: '/permissions',
+      icon: <ShieldCheck className="w-5 h-5" />,
+      allowed: canViewEmployees,
+    },
   ];
 
   const placeholderNavItems = [
     { name: 'Companies', icon: <Building2 className="w-5 h-5" />, tag: 'Upcoming' },
     { name: 'Departments', icon: <Network className="w-5 h-5" />, tag: 'Upcoming' },
     { name: 'Designations', icon: <Award className="w-5 h-5" />, tag: 'Upcoming' },
-    { name: 'Access Control', icon: <ShieldCheck className="w-5 h-5" />, tag: 'Upcoming' },
     { name: 'Audit Logs', icon: <FileText className="w-5 h-5" />, tag: 'Upcoming' },
   ];
 

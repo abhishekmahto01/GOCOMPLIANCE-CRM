@@ -6,7 +6,8 @@ import { AuthProvider } from '../context/AuthContext';
 import { DashboardPage } from '../pages/DashboardPage';
 import { EmployeeListPage } from '../pages/EmployeeListPage';
 import { EmployeeFormPage } from '../pages/EmployeeFormPage';
-import { AdminPlaceholderPage } from '../pages/AdminPlaceholderPage';
+import { UserPermissionsPage } from '../pages/UserPermissionsPage';
+import { LoginCredentialsPage } from '../pages/LoginCredentialsPage';
 import { UnauthorizedPage } from '../pages/UnauthorizedPage';
 import { ProtectedRoute } from '../components/auth/ProtectedRoute';
 import { AdminLayout } from '../components/admin/AdminLayout';
@@ -14,6 +15,7 @@ import { AdminIndexRedirect } from '../components/admin/AdminIndexRedirect';
 import * as authApi from '../api/auth';
 import * as lookupApi from '../api/lookup';
 import * as employeesApi from '../api/employees';
+import * as permissionsApi from '../api/permissions';
 import { ACCESS_TOKEN_KEY } from '../api/client';
 
 describe('Admin Module Layout & Collapsible Sidebar Routing', () => {
@@ -79,6 +81,7 @@ describe('Admin Module Layout & Collapsible Sidebar Routing', () => {
     localStorage.clear();
     vi.restoreAllMocks();
     localStorage.setItem(ACCESS_TOKEN_KEY, 'valid-token');
+    vi.spyOn(permissionsApi, 'getPermissionCatalogApi').mockResolvedValue({ modules: [] });
     vi.spyOn(lookupApi, 'getLookupCompaniesApi').mockResolvedValue([]);
     vi.spyOn(lookupApi, 'getLookupDepartmentsApi').mockResolvedValue([]);
     vi.spyOn(lookupApi, 'getLookupDesignationsApi').mockResolvedValue([]);
@@ -86,9 +89,9 @@ describe('Admin Module Layout & Collapsible Sidebar Routing', () => {
     vi.spyOn(employeesApi, 'getEmployeesApi').mockResolvedValue({
       items: [],
       page: 1,
-      page_size: 20,
+      page_size: 15,
       total: 0,
-      pages: 1,
+      pages: 0,
     });
   });
 
@@ -127,7 +130,7 @@ describe('Admin Module Layout & Collapsible Sidebar Routing', () => {
                 path="access"
                 element={
                   <ProtectedRoute requiredModule="ADMIN" requiredAction="view">
-                    <AdminPlaceholderPage featureKey="access" />
+                    <UserPermissionsPage />
                   </ProtectedRoute>
                 }
               />
@@ -135,7 +138,7 @@ describe('Admin Module Layout & Collapsible Sidebar Routing', () => {
                 path="account-activation"
                 element={
                   <ProtectedRoute requiredModule="ADMIN" requiredAction="view">
-                    <AdminPlaceholderPage featureKey="activation" />
+                    <LoginCredentialsPage />
                   </ProtectedRoute>
                 }
               />
@@ -175,7 +178,7 @@ describe('Admin Module Layout & Collapsible Sidebar Routing', () => {
     const userControlBtn = within(sidebar).getByRole('button', { name: /User Control/i });
     await user.click(userControlBtn);
 
-    expect(within(sidebar).getByRole('link', { name: /Access Control & Scopes/i })).toBeInTheDocument();
+    expect(within(sidebar).getByRole('link', { name: /User Permissions/i })).toBeInTheDocument();
     expect(within(sidebar).getByRole('link', { name: /Login Credentials/i })).toBeInTheDocument();
   });
 
@@ -209,7 +212,7 @@ describe('Admin Module Layout & Collapsible Sidebar Routing', () => {
     await waitFor(() => {
       const userControlButton = screen.getByRole('button', { name: /User Control/i });
       expect(userControlButton).toHaveAttribute('aria-expanded', 'true');
-      expect(screen.getByRole('link', { name: /Access Control & Scopes/i })).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /User Permissions/i })).toBeInTheDocument();
     });
   });
 

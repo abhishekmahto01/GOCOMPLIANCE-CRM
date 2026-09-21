@@ -9,6 +9,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { EmployeeListPage } from './pages/EmployeeListPage';
 import { EmployeeDetailPage } from './pages/EmployeeDetailPage';
 import { EmployeeFormPage } from './pages/EmployeeFormPage';
+import { UserPermissionsPage } from './pages/UserPermissionsPage';
 import { UnauthorizedPage } from './pages/UnauthorizedPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
@@ -54,6 +55,24 @@ export const App: React.FC = () => {
               element={
                 <ProtectedRoute moduleCode="ADMIN_EMPLOYEES" requiredAction="edit">
                   <EmployeeFormPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* User Permissions Management */}
+            <Route
+              path="/permissions"
+              element={
+                <ProtectedRoute moduleCode="ADMIN_EMPLOYEES" requiredAction="view">
+                  <UserPermissionsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/user-permissions"
+              element={
+                <ProtectedRoute moduleCode="ADMIN_EMPLOYEES" requiredAction="view">
+                  <UserPermissionsPage />
                 </ProtectedRoute>
               }
             />

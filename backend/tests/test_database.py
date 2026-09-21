@@ -65,6 +65,7 @@ def test_registered_tables_in_metadata() -> None:
         "auth_refresh_token",
         "module_master",
         "user_module_permission",
+        "permission_audit_log",
     }
 
 

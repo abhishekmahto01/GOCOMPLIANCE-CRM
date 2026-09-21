@@ -63,3 +63,6 @@ export const AlertBanner: React.FC<AlertBannerProps> = ({
     </div>
   );
 };
+
+export const Toast = AlertBanner;
+export type ToastType = AlertType;

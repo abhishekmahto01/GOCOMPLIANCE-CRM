@@ -69,8 +69,8 @@ export const AdminLayout: React.FC = () => {
         { label: 'Employee Profile' },
       ];
     }
-    if (pathname === '/admin/access') {
-      return [{ label: 'Administration', href: '/admin' }, { label: 'Access Control' }];
+    if (pathname === '/admin/access' || pathname === '/admin/permissions') {
+      return [{ label: 'Administration', href: '/admin' }, { label: 'User Permissions' }];
     }
     if (pathname === '/admin/account-activation') {
       return [{ label: 'Administration', href: '/admin' }, { label: 'Account Activation' }];

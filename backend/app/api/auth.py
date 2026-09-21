@@ -17,7 +17,7 @@ from app.schemas.auth import (
     RefreshTokenRequest,
     TokenResponse,
 )
-from app.schemas.permission import AccessibleModuleRead
+from app.schemas.permission import AccessibleModuleRead, UserEffectivePermissionsResponse
 from app.services import permissions
 from app.services.auth_service import (
     authenticate_user,
@@ -121,6 +121,21 @@ def get_current_user_modules(
 ) -> List[AccessibleModuleRead]:
     """Return navigation hierarchy and permission flags for the authenticated user."""
     return permissions.get_accessible_modules(session, current_user.user_id)
+
+
+@router.get(
+    "/me/permissions",
+    response_model=UserEffectivePermissionsResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get Current User Effective Permissions Bundle",
+    description="Retrieve the effective permission slugs mapping and accessible pages for the authenticated employee.",
+)
+def get_current_user_effective_permissions(
+    current_user: User = Depends(require_fully_activated_user),
+    session: Session = Depends(get_db),
+) -> UserEffectivePermissionsResponse:
+    """Return effective permission slugs map and accessible pages for the authenticated user."""
+    return permissions.get_user_effective_permissions_bundle(session, current_user.user_id)
 
 
 @router.post(

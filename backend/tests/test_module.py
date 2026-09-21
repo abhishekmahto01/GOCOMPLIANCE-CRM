@@ -302,29 +302,23 @@ def test_seed_modules_idempotency_and_hierarchy() -> None:
     """Verify seed_modules inserts 8 records on initial run and skips on subsequent runs."""
     mock_session = MagicMock()
 
-    # Pass 1: Empty DB -> 8 inserts
+    # Pass 1: Empty DB -> 22 inserts
     mock_session.scalars.return_value.all.return_value = []
-    mock_session.scalar.side_effect = [
-        get_deterministic_module_uuid("ADMIN"),  # for ADMIN_COMPANIES
-        get_deterministic_module_uuid("ADMIN"),  # for ADMIN_DEPARTMENTS
-        get_deterministic_module_uuid("ADMIN"),  # for ADMIN_DESIGNATIONS
-        get_deterministic_module_uuid("ADMIN"),  # for ADMIN_EMPLOYEES
-        get_deterministic_module_uuid("ADMIN"),  # for ADMIN_ACCESS
-    ]
+    mock_session.scalar.return_value = get_deterministic_module_uuid("ADMIN")
 
     inserted, skipped = seed_modules(mock_session)
-    assert inserted == 8
+    assert inserted == len(INITIAL_MODULES)
     assert skipped == 0
     assert mock_session.commit.call_count == 1
 
-    # Pass 2: All 8 modules exist -> 8 skipped, 0 inserted
+    # Pass 2: All modules exist -> all skipped, 0 inserted
     mock_session.reset_mock()
     all_codes = [m["module_code"] for m in INITIAL_MODULES]
     mock_session.scalars.return_value.all.return_value = all_codes
 
     inserted, skipped = seed_modules(mock_session)
     assert inserted == 0
-    assert skipped == 8
+    assert skipped == len(INITIAL_MODULES)
     assert mock_session.commit.call_count == 1
 
 

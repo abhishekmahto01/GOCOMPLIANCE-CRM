@@ -123,15 +123,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       switch (action) {
         case 'view':
+        case 'read':
           return mod.can_view;
         case 'create':
+        case 'write':
           return mod.can_create;
         case 'edit':
+        case 'update':
           return mod.can_edit;
         case 'delete':
           return mod.can_delete;
         case 'approve':
           return mod.can_approve;
+        case 'assign':
+          return Boolean(mod.can_assign);
+        case 'reassign':
+          return Boolean(mod.can_reassign);
+        case 'export':
+          return Boolean(mod.can_export);
         default:
           return false;
       }

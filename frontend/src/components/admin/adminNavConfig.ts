@@ -4,7 +4,6 @@ import {
   Users,
   UserPlus,
   ShieldCheck,
-  KeyRound,
   UserCheck,
 } from 'lucide-react';
 import type { ActionType } from '../../types/permission';
@@ -76,11 +75,9 @@ export const ADMIN_NAV_GROUPS: NavParentGroup[] = [
     children: [
       {
         id: 'access_control',
-        title: 'Access Control & Scopes',
+        title: 'User Permissions',
         route: '/admin/access',
-        icon: KeyRound,
-        badge: 'Coming Soon',
-        isUpcoming: true,
+        icon: ShieldCheck,
         requiredModule: 'ADMIN',
         requiredAction: 'view',
       },

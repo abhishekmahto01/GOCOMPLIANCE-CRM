@@ -65,6 +65,9 @@ def test_user_module_permission_model_columns() -> None:
         "can_edit",
         "can_delete",
         "can_approve",
+        "can_assign",
+        "can_reassign",
+        "can_export",
         "data_scope",
         "status",
         "granted_by_user_id",
@@ -88,6 +91,9 @@ def test_user_module_permission_model_columns() -> None:
     assert columns["can_edit"].nullable is False
     assert columns["can_delete"].nullable is False
     assert columns["can_approve"].nullable is False
+    assert columns["can_assign"].nullable is False
+    assert columns["can_reassign"].nullable is False
+    assert columns["can_export"].nullable is False
 
     # Scope and status defaults
     assert columns["data_scope"].nullable is False

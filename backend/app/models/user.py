@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from app.models.company import Company
     from app.models.department import Department
     from app.models.designation import Designation
+    from app.models.permission_audit import PermissionAuditLog
     from app.models.refresh_token import RefreshToken
     from app.models.user_module_permission import UserModulePermission
 
@@ -181,6 +182,28 @@ class User(Base):
         comment="Account/employment status: PENDING, ACTIVE, INACTIVE, SUSPENDED",
     )
 
+    is_hod: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
+        default=False,
+        comment="Whether user is designated as Head of Department (HOD)",
+    )
+
+    is_reporting_manager: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
+        default=False,
+        comment="Whether user is designated as a Reporting Manager",
+    )
+
+    primary_location: Mapped[Optional[str]] = mapped_column(
+        String(100),
+        nullable=True,
+        comment="Primary operating location / branch of the employee",
+    )
+
     # Security & Authentication fields (Stage 7B)
     password_hash: Mapped[Optional[str]] = mapped_column(
         String(255),
@@ -294,6 +317,20 @@ class User(Base):
         "UserModulePermission",
         foreign_keys="[UserModulePermission.granted_by_user_id]",
         back_populates="granted_by",
+    )
+
+    audit_actions_performed: Mapped[List["PermissionAuditLog"]] = relationship(
+        "PermissionAuditLog",
+        foreign_keys="[PermissionAuditLog.actor_user_id]",
+        back_populates="actor",
+    )
+
+    audit_logs_received: Mapped[List["PermissionAuditLog"]] = relationship(
+        "PermissionAuditLog",
+        foreign_keys="[PermissionAuditLog.target_user_id]",
+        back_populates="target_user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
     def __repr__(self) -> str:

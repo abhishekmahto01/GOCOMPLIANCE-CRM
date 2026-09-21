@@ -43,7 +43,7 @@ class UserModulePermission(Base):
             name="chk_permission_status_valid",
         ),
         CheckConstraint(
-            "can_view = true OR (can_create = false AND can_edit = false AND can_delete = false AND can_approve = false)",
+            "can_view = true OR (can_create = false AND can_edit = false AND can_delete = false AND can_approve = false AND can_assign = false AND can_reassign = false AND can_export = false)",
             name="chk_permission_action_requires_view",
         ),
         CheckConstraint(
@@ -123,6 +123,30 @@ class UserModulePermission(Base):
         server_default=text("false"),
         default=False,
         comment="Permission to execute approval workflows in module (requires can_view=true)",
+    )
+
+    can_assign: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
+        default=False,
+        comment="Permission to assign orders/tasks in module (requires can_view=true)",
+    )
+
+    can_reassign: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
+        default=False,
+        comment="Permission to reassign orders/tasks in module (requires can_view=true)",
+    )
+
+    can_export: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
+        default=False,
+        comment="Permission to export reports/records in module (requires can_view=true)",
     )
 
     data_scope: Mapped[str] = mapped_column(
@@ -206,5 +230,8 @@ class UserModulePermission(Base):
             f"edit={self.can_edit}, "
             f"delete={self.can_delete}, "
             f"approve={self.can_approve}, "
+            f"assign={self.can_assign}, "
+            f"reassign={self.can_reassign}, "
+            f"export={self.can_export}, "
             f"status='{self.status}')>"
         )
