@@ -351,7 +351,7 @@ describe('Admin Module Layout & Collapsible Sidebar Routing', () => {
     });
   });
 
-  it('hides Admin card on main dashboard when user lacks ADMIN permission and leaves Sales/Operations unaffected', async () => {
+  it('hides Admin card on main dashboard when user lacks ADMIN permission and shows only authorized Sales module', async () => {
     vi.spyOn(authApi, 'getCurrentUserApi').mockResolvedValue(mockSalesUser);
     vi.spyOn(authApi, 'getAccessibleModulesApi').mockResolvedValue([
       {
@@ -383,7 +383,7 @@ describe('Admin Module Layout & Collapsible Sidebar Routing', () => {
     await waitFor(() => {
       expect(screen.queryByText('Admin')).not.toBeInTheDocument();
       expect(screen.getByText('Sales')).toBeInTheDocument();
-      expect(screen.getByText('Operations')).toBeInTheDocument();
+      expect(screen.queryByText('Operations')).not.toBeInTheDocument();
     });
   });
 });

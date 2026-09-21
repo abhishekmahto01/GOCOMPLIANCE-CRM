@@ -3,7 +3,17 @@ import { useAuth } from '../context/AuthContext';
 import type { ActionType, DataScope } from '../types/permission';
 
 export function usePermissions() {
-  const { user, modules, hasPermission, getEffectiveScope, canAccessModule } = useAuth();
+  const {
+    user,
+    modules,
+    hasPermission,
+    getEffectiveScope,
+    canAccessModule,
+    hasModuleAccess,
+    isLoading,
+    permissionError,
+    refreshUserProfile,
+  } = useAuth();
 
   // Standard permission check by module/page code and action
   const can = useCallback(
@@ -62,9 +72,14 @@ export function usePermissions() {
   return {
     user,
     modules,
+    isLoading,
+    permissionError,
+    refreshUserProfile,
     can,
     canSlug,
     hasAccess,
+    hasModuleAccess,
+    hasPermission,
     getScope,
     isHod,
     isReportingManager,
