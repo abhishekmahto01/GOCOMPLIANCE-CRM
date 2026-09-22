@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin_permissions, auth, employees, health, lookup
+from app.api import admin_permissions, auth, employees, health, lookup, sales
 from app.core.config import settings
 
 app = FastAPI(
@@ -42,5 +42,9 @@ app.include_router(
 )
 app.include_router(
     admin_permissions.router,
+    prefix=settings.API_PREFIX,
+)
+app.include_router(
+    sales.router,
     prefix=settings.API_PREFIX,
 )

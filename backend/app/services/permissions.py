@@ -427,7 +427,7 @@ def get_team_user_ids(
         """
     )
     result = session.execute(cte_query, {"root_id": manager_user_id, "max_depth": max_depth})
-    return [row[0] for row in result.fetchall()]
+    return [uuid.UUID(str(row[0])) for row in result.fetchall()]
 
 
 def resolve_data_scope_context(

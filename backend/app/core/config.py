@@ -117,8 +117,9 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         """Return True if application is running in production environment mode."""
-        env = (self.APP_ENV or self.ENVIRONMENT or "").strip().lower()
-        return env in {"production", "prod"}
+        env_app = (self.APP_ENV or "").strip().lower()
+        env_main = (self.ENVIRONMENT or "").strip().lower()
+        return env_app in {"production", "prod"} or env_main in {"production", "prod"}
 
     def get_effective_trial_password(self) -> Optional[str]:
         """Return configured trial password if enabled and safe, else raise ValueError."""

@@ -12,21 +12,27 @@ export interface BreadcrumbItem {
 }
 
 export interface AdminHeaderProps {
+  showLogo?: boolean;
   breadcrumbs?: BreadcrumbItem[];
   theme: 'light' | 'dark';
   onToggleTheme: () => void;
   onOpenPasswordModal?: () => void;
   onLogout: () => void;
   onOpenMobileMenu?: () => void;
+  onToggleSidebar?: () => void;
+  isSidebarCollapsed?: boolean;
 }
 
 export const AdminHeader: React.FC<AdminHeaderProps> = ({
+  showLogo = true,
   breadcrumbs = [],
   theme,
   onToggleTheme,
   onOpenPasswordModal,
   onLogout,
   onOpenMobileMenu,
+  onToggleSidebar,
+  isSidebarCollapsed = false,
 }) => {
   const { session, user } = useAuth();
   const username = session.username || user?.employee_code || 'Admin';
@@ -36,7 +42,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
   return (
     <header className="w-full bg-white/80 dark:bg-slate-900/85 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800 px-4 sm:px-8 py-3 transition-colors duration-300">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
-        {/* Left: Mobile Drawer Trigger + Brand Identity & Breadcrumbs */}
+        {/* Left: Mobile Drawer Trigger / Desktop Sidebar Collapse + Brand Identity & Breadcrumbs */}
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-4 self-start md:self-center">
           {onOpenMobileMenu && (
             <button
@@ -49,9 +55,23 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
             </button>
           )}
 
-          <Link to="/dashboard" className="shrink-0">
-            <BrandLogo showTagline={false} theme={isDark ? 'light' : 'dark'} size="sm" />
-          </Link>
+          {onToggleSidebar && (
+            <button
+              type="button"
+              onClick={onToggleSidebar}
+              className="p-1.5 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hidden lg:inline-flex items-center justify-center transition border border-slate-200 dark:border-slate-700 shadow-2xs"
+              title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar (Full Screen)"}
+              aria-label="Toggle Sidebar"
+            >
+              <Menu className="w-4 h-4" />
+            </button>
+          )}
+
+          {showLogo && (
+            <Link to="/dashboard" className="shrink-0">
+              <BrandLogo showTagline={false} theme={isDark ? 'light' : 'dark'} size="sm" />
+            </Link>
+          )}
 
           {breadcrumbs.length > 0 && (
             <nav className="flex items-center gap-1.5 text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">
