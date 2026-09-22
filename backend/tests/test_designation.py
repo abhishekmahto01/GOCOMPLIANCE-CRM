@@ -43,6 +43,14 @@ def test_designation_model_table_name_and_metadata() -> None:
         "module_master",
         "user_module_permission",
         "permission_audit_log",
+        "service_master",
+        "service_required_document",
+        "client_master",
+        "sales_order",
+        "operation_application",
+        "application_document",
+        "application_assignment_history",
+        "application_activity_log",
     }
 
 

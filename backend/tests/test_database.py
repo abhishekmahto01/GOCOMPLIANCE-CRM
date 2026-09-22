@@ -55,7 +55,7 @@ def test_config_missing_database_url() -> None:
 
 
 def test_registered_tables_in_metadata() -> None:
-    """Verify that company_master, department_master, designation_master, user_master, auth_refresh_token, module_master, and user_module_permission are registered in Base.metadata for Stage 9."""
+    """Verify that all domain tables are registered in Base.metadata."""
     import app.models  # noqa: F401
     assert set(Base.metadata.tables.keys()) == {
         "company_master",
@@ -66,6 +66,14 @@ def test_registered_tables_in_metadata() -> None:
         "module_master",
         "user_module_permission",
         "permission_audit_log",
+        "service_master",
+        "service_required_document",
+        "client_master",
+        "sales_order",
+        "operation_application",
+        "application_document",
+        "application_assignment_history",
+        "application_activity_log",
     }
 
 

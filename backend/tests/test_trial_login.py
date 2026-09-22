@@ -29,7 +29,7 @@ def test_org_setup(db_session):
             module_id=uuid.uuid4(),
             module_code="ADMIN",
             module_name="Administration",
-            route_path="/admin",
+            route="/admin",
             status="ACTIVE",
             display_order=1,
         )
@@ -42,8 +42,8 @@ def test_org_setup(db_session):
             module_id=uuid.uuid4(),
             module_code="ADMIN_EMPLOYEES",
             module_name="Employee Management",
-            parent_id=admin_mod.module_id,
-            route_path="/admin/employees",
+            parent_module_id=admin_mod.module_id,
+            route="/admin/employees",
             status="ACTIVE",
             display_order=2,
         )

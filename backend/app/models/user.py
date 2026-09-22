@@ -21,11 +21,14 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import Base
 
 if TYPE_CHECKING:
+    from app.models.client import ClientMaster
     from app.models.company import Company
     from app.models.department import Department
     from app.models.designation import Designation
+    from app.models.operation_application import OperationApplication
     from app.models.permission_audit import PermissionAuditLog
     from app.models.refresh_token import RefreshToken
+    from app.models.sales_order import SalesOrder
     from app.models.user_module_permission import UserModulePermission
 
 
@@ -331,6 +334,36 @@ class User(Base):
         back_populates="target_user",
         cascade="all, delete-orphan",
         passive_deletes=True,
+    )
+
+    clients_created: Mapped[List["ClientMaster"]] = relationship(
+        "ClientMaster",
+        foreign_keys="[ClientMaster.created_by_user_id]",
+        back_populates="created_by",
+        cascade="save-update, merge",
+        passive_deletes=True,
+    )
+
+    sales_orders: Mapped[List["SalesOrder"]] = relationship(
+        "SalesOrder",
+        foreign_keys="[SalesOrder.salesperson_user_id]",
+        back_populates="salesperson",
+        cascade="save-update, merge",
+        passive_deletes=True,
+    )
+
+    assigned_applications: Mapped[List["OperationApplication"]] = relationship(
+        "OperationApplication",
+        foreign_keys="[OperationApplication.assigned_to_user_id]",
+        back_populates="assigned_to",
+        cascade="save-update, merge",
+        passive_deletes=True,
+    )
+
+    applications_assigned_by: Mapped[List["OperationApplication"]] = relationship(
+        "OperationApplication",
+        foreign_keys="[OperationApplication.assigned_by_user_id]",
+        back_populates="assigned_by",
     )
 
     def __repr__(self) -> str:

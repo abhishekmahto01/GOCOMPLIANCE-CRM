@@ -10,8 +10,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import Base
 
 if TYPE_CHECKING:
+    from app.models.client import ClientMaster
     from app.models.department import Department
     from app.models.designation import Designation
+    from app.models.operation_application import OperationApplication
+    from app.models.sales_order import SalesOrder
     from app.models.user import User
 
 
@@ -121,6 +124,30 @@ class Company(Base):
     # ORM Relationship to User (Restrictive deletion; no cascade delete)
     users: Mapped[List["User"]] = relationship(
         "User",
+        back_populates="company",
+        cascade="save-update, merge",
+        passive_deletes=True,
+    )
+
+    # ORM Relationship to Client (Restrictive deletion; no cascade delete)
+    clients: Mapped[List["ClientMaster"]] = relationship(
+        "ClientMaster",
+        back_populates="company",
+        cascade="save-update, merge",
+        passive_deletes=True,
+    )
+
+    # ORM Relationship to SalesOrder (Restrictive deletion; no cascade delete)
+    sales_orders: Mapped[List["SalesOrder"]] = relationship(
+        "SalesOrder",
+        back_populates="company",
+        cascade="save-update, merge",
+        passive_deletes=True,
+    )
+
+    # ORM Relationship to OperationApplication (Restrictive deletion; no cascade delete)
+    applications: Mapped[List["OperationApplication"]] = relationship(
+        "OperationApplication",
         back_populates="company",
         cascade="save-update, merge",
         passive_deletes=True,
