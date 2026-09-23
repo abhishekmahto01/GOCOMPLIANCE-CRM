@@ -65,18 +65,21 @@ class ClientMaster(Base):
     entity_type: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
+        server_default=text("'INDIVIDUAL'"),
         comment="Entity type: Private Limited, LLP, One Person Company, Partnership, Proprietorship, Individual",
     )
 
     contact_person: Mapped[str] = mapped_column(
         String(150),
         nullable=False,
+        server_default=text("''"),
         comment="Primary contact person name",
     )
 
-    contact_email: Mapped[str] = mapped_column(
+    contact_email: Mapped[Optional[str]] = mapped_column(
         String(255),
-        nullable=False,
+        nullable=True,
+        server_default=text("''"),
         comment="Primary contact email address",
     )
 

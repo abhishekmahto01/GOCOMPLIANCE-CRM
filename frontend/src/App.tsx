@@ -18,6 +18,8 @@ import { AdminLayout } from './components/admin/AdminLayout';
 import { AdminIndexRedirect } from './components/admin/AdminIndexRedirect';
 import { SalesLayout } from './components/sales/SalesLayout';
 import { SalesDashboardPage } from './pages/SalesDashboardPage';
+import { SalesEntryPage } from './pages/SalesEntryPage';
+import { SalesRegisterPage } from './pages/SalesRegisterPage';
 
 const OperationsWorkspacePlaceholder: React.FC = () => (
   <div className="min-h-screen w-full flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950 p-6 text-center font-sans">
@@ -85,6 +87,46 @@ export const App: React.FC = () => {
               element={
                 <ProtectedRoute requiredModule="SALES" requiredAction="view">
                   <SalesDashboardPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="entry"
+              element={
+                <ProtectedRoute requiredModule="SALES" requiredAction="create">
+                  <SalesEntryPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="new"
+              element={
+                <ProtectedRoute requiredModule="SALES" requiredAction="create">
+                  <SalesEntryPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="register"
+              element={
+                <ProtectedRoute requiredModule="SALES" requiredAction="view">
+                  <SalesRegisterPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="orders"
+              element={
+                <ProtectedRoute requiredModule="SALES" requiredAction="view">
+                  <SalesRegisterPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="my-orders"
+              element={
+                <ProtectedRoute requiredModule="SALES" requiredAction="view">
+                  <SalesRegisterPage />
                 </ProtectedRoute>
               }
             />

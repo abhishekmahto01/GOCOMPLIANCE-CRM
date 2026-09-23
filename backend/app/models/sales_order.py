@@ -40,8 +40,20 @@ class SalesOrder(Base):
             name="chk_sales_order_received_non_negative",
         ),
         CheckConstraint(
+            "amount_received <= order_value",
+            name="chk_sales_order_advance_le_total",
+        ),
+        CheckConstraint(
             "balance_amount >= 0",
             name="chk_sales_order_balance_non_negative",
+        ),
+        CheckConstraint(
+            "govt_fees >= 0",
+            name="chk_sales_order_govt_fees_non_negative",
+        ),
+        CheckConstraint(
+            "incidental_cost >= 0",
+            name="chk_sales_order_incidental_cost_non_negative",
         ),
         CheckConstraint(
             "payment_status IN ('FULLY_PAID', 'PARTIALLY_PAID', 'PENDING', 'OVERDUE')",
@@ -174,6 +186,47 @@ class SalesOrder(Base):
         nullable=True,
         index=True,
         comment="Timestamp when order was confirmed and handed over to operations",
+    )
+
+    proforma_invoice_no: Mapped[Optional[str]] = mapped_column(
+        String(100),
+        nullable=True,
+        index=True,
+        comment="Proforma invoice reference code",
+    )
+
+    tax_invoice_no: Mapped[Optional[str]] = mapped_column(
+        String(100),
+        nullable=True,
+        index=True,
+        comment="Final tax invoice reference code",
+    )
+
+    reimbursement_note: Mapped[Optional[str]] = mapped_column(
+        String(500),
+        nullable=True,
+        comment="Reimbursement note or expense instructions",
+    )
+
+    govt_fees: Mapped[float] = mapped_column(
+        Numeric(12, 2),
+        nullable=False,
+        server_default=text("0.00"),
+        comment="Government statutory / filing fees in INR",
+    )
+
+    incidental_cost: Mapped[float] = mapped_column(
+        Numeric(12, 2),
+        nullable=False,
+        server_default=text("0.00"),
+        comment="Incidental / operational expenses in INR",
+    )
+
+    profit_amount: Mapped[float] = mapped_column(
+        Numeric(12, 2),
+        nullable=False,
+        server_default=text("0.00"),
+        comment="Net profit in INR (order_value - govt_fees - incidental_cost)",
     )
 
     notes: Mapped[Optional[str]] = mapped_column(

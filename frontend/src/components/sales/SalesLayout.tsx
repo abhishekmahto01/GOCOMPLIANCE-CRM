@@ -47,8 +47,14 @@ export const SalesLayout: React.FC = () => {
 
   // Compute Breadcrumbs from pathname
   const getBreadcrumbs = (pathname: string): BreadcrumbItem[] => {
-    if (pathname.startsWith('/sales/orders')) {
-      return [{ label: 'Sales', href: '/sales/dashboard' }, { label: 'Sales Orders' }];
+    if (pathname.startsWith('/sales/entry') || pathname.startsWith('/sales/new')) {
+      return [{ label: 'Sales', href: '/sales/dashboard' }, { label: 'New Sales Entry' }];
+    }
+    if (pathname.startsWith('/sales/register') || pathname.startsWith('/sales/orders') || pathname.startsWith('/sales/my-orders')) {
+      return [{ label: 'Sales', href: '/sales/dashboard' }, { label: 'Sales Register' }];
+    }
+    if (pathname.startsWith('/sales/dashboard')) {
+      return [{ label: 'Sales', href: '/sales/dashboard' }, { label: 'Sales Dashboard' }];
     }
     return [{ label: 'Sales' }];
   };

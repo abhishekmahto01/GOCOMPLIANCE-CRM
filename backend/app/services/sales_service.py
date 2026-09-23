@@ -38,8 +38,19 @@ from app.schemas.sales_dashboard import (
     ServiceSalesItem,
     TeamPerformanceRow,
 )
-from app.schemas.sales_order import SalesOrderConfirmResponse, SalesOrderCreate
-from app.services import permissions
+from app.schemas.sales_order import (
+    SalesClientOption,
+    SalesEmployeeOption,
+    SalesFormOptionsResponse,
+    SalesOrderConfirmResponse,
+    SalesOrderCreate,
+    SalesOrderDetailRead,
+    SalesOrderRead,
+    SalesRegisterResponse,
+    SalesRegisterSummary,
+    SalesServiceOption,
+)
+from app.services import operation_service, permissions
 
 
 class SalesOrderNotFoundError(Exception):
@@ -237,43 +248,142 @@ def create_sales_order(
     data: SalesOrderCreate,
     current_user: User,
 ) -> SalesOrder:
-    """Create a new sales order with computed balance and optional auto-confirmation."""
-    company = session.get(Company, data.company_id)
+    """Create a new sales order with client matching/deduplication, RBAC scoping, and financial calculations."""
+    company_id = data.company_id or current_user.company_id
+    company = session.get(Company, company_id)
     if not company or company.status != "ACTIVE":
-        raise ValueError(f"Active company with ID '{data.company_id}' not found.")
+        raise ValueError(f"Active company with ID '{company_id}' not found.")
 
-    client = session.get(ClientMaster, data.client_id)
-    if not client or client.status != "ACTIVE":
-        raise ValueError(f"Active client with ID '{data.client_id}' not found.")
-    if client.company_id != data.company_id:
-        raise ValueError("Client does not belong to specified company.")
+    # 1. Client Resolution and Deduplication
+    client = None
+    if data.client_id:
+        client = session.get(ClientMaster, data.client_id)
+        if not client or client.status != "ACTIVE":
+            raise ValueError(f"Active client with ID '{data.client_id}' not found.")
+        if client.company_id != company_id:
+            raise ValueError("Client does not belong to specified company.")
+    elif data.client_name and data.client_name.strip():
+        c_name = data.client_name.strip()
+        c_phone = (data.contact_no or "").strip()
 
+        # Check existing client in company by name or contact phone
+        query = session.query(ClientMaster).filter(
+            ClientMaster.company_id == company_id,
+            ClientMaster.status == "ACTIVE",
+        )
+        if c_phone:
+            matched_client = query.filter(
+                or_(
+                    func.lower(ClientMaster.client_name) == func.lower(c_name),
+                    ClientMaster.contact_phone == c_phone,
+                )
+            ).first()
+        else:
+            matched_client = query.filter(
+                func.lower(ClientMaster.client_name) == func.lower(c_name)
+            ).first()
+
+        if matched_client:
+            client = matched_client
+            if c_phone and not matched_client.contact_phone:
+                matched_client.contact_phone = c_phone
+        else:
+            client = ClientMaster(
+                client_id=uuid.uuid4(),
+                company_id=company_id,
+                client_name=c_name,
+                contact_person=c_name,
+                contact_email=f"{c_phone}@client.crm" if c_phone else "",
+                contact_phone=c_phone or "0000000000",
+                entity_type="INDIVIDUAL",
+                created_by_user_id=current_user.user_id,
+                status="ACTIVE",
+            )
+            session.add(client)
+            session.flush()
+
+    if not client:
+        raise ValueError("Valid client could not be identified or created.")
+
+    # 2. Service Verification
     service = session.get(ServiceMaster, data.service_id)
     if not service or service.status != "ACTIVE":
         raise ValueError(f"Active service with ID '{data.service_id}' not found.")
 
-    salesperson = session.get(User, data.salesperson_user_id)
+    # 3. Salesperson Resolution and Data Scope Check
+    try:
+        scope_ctx = permissions.resolve_data_scope_context(session, current_user, "SALES_CONFIRMED_ORDER")
+    except permissions.PermissionDeniedError:
+        scope_ctx = None
+
+    if scope_ctx:
+        if scope_ctx.scope == "SELF":
+            salesperson_id = current_user.user_id
+        elif data.salesperson_user_id:
+            salesperson_id = data.salesperson_user_id
+            if scope_ctx.scope == "TEAM":
+                if salesperson_id not in scope_ctx.team_user_ids:
+                    raise ValueError("Selected salesperson is not within your permitted team.")
+            elif scope_ctx.scope in ("COMPANY", "DEPARTMENT"):
+                sp_user = session.get(User, salesperson_id)
+                if not sp_user or sp_user.company_id != current_user.company_id:
+                    raise ValueError("Selected salesperson does not belong to your company.")
+        else:
+            salesperson_id = current_user.user_id
+    else:
+        salesperson_id = data.salesperson_user_id or current_user.user_id
+
+    salesperson = session.get(User, salesperson_id)
     if not salesperson or salesperson.account_status != "ACTIVE":
-        raise ValueError(f"Active salesperson with ID '{data.salesperson_user_id}' not found.")
+        raise ValueError(f"Active salesperson with ID '{salesperson_id}' not found.")
+
+    # 4. Financial Calculations & Validations
+    val = Decimal(str(data.order_value))
+    rcvd = Decimal(str(data.amount_received or "0.00"))
+    g_fee = Decimal(str(data.govt_fees or "0.00"))
+    i_cost = Decimal(str(data.incidental_cost or "0.00"))
+
+    if val < Decimal("0.00") or rcvd < Decimal("0.00") or g_fee < Decimal("0.00") or i_cost < Decimal("0.00"):
+        raise ValueError("Amounts cannot be negative.")
+
+    if rcvd > val:
+        raise ValueError("Advance Amount cannot be greater than Total Amount.")
+
+    bal = max(Decimal("0.00"), val - rcvd)
+    profit = val - g_fee - i_cost
+
+    # Payment Status
+    if data.payment_status:
+        pmt_status = data.payment_status.upper()
+    else:
+        if rcvd >= val and val > Decimal("0.00"):
+            pmt_status = "FULLY_PAID"
+        elif rcvd > Decimal("0.00"):
+            pmt_status = "PARTIALLY_PAID"
+        else:
+            pmt_status = "PENDING"
 
     order_num = generate_sales_order_number(session, data.order_date)
-    val = Decimal(str(data.order_value))
-    rcvd = Decimal(str(data.amount_received))
-    bal = max(Decimal("0.00"), val - rcvd)
 
     order = SalesOrder(
         order_number=order_num,
-        company_id=data.company_id,
-        client_id=data.client_id,
+        company_id=company_id,
+        client_id=client.client_id,
         service_id=data.service_id,
-        salesperson_user_id=data.salesperson_user_id,
+        salesperson_user_id=salesperson_id,
         lead_source=data.lead_source,
         order_date=data.order_date,
         order_value=val,
         amount_received=rcvd,
         balance_amount=bal,
-        payment_status=data.payment_status,
+        govt_fees=g_fee,
+        incidental_cost=i_cost,
+        profit_amount=profit,
+        payment_status=pmt_status,
         confirmation_status="DRAFT",
+        proforma_invoice_no=data.proforma_invoice_no.strip() if data.proforma_invoice_no else None,
+        tax_invoice_no=data.tax_invoice_no.strip() if data.tax_invoice_no else None,
+        reimbursement_note=data.reimbursement_note.strip() if data.reimbursement_note else None,
         notes=data.notes,
     )
     session.add(order)
@@ -989,3 +1099,579 @@ def export_sales_orders_csv(
     csv_content = output.getvalue()
     filename = f"sales_report_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.csv"
     return csv_content, filename
+
+
+def get_sales_register_data(
+    session: Session,
+    current_user: User,
+    page: int = 1,
+    limit: int = 50,
+    search: Optional[str] = None,
+    payment_status: Optional[str] = None,
+    work_status: Optional[str] = None,
+    employee_id: Optional[uuid.UUID] = None,
+    service_id: Optional[uuid.UUID] = None,
+    lead_source: Optional[str] = None,
+    from_date: Optional[date] = None,
+    to_date: Optional[date] = None,
+    sort_by: str = "order_date",
+    sort_dir: str = "desc",
+) -> SalesRegisterResponse:
+    """Retrieve filtered and paginated Sales Register records covering all 20 columns."""
+    try:
+        scope_ctx = permissions.resolve_data_scope_context(session, current_user, "SALES_MY_ORDERS")
+    except permissions.PermissionDeniedError:
+        try:
+            scope_ctx = permissions.resolve_data_scope_context(session, current_user, "SALES_ALL_ORDERS")
+        except permissions.PermissionDeniedError:
+            scope_ctx = permissions.resolve_data_scope_context(session, current_user, "SALES_DASHBOARD")
+
+    if scope_ctx.scope == "SELF":
+        employee_id = current_user.user_id
+
+    query = (
+        select(SalesOrder)
+        .join(ClientMaster, SalesOrder.client_id == ClientMaster.client_id)
+        .join(ServiceMaster, SalesOrder.service_id == ServiceMaster.service_id)
+        .join(User, SalesOrder.salesperson_user_id == User.user_id)
+        .outerjoin(OperationApplication, SalesOrder.order_id == OperationApplication.sales_order_id)
+    )
+
+    query = _apply_sales_filters(
+        query,
+        scope_ctx=scope_ctx,
+        start_date=from_date,
+        end_date=to_date,
+        employee_id=employee_id,
+        service_id=service_id,
+        lead_source=lead_source,
+        payment_status=payment_status,
+    )
+
+    if work_status and work_status != "ALL":
+        ws_upper = work_status.upper()
+        if ws_upper in ("DRAFT", "CONFIRMED", "CANCELLED"):
+            query = query.where(
+                or_(
+                    SalesOrder.confirmation_status == ws_upper,
+                    OperationApplication.application_status == ws_upper,
+                )
+            )
+        else:
+            query = query.where(OperationApplication.application_status == ws_upper)
+
+    if search and search.strip():
+        term = f"%{search.strip()}%"
+        query = query.where(
+            or_(
+                ClientMaster.client_name.ilike(term),
+                ClientMaster.contact_phone.ilike(term),
+                SalesOrder.order_number.ilike(term),
+                SalesOrder.proforma_invoice_no.ilike(term),
+                SalesOrder.tax_invoice_no.ilike(term),
+                SalesOrder.reimbursement_note.ilike(term),
+                SalesOrder.notes.ilike(term),
+                ServiceMaster.service_name.ilike(term),
+                User.first_name.ilike(term),
+                User.last_name.ilike(term),
+                User.employee_code.ilike(term),
+            )
+        )
+
+    all_matched = session.execute(query).scalars().all()
+    total_count = len(all_matched)
+
+    total_sales = sum((o.order_value for o in all_matched), Decimal("0.00"))
+    total_advance = sum((o.amount_received for o in all_matched), Decimal("0.00"))
+    total_pending = sum((o.balance_amount for o in all_matched), Decimal("0.00"))
+    total_govt = sum((o.govt_fees for o in all_matched), Decimal("0.00"))
+    total_incidental = sum((o.incidental_cost for o in all_matched), Decimal("0.00"))
+    total_profit = sum((o.profit_amount for o in all_matched), Decimal("0.00"))
+
+    summary = SalesRegisterSummary(
+        total_orders=total_count,
+        total_sales=total_sales,
+        total_advance=total_advance,
+        total_pending=total_pending,
+        total_govt_fees=total_govt,
+        total_incidental_cost=total_incidental,
+        total_profits=total_profit,
+        formatted_total_sales=format_inr(total_sales),
+        formatted_total_advance=format_inr(total_advance),
+        formatted_total_pending=format_inr(total_pending),
+        formatted_total_govt_fees=format_inr(total_govt),
+        formatted_total_incidental_cost=format_inr(total_incidental),
+        formatted_total_profits=format_inr(total_profit),
+    )
+
+    if sort_dir.lower() == "asc":
+        query = query.order_by(SalesOrder.order_date.asc(), SalesOrder.created_at.asc())
+    else:
+        query = query.order_by(SalesOrder.order_date.desc(), SalesOrder.created_at.desc())
+
+    safe_page = max(1, page)
+    safe_limit = max(1, min(100, limit))
+    offset_val = (safe_page - 1) * safe_limit
+
+    paged_orders = session.execute(query.offset(offset_val).limit(safe_limit)).scalars().all()
+
+    items: List[SalesOrderDetailRead] = []
+    for idx, o in enumerate(paged_orders):
+        s_no = offset_val + idx + 1
+        c_name = o.client.client_name if o.client else "—"
+        c_phone = o.client.contact_phone if o.client else "—"
+        s_name = o.service.service_name if o.service else "—"
+        s_code = o.service.service_code if o.service else ""
+        sp_name = f"{o.salesperson.first_name} {o.salesperson.last_name}".strip() if o.salesperson else "—"
+        sp_code = o.salesperson.employee_code if o.salesperson else ""
+
+        app_id = o.application.application_id if o.application else None
+        app_num = o.application.application_number if o.application else None
+        op_st = o.application.application_status if o.application else o.confirmation_status
+
+        assigned_to_id = o.application.assigned_to_user_id if o.application else None
+        assigned_to_name = (
+            f"{o.application.assigned_to.first_name} {o.application.assigned_to.last_name}".strip()
+            if (o.application and o.application.assigned_to)
+            else "Unassigned"
+        )
+        assigned_to_code = (
+            o.application.assigned_to.employee_code
+            if (o.application and o.application.assigned_to)
+            else None
+        )
+
+        items.append(
+            SalesOrderDetailRead(
+                s_no=s_no,
+                order_id=o.order_id,
+                order_number=o.order_number,
+                company_id=o.company_id,
+                client_id=o.client_id,
+                service_id=o.service_id,
+                salesperson_user_id=o.salesperson_user_id,
+                lead_source=o.lead_source,
+                order_date=o.order_date,
+                formatted_date=o.order_date.strftime("%d %b %Y"),
+                order_value=o.order_value,
+                amount_received=o.amount_received,
+                balance_amount=o.balance_amount,
+                govt_fees=o.govt_fees,
+                incidental_cost=o.incidental_cost,
+                profit_amount=o.profit_amount,
+                payment_status=o.payment_status,
+                confirmation_status=o.confirmation_status,
+                confirmed_at=o.confirmed_at,
+                proforma_invoice_no=o.proforma_invoice_no,
+                tax_invoice_no=o.tax_invoice_no,
+                reimbursement_note=o.reimbursement_note,
+                notes=o.notes,
+                remarks=o.notes,
+                created_at=o.created_at,
+                updated_at=o.updated_at,
+                client_name=c_name,
+                contact_no=c_phone,
+                service_name=s_name,
+                service_code=s_code,
+                salesperson_name=sp_name,
+                salesperson_code=sp_code,
+                assigned_to_user_id=assigned_to_id,
+                assigned_to_name=assigned_to_name,
+                assigned_to_code=assigned_to_code,
+                work_status=op_st,
+                application_id=app_id,
+                application_number=app_num,
+                operation_status=op_st,
+            )
+        )
+
+    total_pages = (total_count + safe_limit - 1) // safe_limit if total_count > 0 else 1
+
+    return SalesRegisterResponse(
+        items=items,
+        total_count=total_count,
+        page=safe_page,
+        limit=safe_limit,
+        total_pages=total_pages,
+        summary=summary,
+    )
+
+
+def get_sales_form_options(
+    session: Session,
+    current_user: User,
+) -> SalesFormOptionsResponse:
+    """Retrieve dropdown options for the Sales Entry form, respecting data scoping."""
+    # 1. Services
+    services = session.execute(
+        select(ServiceMaster).where(ServiceMaster.status == "ACTIVE").order_by(ServiceMaster.service_name.asc())
+    ).scalars().all()
+    service_opts = [
+        SalesServiceOption(
+            service_id=s.service_id,
+            service_code=s.service_code,
+            service_name=s.service_name,
+            category=s.category,
+            base_price=s.base_price,
+            govt_fee=s.govt_fee,
+        )
+        for s in services
+    ]
+
+    # 2. Salespersons scoped by RBAC
+    try:
+        scope_ctx = permissions.resolve_data_scope_context(session, current_user, "SALES_CONFIRMED_ORDER")
+    except permissions.PermissionDeniedError:
+        scope_ctx = permissions.DataScopeContext(
+            scope="SELF",
+            user_id=current_user.user_id,
+            company_id=current_user.company_id,
+            department_id=current_user.department_id or uuid.uuid4(),
+            team_user_ids=[current_user.user_id],
+        )
+
+    if scope_ctx.scope == "SELF":
+        sp_users = [current_user]
+        can_select = False
+    elif scope_ctx.scope == "TEAM":
+        sp_users = session.execute(
+            select(User)
+            .outerjoin(Department, User.department_id == Department.department_id)
+            .outerjoin(Designation, User.designation_id == Designation.designation_id)
+            .where(
+                User.user_id.in_(scope_ctx.team_user_ids),
+                User.account_status == "ACTIVE",
+            )
+            .order_by(User.first_name.asc())
+        ).scalars().all()
+        can_select = True
+    else:  # COMPANY, ALL
+        sp_users = session.execute(
+            select(User)
+            .outerjoin(Department, User.department_id == Department.department_id)
+            .outerjoin(Designation, User.designation_id == Designation.designation_id)
+            .where(
+                User.company_id == current_user.company_id if scope_ctx.scope == "COMPANY" else True,
+                User.account_status == "ACTIVE",
+            )
+            .order_by(User.first_name.asc())
+        ).scalars().all()
+        can_select = True
+
+    employee_opts = [
+        SalesEmployeeOption(
+            user_id=u.user_id,
+            employee_code=u.employee_code,
+            full_name=f"{u.first_name} {u.last_name}".strip(),
+            department_name=u.department.department_name if u.department else None,
+            designation_name=u.designation.designation_name if u.designation else None,
+        )
+        for u in sp_users
+    ]
+
+    # 3. Clients in company
+    clients = session.execute(
+        select(ClientMaster).where(
+            ClientMaster.company_id == current_user.company_id,
+            ClientMaster.status == "ACTIVE",
+        ).order_by(ClientMaster.client_name.asc()).limit(300)
+    ).scalars().all()
+
+    client_opts = [
+        SalesClientOption(
+            client_id=c.client_id,
+            client_name=c.client_name,
+            contact_phone=c.contact_phone,
+            contact_email=c.contact_email,
+            contact_person=c.contact_person,
+            entity_type=c.entity_type,
+        )
+        for c in clients
+    ]
+
+    # 4. Eligible Operations Assignees
+    ops_assignees = get_eligible_operations_assignees(session, current_user.company_id)
+
+    lead_sources = ["WEBSITE", "REFERRAL", "DIRECT", "OTHERS"]
+    comp = session.get(Company, current_user.company_id)
+    comp_name = comp.company_name if comp else "GoCompliance CRM"
+
+    return SalesFormOptionsResponse(
+        services=service_opts,
+        salespersons=employee_opts,
+        clients=client_opts,
+        lead_sources=lead_sources,
+        operations_assignees=ops_assignees,
+        default_salesperson_id=current_user.user_id,
+        can_select_salesperson=can_select,
+        company_id=current_user.company_id,
+        company_name=comp_name,
+    )
+
+
+def get_eligible_operations_assignees(
+    session: Session,
+    company_id: uuid.UUID,
+) -> List[SalesEmployeeOption]:
+    """Retrieve active employees in the Operations department/roles for task assignment."""
+    from app.models.module import Module
+    from app.models.user_module_permission import UserModulePermission
+
+    stmt = (
+        select(User)
+        .outerjoin(Department, User.department_id == Department.department_id)
+        .outerjoin(Designation, User.designation_id == Designation.designation_id)
+        .where(
+            User.company_id == company_id,
+            User.account_status == "ACTIVE",
+            or_(
+                Department.department_name.ilike("%operation%"),
+                Department.department_code.ilike("%operation%"),
+                Department.department_code.ilike("%ops%"),
+                Designation.designation_name.ilike("%operation%"),
+                Designation.designation_code.ilike("%ops%"),
+                User.user_id.in_(
+                    select(UserModulePermission.user_id)
+                    .join(Module, UserModulePermission.module_id == Module.module_id)
+                    .where(
+                        UserModulePermission.status == "ACTIVE",
+                        func.upper(Module.module_code).in_(
+                            ["OPERATIONS", "OPERATION", "OPS_WORKSPACE", "OPS_APPLICATIONS"]
+                        ),
+                    )
+                ),
+            ),
+        )
+        .order_by(User.first_name.asc(), User.last_name.asc())
+    )
+    users = session.execute(stmt).scalars().all()
+    # Fallback to active users if none tagged with operations department in test/dev data
+    if not users:
+        users = session.execute(
+            select(User)
+            .where(
+                User.company_id == company_id,
+                User.account_status == "ACTIVE",
+            )
+            .order_by(User.first_name.asc(), User.last_name.asc())
+        ).scalars().all()
+
+    return [
+        SalesEmployeeOption(
+            user_id=u.user_id,
+            employee_code=u.employee_code,
+            full_name=f"{u.first_name} {u.last_name}".strip(),
+            department_name=u.department.department_name if u.department else None,
+            designation_name=u.designation.designation_name if u.designation else None,
+        )
+        for u in users
+    ]
+
+
+def assign_sales_order_operations(
+    session: Session,
+    order_id: uuid.UUID,
+    assignee_user_id: uuid.UUID,
+    assigned_by: User,
+    priority: str = "MEDIUM",
+    target_due_date: Optional[date] = None,
+    notes: Optional[str] = None,
+) -> SalesOrderDetailRead:
+    """Assign or reassign an order's operations application to an eligible Operations team member."""
+    order = session.get(SalesOrder, order_id)
+    if not order:
+        raise SalesOrderNotFoundError(f"Sales order with ID '{order_id}' not found.")
+
+    # Authorization Check: Operations manager / head / super admin / director
+    is_authorized = False
+    if getattr(assigned_by, "is_super_admin", False):
+        is_authorized = True
+    else:
+        for mod_code in ("OPERATIONS", "OPS_APPLICATIONS", "ADMIN", "SALES"):
+            try:
+                scope_ctx = permissions.resolve_data_scope_context(session, assigned_by, mod_code)
+                if scope_ctx and scope_ctx.scope in ("COMPANY", "DEPARTMENT", "TEAM", "ALL"):
+                    is_authorized = True
+                    break
+            except permissions.PermissionDeniedError:
+                continue
+
+    if not is_authorized and assigned_by.department:
+        dept_name = (assigned_by.department.department_name or "").upper()
+        if "OPERATION" in dept_name or "ADMIN" in dept_name or getattr(assigned_by, "is_reporting_manager", False):
+            is_authorized = True
+
+    if not is_authorized:
+        if getattr(assigned_by, "is_reporting_manager", False):
+            is_authorized = True
+        else:
+            raise SalesOrderPermissionError("Only authorized Operations managers/heads can assign or reassign work.")
+
+    # Ensure application exists (confirm if draft)
+    if not order.application:
+        confirm_sales_order(session, order_id, assigned_by)
+        session.refresh(order)
+
+    app = order.application
+    if not app:
+        raise ValueError("Could not initialize operations application for this order.")
+
+    # Validate assignee is an active employee in the same company
+    assignee = session.get(User, assignee_user_id)
+    if not assignee or assignee.account_status != "ACTIVE":
+        raise ValueError(f"Target assignee '{assignee_user_id}' is not an active employee.")
+    if assignee.company_id != order.company_id:
+        raise ValueError("Assignee does not belong to the same company as the sales order.")
+
+    # Call operation_service.assign_task
+    operation_service.assign_task(
+        session=session,
+        application_id=app.application_id,
+        assignee_user_id=assignee_user_id,
+        assigned_by=assigned_by,
+        priority=priority or "MEDIUM",
+        target_due_date=target_due_date,
+        notes=notes,
+    )
+    session.flush()
+    session.refresh(order)
+    session.refresh(app)
+
+    c_name = order.client.client_name if order.client else "—"
+    c_phone = order.client.contact_phone if order.client else "—"
+    s_name = order.service.service_name if order.service else "—"
+    s_code = order.service.service_code if order.service else ""
+    sp_name = f"{order.salesperson.first_name} {order.salesperson.last_name}".strip() if order.salesperson else "—"
+    sp_code = order.salesperson.employee_code if order.salesperson else ""
+
+    assigned_to_name = (
+        f"{app.assigned_to.first_name} {app.assigned_to.last_name}".strip()
+        if app.assigned_to
+        else "Unassigned"
+    )
+    assigned_to_code = app.assigned_to.employee_code if app.assigned_to else None
+
+    return SalesOrderDetailRead(
+        s_no=1,
+        order_id=order.order_id,
+        order_number=order.order_number,
+        company_id=order.company_id,
+        client_id=order.client_id,
+        service_id=order.service_id,
+        salesperson_user_id=order.salesperson_user_id,
+        lead_source=order.lead_source,
+        order_date=order.order_date,
+        formatted_date=order.order_date.strftime("%d %b %Y"),
+        order_value=order.order_value,
+        amount_received=order.amount_received,
+        balance_amount=order.balance_amount,
+        govt_fees=order.govt_fees,
+        incidental_cost=order.incidental_cost,
+        profit_amount=order.profit_amount,
+        payment_status=order.payment_status,
+        confirmation_status=order.confirmation_status,
+        confirmed_at=order.confirmed_at,
+        proforma_invoice_no=order.proforma_invoice_no,
+        tax_invoice_no=order.tax_invoice_no,
+        reimbursement_note=order.reimbursement_note,
+        notes=order.notes,
+        remarks=order.notes,
+        created_at=order.created_at,
+        updated_at=order.updated_at,
+        client_name=c_name,
+        contact_no=c_phone,
+        service_name=s_name,
+        service_code=s_code,
+        salesperson_name=sp_name,
+        salesperson_code=sp_code,
+        assigned_to_user_id=app.assigned_to_user_id,
+        assigned_to_name=assigned_to_name,
+        assigned_to_code=assigned_to_code,
+        work_status=app.application_status,
+        application_id=app.application_id,
+        application_number=app.application_number,
+        operation_status=app.application_status,
+    )
+
+
+def export_sales_register_csv(
+    session: Session,
+    current_user: User,
+    search: Optional[str] = None,
+    payment_status: Optional[str] = None,
+    work_status: Optional[str] = None,
+    employee_id: Optional[uuid.UUID] = None,
+    service_id: Optional[uuid.UUID] = None,
+    lead_source: Optional[str] = None,
+    from_date: Optional[date] = None,
+    to_date: Optional[date] = None,
+) -> Tuple[str, str]:
+    """Generate CSV of Sales Register matching all 20 columns in the director's order."""
+    reg_response = get_sales_register_data(
+        session=session,
+        current_user=current_user,
+        page=1,
+        limit=100000,
+        search=search,
+        payment_status=payment_status,
+        work_status=work_status,
+        employee_id=employee_id,
+        service_id=service_id,
+        lead_source=lead_source,
+        from_date=from_date,
+        to_date=to_date,
+    )
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    writer.writerow([
+        "S.No",
+        "Date",
+        "Client Name",
+        "Contact No",
+        "Source",
+        "Work",
+        "Converted By",
+        "Assigned To",
+        "Work Status",
+        "Total Amount",
+        "Advance Amount",
+        "Pending Amount",
+        "Payment Status",
+        "Proforma Invoice No.",
+        "Tax Invoice No.",
+        "Reimbursement Note",
+        "Govt Fees",
+        "Incidental Cost",
+        "Profits",
+        "Remarks",
+    ])
+
+    for row in reg_response.items:
+        writer.writerow([
+            row.s_no,
+            row.formatted_date or row.order_date.strftime("%d/%m/%Y"),
+            row.client_name or "",
+            row.contact_no or "",
+            row.lead_source or "",
+            row.service_name or "",
+            row.salesperson_name or "",
+            row.assigned_to_name or "Unassigned",
+            row.work_status or row.confirmation_status,
+            f"{row.order_value:.2f}",
+            f"{row.amount_received:.2f}",
+            f"{row.balance_amount:.2f}",
+            row.payment_status or "",
+            row.proforma_invoice_no or "",
+            row.tax_invoice_no or "",
+            row.reimbursement_note or "",
+            f"{row.govt_fees:.2f}",
+            f"{row.incidental_cost:.2f}",
+            f"{row.profit_amount:.2f}",
+            row.notes or "",
+        ])
+
+    today_str = date.today().strftime("%Y%m%d")
+    filename = f"sales_register_{today_str}.csv"
+    return output.getvalue(), filename

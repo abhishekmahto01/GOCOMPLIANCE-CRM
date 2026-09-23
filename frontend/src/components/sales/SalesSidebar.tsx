@@ -6,6 +6,8 @@ import {
   ChevronDown,
   X,
   TrendingUp,
+  PlusCircle,
+  Table2,
   PanelLeftClose,
 } from 'lucide-react';
 import { BrandLogo } from '../auth/BrandLogo';
@@ -42,7 +44,17 @@ export const SalesSidebar: React.FC<SalesSidebarProps> = ({
     };
   }, [isOpen]);
 
-  const isSalesDashboardActive = location.pathname === '/sales/dashboard' || location.pathname === '/sales';
+  const isSalesDashboardActive =
+    location.pathname === '/sales/dashboard' || location.pathname === '/sales';
+  const isSalesEntryActive =
+    location.pathname === '/sales/entry' || location.pathname === '/sales/new';
+  const isSalesRegisterActive =
+    location.pathname === '/sales/register' ||
+    location.pathname === '/sales/orders' ||
+    location.pathname === '/sales/my-orders' ||
+    location.pathname === '/sales/all-orders';
+
+  const isAnySalesActive = isSalesDashboardActive || isSalesEntryActive || isSalesRegisterActive;
 
   const renderSidebarContent = (isDrawer = false) => (
     <div className="flex flex-col h-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-r border-slate-200/80 dark:border-slate-800 transition-colors duration-300 select-none">
@@ -92,7 +104,7 @@ export const SalesSidebar: React.FC<SalesSidebarProps> = ({
             type="button"
             onClick={() => setIsSalesExpanded(!isSalesExpanded)}
             className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
-              isSalesDashboardActive
+              isAnySalesActive
                 ? 'bg-blue-50/80 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400'
                 : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100/70 dark:hover:bg-slate-800/60'
             }`}
@@ -121,6 +133,32 @@ export const SalesSidebar: React.FC<SalesSidebarProps> = ({
               >
                 <TrendingUp className="w-3.5 h-3.5" />
                 <span>Sales Dashboard</span>
+              </Link>
+
+              {/* New Sales Entry */}
+              <Link
+                to="/sales/entry"
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
+                  isSalesEntryActive
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30'
+                }`}
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                <span>New Sales Entry</span>
+              </Link>
+
+              {/* Sales Register */}
+              <Link
+                to="/sales/register"
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
+                  isSalesRegisterActive
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30'
+                }`}
+              >
+                <Table2 className="w-3.5 h-3.5" />
+                <span>Sales Register</span>
               </Link>
             </div>
           )}

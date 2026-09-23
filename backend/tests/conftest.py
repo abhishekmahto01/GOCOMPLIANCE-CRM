@@ -68,6 +68,7 @@ def setup_test_database():
     if test_url:
         get_verified_test_db_url()
         eng = get_test_engine()
+        Base.metadata.drop_all(bind=eng)
         Base.metadata.create_all(bind=eng)
         yield
     else:
@@ -85,13 +86,14 @@ def db_session() -> Generator[Session, None, None]:
     connection = eng.connect()
     transaction = connection.begin()
 
-    session = Session(bind=connection, expire_on_commit=False)
+    session = Session(bind=connection, expire_on_commit=False, join_transaction_mode="create_savepoint")
 
     try:
         yield session
     finally:
         session.close()
-        transaction.rollback()
+        if transaction.is_active:
+            transaction.rollback()
         connection.close()
 
 
