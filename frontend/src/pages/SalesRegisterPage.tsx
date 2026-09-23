@@ -36,12 +36,14 @@ interface OutletContextType {
   addToast?: (type: 'success' | 'error' | 'info', title: string, message: string) => void;
 }
 
-function formatInr(val: number): string {
+function formatInr(val: number | string | null | undefined): string {
+  const num = typeof val === 'number' ? val : parseFloat(String(val ?? 0));
+  const safeNum = isNaN(num) ? 0 : num;
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
     maximumFractionDigits: 0,
-  }).format(val || 0);
+  }).format(safeNum);
 }
 
 function renderPaymentBadge(status: string) {
@@ -440,7 +442,7 @@ export const SalesRegisterPage: React.FC = () => {
             Govt & Incidental
           </span>
           <div className="mt-1.5 text-xl font-bold text-slate-700 dark:text-slate-300">
-            {formatInr((summary?.total_govt_fees || 0) + (summary?.total_incidental_cost || 0))}
+            {formatInr(Number(summary?.total_govt_fees || 0) + Number(summary?.total_incidental_cost || 0))}
           </div>
         </div>
 

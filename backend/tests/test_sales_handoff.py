@@ -248,8 +248,8 @@ def test_confirm_sales_order_automatic_handoff(db_session: Session, test_setup_e
     assert result.confirmation_status == "CONFIRMED"
     assert result.application_id is not None
     assert result.application_number.startswith("AP-2025-")
-    assert result.application_status == "UNASSIGNED"
-    assert result.assigned_to_user_id is None
+    assert result.application_status == "ASSIGNED"
+    assert result.assigned_to_user_id == entities["ops_manager"].user_id
     assert result.documents_count == 3
 
     # Check database state
@@ -270,8 +270,8 @@ def test_confirm_sales_order_automatic_handoff(db_session: Session, test_setup_e
     # Check initial activity log
     activity = db_session.query(ApplicationActivityLog).filter(ApplicationActivityLog.application_id == app.application_id).all()
     assert len(activity) == 1
-    assert activity[0].action_type == "STATUS_CHANGE"
-    assert activity[0].new_value == "UNASSIGNED"
+    assert activity[0].action_type == "ASSIGNMENT_CHANGE"
+    assert "Pooja Singh" in activity[0].new_value
 
 
 def test_confirm_sales_order_idempotency(db_session: Session, test_setup_entities):
@@ -343,17 +343,18 @@ def test_task_assignment_and_reassignment_history(db_session: Session, test_setu
     )
     order = create_sales_order(db_session, dto, entities["sales_user"])
     app = order.application
-    assert app.application_status == "UNASSIGNED"
+    assert app.application_status == "ASSIGNED"
+    assert app.assigned_to_user_id == entities["ops_manager"].user_id
 
-    # 1. Assign task to Deepak (ops_user1)
-    assigned_app = assign_task(
+    # 1. Reassign task to Deepak (ops_user1)
+    assigned_app = reassign_task(
         db_session,
         application_id=app.application_id,
-        assignee_user_id=entities["ops_user1"].user_id,
-        assigned_by=entities["ops_manager"],
+        new_assignee_user_id=entities["ops_user1"].user_id,
+        reason="Assigned to specialist Deepak",
+        reassigned_by=entities["ops_manager"],
         priority="HIGH",
         target_due_date=date(2025, 3, 28),
-        notes="High priority client, complete before month end",
     )
 
     assert assigned_app.assigned_to_user_id == entities["ops_user1"].user_id
@@ -366,10 +367,10 @@ def test_task_assignment_and_reassignment_history(db_session: Session, test_setu
     hist1 = db_session.query(ApplicationAssignmentHistory).filter(
         ApplicationAssignmentHistory.application_id == app.application_id
     ).all()
-    assert len(hist1) == 1
-    assert hist1[0].previous_assignee_user_id is None
-    assert hist1[0].new_assignee_user_id == entities["ops_user1"].user_id
-    assert hist1[0].assigned_by_user_id == entities["ops_manager"].user_id
+    assert len(hist1) == 2
+    assert hist1[1].previous_assignee_user_id == entities["ops_manager"].user_id
+    assert hist1[1].new_assignee_user_id == entities["ops_user1"].user_id
+    assert hist1[1].assigned_by_user_id == entities["ops_manager"].user_id
 
     # 2. Reassign task to Sonal (ops_user2)
     reassigned_app = reassign_task(
@@ -388,10 +389,10 @@ def test_task_assignment_and_reassignment_history(db_session: Session, test_setu
     hist2 = db_session.query(ApplicationAssignmentHistory).filter(
         ApplicationAssignmentHistory.application_id == app.application_id
     ).order_by(ApplicationAssignmentHistory.assigned_at.asc()).all()
-    assert len(hist2) == 2
-    assert hist2[1].previous_assignee_user_id == entities["ops_user1"].user_id
-    assert hist2[1].new_assignee_user_id == entities["ops_user2"].user_id
-    assert "medical leave" in hist2[1].reason
+    assert len(hist2) == 3
+    assert hist2[2].previous_assignee_user_id == entities["ops_user1"].user_id
+    assert hist2[2].new_assignee_user_id == entities["ops_user2"].user_id
+    assert "medical leave" in hist2[2].reason
 
 
 def test_status_transitions_valid_and_invalid(db_session: Session, test_setup_entities):
@@ -408,33 +409,29 @@ def test_status_transitions_valid_and_invalid(db_session: Session, test_setup_en
     )
     order = create_sales_order(db_session, dto, entities["sales_user"])
     app = order.application
-    assert app.application_status == "UNASSIGNED"
+    assert app.application_status == "ASSIGNED"
 
-    # Invalid jump from UNASSIGNED to SUBMITTED should fail
+    # Invalid jump from ASSIGNED to SUBMITTED should fail
     with pytest.raises(InvalidStatusTransitionError):
         update_application_status(db_session, app.application_id, "SUBMITTED", entities["ops_manager"])
 
-    # Valid step 1: UNASSIGNED -> ASSIGNED
-    assign_task(db_session, app.application_id, entities["ops_user1"].user_id, entities["ops_manager"])
-    assert app.application_status == "ASSIGNED"
-
-    # Valid step 2: ASSIGNED -> IN_PROGRESS
+    # Valid step 1: ASSIGNED -> IN_PROGRESS
     update_application_status(db_session, app.application_id, "IN_PROGRESS", entities["ops_user1"])
     assert app.application_status == "IN_PROGRESS"
 
-    # Valid step 3: IN_PROGRESS -> PENDING_DOCUMENTS
+    # Valid step 2: IN_PROGRESS -> PENDING_DOCUMENTS
     update_application_status(db_session, app.application_id, "PENDING_DOCUMENTS", entities["ops_user1"])
     assert app.application_status == "PENDING_DOCUMENTS"
 
-    # Valid step 4: PENDING_DOCUMENTS -> READY_FOR_SUBMISSION
+    # Valid step 3: PENDING_DOCUMENTS -> READY_FOR_SUBMISSION
     update_application_status(db_session, app.application_id, "READY_FOR_SUBMISSION", entities["ops_user1"])
     assert app.application_status == "READY_FOR_SUBMISSION"
 
-    # Valid step 5: READY_FOR_SUBMISSION -> SUBMITTED
+    # Valid step 4: READY_FOR_SUBMISSION -> SUBMITTED
     update_application_status(db_session, app.application_id, "SUBMITTED", entities["ops_user1"], "Filed with MC portal ref 12345")
     assert app.application_status == "SUBMITTED"
 
-    # Valid step 6: SUBMITTED -> APPROVED
+    # Valid step 5: SUBMITTED -> APPROVED
     update_application_status(db_session, app.application_id, "APPROVED", entities["ops_manager"], "License certificate received")
     assert app.application_status == "APPROVED"
     assert app.completion_date == date.today()

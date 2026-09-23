@@ -73,6 +73,9 @@ export async function getMyOperationsTasksApi(
   if (params?.status && params.status !== 'ALL') queryParams.status = params.status;
   if (params?.priority && params.priority !== 'ALL') queryParams.priority = params.priority;
   if (params?.search) queryParams.search = params.search;
+  if (params?.assigned_to_user_id && params.assigned_to_user_id !== 'ALL') {
+    queryParams.assigned_to_user_id = params.assigned_to_user_id;
+  }
   if (params?.start_date) queryParams.start_date = params.start_date;
   if (params?.end_date) queryParams.end_date = params.end_date;
   if (params?.sort_by) queryParams.sort_by = params.sort_by;

@@ -46,6 +46,16 @@ describe('Admin Module Layout & Collapsible Sidebar Routing', () => {
     designation_name: 'Executive',
   };
 
+  const mockLimitedAdminUser = {
+    ...mockAdminUser,
+    user_id: '88888888-8888-8888-8888-888888888888',
+    employee_code: 'CG0008',
+    first_name: 'Admin',
+    last_name: 'Assistant',
+    official_email: 'assistant@gocompliances.in',
+    designation_name: 'Assistant',
+  };
+
   const fullAdminModules = [
     {
       module_id: 'm-admin',
@@ -230,7 +240,7 @@ describe('Admin Module Layout & Collapsible Sidebar Routing', () => {
   });
 
   it('hides child items if user lacks specific action permission', async () => {
-    vi.spyOn(authApi, 'getCurrentUserApi').mockResolvedValue(mockAdminUser);
+    vi.spyOn(authApi, 'getCurrentUserApi').mockResolvedValue(mockLimitedAdminUser);
     // User has can_view for ADMIN_EMPLOYEES but NOT can_create
     vi.spyOn(authApi, 'getAccessibleModulesApi').mockResolvedValue([
       {
@@ -273,7 +283,7 @@ describe('Admin Module Layout & Collapsible Sidebar Routing', () => {
   });
 
   it('hides entire parent group when user has no permitted child items', async () => {
-    vi.spyOn(authApi, 'getCurrentUserApi').mockResolvedValue(mockAdminUser);
+    vi.spyOn(authApi, 'getCurrentUserApi').mockResolvedValue(mockLimitedAdminUser);
     // User has ADMIN view (can see User Control) but NO ADMIN_EMPLOYEES view or create
     vi.spyOn(authApi, 'getAccessibleModulesApi').mockResolvedValue([
       {

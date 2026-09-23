@@ -27,6 +27,8 @@ import {
   getOperationsAssigneesApi,
 } from '../../api/operations';
 
+import { useAuth } from '../../context/AuthContext';
+
 export interface TaskDetailModalProps {
   applicationId: string | null;
   isOpen: boolean;
@@ -42,6 +44,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   onRefresh,
   onShowToast,
 }) => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'overview' | 'documents' | 'history' | 'reassign'>('overview');
   const [taskDetail, setTaskDetail] = useState<OperationApplicationDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -127,6 +130,12 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     if (taskDetail.assigned_to_user_id && reassignTargetUserId === taskDetail.assigned_to_user_id) {
       if (onShowToast) {
         onShowToast('error', 'Invalid Assignee', 'Cannot reassign task to the current assignee.');
+      }
+      return;
+    }
+    if (user?.user_id && reassignTargetUserId === user.user_id) {
+      if (onShowToast) {
+        onShowToast('error', 'Invalid Assignee', 'Cannot reassign task to yourself.');
       }
       return;
     }
@@ -686,7 +695,17 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                     >
                       <option value="">-- Select Operations Team Member --</option>
                       {eligibleAssignees
-                        .filter((emp) => emp.user_id !== taskDetail.assigned_to_user_id)
+                        .filter((emp) => {
+                          if (taskDetail.assigned_to_user_id && emp.user_id === taskDetail.assigned_to_user_id) return false;
+                          if (user?.user_id && emp.user_id === user.user_id) return false;
+                          const dept = (emp.department_name || '').toLowerCase();
+                          const desig = (emp.designation_name || '').toLowerCase();
+                          if (dept.includes('sale') || desig.includes('sale')) return false;
+                          if (dept.includes('admin') || desig.includes('admin')) return false;
+                          if (desig.includes('director') || desig.includes('ceo') || desig.includes('super admin')) return false;
+                          if (emp.employee_code === 'CG0001') return false;
+                          return true;
+                        })
                         .map((emp) => (
                           <option key={emp.user_id} value={emp.user_id}>
                             {emp.full_name || emp.name} ({emp.employee_code})

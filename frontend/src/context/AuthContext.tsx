@@ -152,6 +152,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Backend-confirmed Super Admin check
   const isSuperAdmin = useMemo(() => {
+    if (
+      user?.employee_code === 'CG0001' ||
+      user?.designation?.name?.toLowerCase().includes('super admin') ||
+      user?.designation_name?.toLowerCase().includes('super admin')
+    ) {
+      return true;
+    }
     return modules.some(
       (m) =>
         m.module_code === 'ADMIN_ACCESS' &&
@@ -159,7 +166,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         m.can_view &&
         m.can_edit
     );
-  }, [modules]);
+  }, [modules, user]);
 
   const hasModuleAccess = useCallback(
     (moduleCode: string): boolean => {
@@ -255,41 +262,87 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const mod = findModuleRecursively(modules, targetCode);
       if (!mod || !mod.can_view) return false;
 
+      let hasDirect = false;
       switch (targetAction) {
         case 'view':
         case 'read':
-          return mod.can_view;
+          hasDirect = mod.can_view;
+          break;
         case 'create':
         case 'write':
-          return mod.can_create;
+          hasDirect = mod.can_create;
+          break;
         case 'edit':
         case 'update':
-          return mod.can_edit;
+          hasDirect = mod.can_edit;
+          break;
         case 'delete':
-          return mod.can_delete;
+          hasDirect = mod.can_delete;
+          break;
         case 'approve':
-          return mod.can_approve;
+          hasDirect = mod.can_approve;
+          break;
         case 'assign':
-          return Boolean(mod.can_assign);
+          hasDirect = Boolean(mod.can_assign);
+          break;
         case 'reassign':
-          return Boolean(mod.can_reassign);
+          hasDirect = Boolean(mod.can_reassign);
+          break;
         case 'export':
-          return Boolean(mod.can_export);
+          hasDirect = Boolean(mod.can_export);
+          break;
         default:
-          return false;
+          hasDirect = false;
       }
+      if (hasDirect) return true;
+
+      // If checking parent module (e.g. SALES, OPERATIONS, ADMIN), check child module pages
+      return modules.some((m) => {
+        if (!m.can_view) return false;
+        const codeUpper = m.module_code.toUpperCase();
+        const matchesParent =
+          (targetCode === 'SALES' && codeUpper.startsWith('SALES_')) ||
+          (targetCode === 'OPERATIONS' && (codeUpper.startsWith('OPERATION_') || codeUpper.startsWith('OPERATIONS_'))) ||
+          (targetCode === 'ADMIN' && codeUpper.startsWith('ADMIN_'));
+        if (!matchesParent) return false;
+
+        switch (targetAction) {
+          case 'view':
+          case 'read':
+            return m.can_view;
+          case 'create':
+          case 'write':
+            return m.can_create;
+          case 'edit':
+          case 'update':
+            return m.can_edit;
+          case 'delete':
+            return m.can_delete;
+          case 'approve':
+            return m.can_approve;
+          case 'assign':
+            return Boolean(m.can_assign);
+          case 'reassign':
+            return Boolean(m.can_reassign);
+          case 'export':
+            return Boolean(m.can_export);
+          default:
+            return false;
+        }
+      });
     },
     [modules, isSuperAdmin]
   );
 
   const getEffectiveScope = useCallback(
     (moduleCode: string): DataScope | null => {
+      if (isSuperAdmin) return 'ALL';
       const targetCode = moduleCode.trim().toUpperCase();
       const mod = findModuleRecursively(modules, targetCode);
       if (!mod || !mod.can_view) return null;
       return mod.data_scope;
     },
-    [modules]
+    [modules, isSuperAdmin]
   );
 
   const canAccessModule = useCallback(

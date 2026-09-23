@@ -464,7 +464,12 @@ def get_operations_tasks(
     )
 
     if my_tasks_only:
-        stmt = stmt.where(OperationApplication.assigned_to_user_id == user.user_id)
+        stmt = stmt.where(
+            or_(
+                OperationApplication.assigned_to_user_id == user.user_id,
+                OperationApplication.assigned_by_user_id == user.user_id,
+            )
+        )
     elif unassigned_only:
         stmt = stmt.where(
             or_(
@@ -490,7 +495,7 @@ def get_operations_tasks(
     if priority and priority.strip().upper() != "ALL":
         stmt = stmt.where(OperationApplication.priority == priority.strip().upper())
 
-    if assigned_to_user_id and not my_tasks_only and not unassigned_only:
+    if assigned_to_user_id and not unassigned_only:
         stmt = stmt.where(OperationApplication.assigned_to_user_id == assigned_to_user_id)
 
     if start_date:
@@ -572,12 +577,13 @@ def get_my_tasks(
     status: Optional[str] = None,
     priority: Optional[str] = None,
     search: Optional[str] = None,
+    assigned_to_user_id: Optional[uuid.UUID] = None,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     sort_by: str = "created_at",
     sort_order: str = "desc",
 ) -> OperationsTaskListResponse:
-    """Retrieve tasks strictly assigned to the currently logged in operations employee."""
+    """Retrieve tasks assigned to or delegated/reassigned by the currently logged in operations employee."""
     return get_operations_tasks(
         session=session,
         user=user,
@@ -586,6 +592,7 @@ def get_my_tasks(
         status=status,
         priority=priority,
         search=search,
+        assigned_to_user_id=assigned_to_user_id,
         start_date=start_date,
         end_date=end_date,
         sort_by=sort_by,
@@ -664,11 +671,46 @@ def get_operation_application_detail(
     return _to_application_detail_read(app)
 
 
+def is_disallowed_ops_assignee(u: User) -> bool:
+    """Check if user belongs to Sales, Admin, or Director roles, who are forbidden from being assigned operations tasks."""
+    if not u or u.account_status != "ACTIVE":
+        return True
+
+    dept_name = (u.department.department_name.lower() if u.department and u.department.department_name else "")
+    dept_code = (u.department.department_code.upper() if u.department and u.department.department_code else "")
+    desig_name = (u.designation.designation_name.lower() if u.designation and u.designation.designation_name else "")
+    desig_code = (u.designation.designation_code.upper() if u.designation and u.designation.designation_code else "")
+
+    # Disallow Sales
+    if "sale" in dept_name or "sale" in dept_code or dept_code in ("SL", "SALES", "SALE"):
+        return True
+    if "sale" in desig_name or "sale" in desig_code:
+        return True
+
+    # Disallow Admin / Administration
+    if "admin" in dept_name or "admin" in dept_code or dept_code in ("AD", "ADM", "ADMIN", "ADMINISTRATION"):
+        return True
+    if "admin" in desig_name or "admin" in desig_code:
+        return True
+
+    # Disallow Directors / Executive / CEO
+    if "director" in desig_name or "director" in desig_code or desig_code in ("DIR", "MD", "CEO"):
+        return True
+    if "managing director" in desig_name or "ceo" in desig_name or "chief" in desig_name:
+        return True
+
+    # Disallow Super Admin
+    if getattr(u, "is_super_admin", False) or getattr(u, "role_type", "") == "SUPER_ADMIN" or getattr(u, "employee_code", "") == "CG0001":
+        return True
+
+    return False
+
+
 def get_eligible_operations_assignees(
     session: Session,
     user: User,
 ) -> List[User]:
-    """Retrieve active employees in the company who are eligible to be assigned operations tasks."""
+    """Retrieve active employees in the company who are eligible to be assigned operations tasks (strictly excluding Sales, Admin, and Directors)."""
     stmt = (
         select(User)
         .options(
@@ -682,21 +724,16 @@ def get_eligible_operations_assignees(
     )
 
     users = session.execute(stmt).scalars().all()
-    # Filter users who have operations department or permission
     eligible: List[User] = []
     for u in users:
+        if is_disallowed_ops_assignee(u):
+            continue
         dept_name = u.department.department_name.lower() if u.department else ""
         dept_code = u.department.department_code.upper() if u.department else ""
         if "operat" in dept_name or "operat" in dept_code or dept_code in ("OP", "OPS", "OPERATIONS"):
             eligible.append(u)
-        else:
-            # Check if user has permission on OPERATIONS
-            if permissions.has_permission(session, u, "OPERATIONS", "view"):
-                eligible.append(u)
-
-    if not eligible:
-        # Fallback to active company users
-        eligible = list(users)
+        elif permissions.has_permission(session, u, "OPERATIONS", "view"):
+            eligible.append(u)
 
     # Sort by first_name, last_name
     eligible.sort(key=lambda u: (u.first_name, u.last_name))
@@ -724,6 +761,13 @@ def assign_task(
     # Validate assignee belongs to the same company
     if assignee.company_id != app.company_id:
         raise ValueError("Assignee does not belong to the application's company.")
+
+    # Validation: target assignee cannot be from Sales, Admin, or Director roles
+    if is_disallowed_ops_assignee(assignee):
+        raise ValueError(
+            "Task cannot be assigned to Sales, Administration, or Director personnel. "
+            "Please select an eligible Operations team member."
+        )
 
     prev_assignee_id = app.assigned_to_user_id
     now_utc = datetime.now(timezone.utc)
@@ -789,8 +833,19 @@ def reassign_task(
     if new_assignee.company_id != app.company_id:
         raise ValueError("Assignee does not belong to the application's company.")
 
+    # Validation: target assignee cannot be from Sales, Admin, or Director roles
+    if is_disallowed_ops_assignee(new_assignee):
+        raise ValueError(
+            "Task cannot be assigned to Sales, Administration, or Director personnel. "
+            "Please select an eligible Operations team member."
+        )
+
+    # Validation: cannot reassign to current assignee or self
     if app.assigned_to_user_id and str(app.assigned_to_user_id) == str(new_assignee_user_id):
         raise ValueError("Task is already assigned to this employee. Cannot reassign to the current assignee.")
+
+    if reassigned_by and str(reassigned_by.user_id) == str(new_assignee_user_id):
+        raise ValueError("Cannot reassign task to yourself.")
 
     prev_assignee_id = app.assigned_to_user_id
     now_utc = datetime.now(timezone.utc)

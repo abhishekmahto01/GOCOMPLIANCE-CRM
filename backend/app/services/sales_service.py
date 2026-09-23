@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import desc, func, or_, select
+from sqlalchemy import case, desc, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models.client import ClientMaster
@@ -429,6 +429,35 @@ def confirm_sales_order(
     order.confirmation_status = "CONFIRMED"
     order.confirmed_at = now_utc
 
+    # Look up Mansi Singhal / Operations lead in the same company for default task assignment
+    ops_lead = session.execute(
+        select(User)
+        .outerjoin(Department, User.department_id == Department.department_id)
+        .where(
+            User.company_id == order.company_id,
+            User.account_status == "ACTIVE",
+            or_(
+                User.employee_code == "CG0003",
+                User.first_name.ilike("%mansi%"),
+                Department.department_code.in_(["OP", "OPS", "OPERATIONS"]),
+                Department.department_name.ilike("%operation%"),
+            ),
+        )
+        .order_by(
+            case(
+                (User.employee_code == "CG0003", 0),
+                (User.first_name.ilike("%mansi%"), 1),
+                else_=2,
+            ),
+            User.created_at.asc(),
+        )
+    ).scalars().first()
+
+    default_assigned_to = ops_lead.user_id if ops_lead else None
+    default_assigned_by = current_user.user_id if ops_lead else None
+    default_assigned_at = now_utc if ops_lead else None
+    default_app_status = "ASSIGNED" if ops_lead else "UNASSIGNED"
+
     app_num = generate_application_number(session, order.order_date)
 
     new_app = OperationApplication(
@@ -437,11 +466,11 @@ def confirm_sales_order(
         company_id=order.company_id,
         client_id=order.client_id,
         service_id=order.service_id,
-        assigned_to_user_id=None,
-        assigned_by_user_id=None,
-        assigned_at=None,
+        assigned_to_user_id=default_assigned_to,
+        assigned_by_user_id=default_assigned_by,
+        assigned_at=default_assigned_at,
         priority="MEDIUM",
-        application_status="UNASSIGNED",
+        application_status=default_app_status,
         target_due_date=None,
         assignment_notes=order.notes,
     )
@@ -466,13 +495,28 @@ def confirm_sales_order(
         session.add(app_doc)
         doc_count += 1
 
+    if ops_lead:
+        history = ApplicationAssignmentHistory(
+            application_id=new_app.application_id,
+            assigned_by_user_id=current_user.user_id,
+            previous_assignee_user_id=None,
+            new_assignee_user_id=ops_lead.user_id,
+            reason="Automatic default assignment on sales entry confirmation",
+            assigned_at=now_utc,
+        )
+        session.add(history)
+
     activity = ApplicationActivityLog(
         application_id=new_app.application_id,
         actor_user_id=current_user.user_id,
-        action_type="STATUS_CHANGE",
+        action_type="ASSIGNMENT_CHANGE" if ops_lead else "STATUS_CHANGE",
         old_value="NONE",
-        new_value="UNASSIGNED",
-        comment=f"Order '{order.order_number}' confirmed and handed over from Sales.",
+        new_value=f"{ops_lead.first_name} {ops_lead.last_name} ({ops_lead.employee_code})" if ops_lead else "UNASSIGNED",
+        comment=(
+            f"Order '{order.order_number}' confirmed and assigned by default to Operations Lead {ops_lead.first_name} {ops_lead.last_name} ({ops_lead.employee_code})."
+            if ops_lead
+            else f"Order '{order.order_number}' confirmed and handed over from Sales."
+        ),
     )
     session.add(activity)
     session.flush()
@@ -485,7 +529,7 @@ def confirm_sales_order(
         application_id=new_app.application_id,
         application_number=new_app.application_number,
         application_status=new_app.application_status,
-        assigned_to_user_id=None,
+        assigned_to_user_id=new_app.assigned_to_user_id,
         documents_count=doc_count,
     )
 
@@ -1413,9 +1457,8 @@ def get_eligible_operations_assignees(
     session: Session,
     company_id: uuid.UUID,
 ) -> List[SalesEmployeeOption]:
-    """Retrieve active employees in the Operations department/roles for task assignment."""
-    from app.models.module import Module
-    from app.models.user_module_permission import UserModulePermission
+    """Retrieve active employees in the Operations department/roles for task assignment (strictly excluding Sales, Admin, and Directors)."""
+    from app.services.operation_service import is_disallowed_ops_assignee
 
     stmt = (
         select(User)
@@ -1430,31 +1473,12 @@ def get_eligible_operations_assignees(
                 Department.department_code.ilike("%ops%"),
                 Designation.designation_name.ilike("%operation%"),
                 Designation.designation_code.ilike("%ops%"),
-                User.user_id.in_(
-                    select(UserModulePermission.user_id)
-                    .join(Module, UserModulePermission.module_id == Module.module_id)
-                    .where(
-                        UserModulePermission.status == "ACTIVE",
-                        func.upper(Module.module_code).in_(
-                            ["OPERATIONS", "OPERATION", "OPS_WORKSPACE", "OPS_APPLICATIONS"]
-                        ),
-                    )
-                ),
             ),
         )
         .order_by(User.first_name.asc(), User.last_name.asc())
     )
     users = session.execute(stmt).scalars().all()
-    # Fallback to active users if none tagged with operations department in test/dev data
-    if not users:
-        users = session.execute(
-            select(User)
-            .where(
-                User.company_id == company_id,
-                User.account_status == "ACTIVE",
-            )
-            .order_by(User.first_name.asc(), User.last_name.asc())
-        ).scalars().all()
+    eligible = [u for u in users if not is_disallowed_ops_assignee(u)]
 
     return [
         SalesEmployeeOption(
@@ -1464,7 +1488,7 @@ def get_eligible_operations_assignees(
             department_name=u.department.department_name if u.department else None,
             designation_name=u.designation.designation_name if u.designation else None,
         )
-        for u in users
+        for u in eligible
     ]
 
 
@@ -1517,11 +1541,15 @@ def assign_sales_order_operations(
         raise ValueError("Could not initialize operations application for this order.")
 
     # Validate assignee is an active employee in the same company
+    from app.services.operation_service import is_disallowed_ops_assignee
+
     assignee = session.get(User, assignee_user_id)
     if not assignee or assignee.account_status != "ACTIVE":
         raise ValueError(f"Target assignee '{assignee_user_id}' is not an active employee.")
     if assignee.company_id != order.company_id:
         raise ValueError("Assignee does not belong to the same company as the sales order.")
+    if is_disallowed_ops_assignee(assignee):
+        raise ValueError("Task cannot be assigned to Sales, Administration, or Director personnel.")
 
     # Call operation_service.assign_task
     operation_service.assign_task(

@@ -560,7 +560,7 @@ class TestOperationsAPI:
         assert res.json()["verified_by_name"] == "Deepak Kumar"
 
     def test_list_operations_assignees(self, client: TestClient, ops_test_fixture: dict):
-        """List eligible operations employees."""
+        """List eligible operations employees strictly excluding Sales, Admin, and Director personnel."""
         headers = auth_header(ops_test_fixture["ops_manager"])
         res = client.get("/api/operations/assignees", headers=headers)
         assert res.status_code == 200
@@ -570,3 +570,117 @@ class TestOperationsAPI:
         assert "OP0001" in codes
         assert "OP0002" in codes
         assert "OP0003" in codes
+        assert "OP0004" not in codes  # Sales user OP0004 must be excluded
+
+    def test_reassign_rejects_sales_admin_director_and_self(
+        self, client: TestClient, db_session: Session, ops_test_fixture: dict
+    ):
+        """Reject reassignment to sales, admin, director, current assignee, and self."""
+        f = ops_test_fixture
+        headers = auth_header(f["ops_manager"])
+        app1_id = f["app1"].application_id
+
+        # 1. Query existing Sales Department and create sales user
+        dept_sales = db_session.query(Department).filter(
+            Department.company_id == f["company"].company_id,
+            Department.department_code == "SALES",
+        ).first()
+
+        sales_user = User(
+            employee_code="OP0088",
+            company_id=f["company"].company_id,
+            department_id=dept_sales.department_id,
+            designation_id=f["ops_manager"].designation_id,
+            first_name="Sales",
+            last_name="Person",
+            official_email="sales.person@opstest.com",
+            mobile_number="+919876543888",
+            date_of_joining=date(2024, 1, 1),
+            employment_type="FULL_TIME",
+            account_status="ACTIVE",
+            must_change_password=False,
+        )
+        db_session.add(sales_user)
+        db_session.flush()
+
+        res_sales = client.post(
+            f"/api/operations/tasks/{app1_id}/reassign",
+            json={"new_assignee_user_id": str(sales_user.user_id), "reason": "Attempting sales assign"},
+            headers=headers,
+        )
+        assert res_sales.status_code == 400
+        assert "Sales, Administration, or Director" in res_sales.json()["detail"]
+
+        # 2. Reject reassign to Current Assignee (Deepak OP0002)
+        res_curr = client.post(
+            f"/api/operations/tasks/{app1_id}/reassign",
+            json={"new_assignee_user_id": str(f["ops_deepak"].user_id), "reason": "Assign to same person"},
+            headers=headers,
+        )
+        assert res_curr.status_code == 400
+        assert "Cannot reassign to the current assignee" in res_curr.json()["detail"]
+
+        # 3. Create Admin Department user and verify rejection
+        dept_admin = Department(
+            company_id=f["company"].company_id,
+            department_code="ADMIN",
+            department_name="Administration Department",
+            status="ACTIVE",
+        )
+        db_session.add(dept_admin)
+        db_session.flush()
+
+        admin_user = User(
+            employee_code="OP0099",
+            company_id=f["company"].company_id,
+            department_id=dept_admin.department_id,
+            designation_id=f["ops_manager"].designation_id,
+            first_name="Admin",
+            last_name="User",
+            official_email="admin.user@opstest.com",
+            mobile_number="+919876543999",
+            date_of_joining=date(2024, 1, 1),
+            employment_type="FULL_TIME",
+            account_status="ACTIVE",
+            must_change_password=False,
+        )
+        db_session.add(admin_user)
+        db_session.flush()
+
+        res_admin = client.post(
+            f"/api/operations/tasks/{app1_id}/reassign",
+            json={"new_assignee_user_id": str(admin_user.user_id), "reason": "Attempting admin assign"},
+            headers=headers,
+        )
+        assert res_admin.status_code == 400
+        assert "Sales, Administration, or Director" in res_admin.json()["detail"]
+
+    def test_super_admin_has_default_unrestricted_access(
+        self, client: TestClient, db_session: Session, ops_test_fixture: dict
+    ):
+        """Superadmin has unrestricted access by default across all operations and sales endpoints."""
+        f = ops_test_fixture
+        super_admin = User(
+            employee_code="CG0001",
+            company_id=f["company"].company_id,
+            department_id=f["ops_manager"].department_id,
+            designation_id=f["ops_manager"].designation_id,
+            first_name="Super",
+            last_name="Admin",
+            official_email="superadmin@opstest.com",
+            mobile_number="+919876543001",
+            date_of_joining=date(2024, 1, 1),
+            employment_type="FULL_TIME",
+            account_status="ACTIVE",
+            must_change_password=False,
+        )
+        db_session.add(super_admin)
+        db_session.flush()
+
+        sa_headers = auth_header(super_admin)
+        res_dash = client.get("/api/operations/dashboard", headers=sa_headers)
+        assert res_dash.status_code == 200
+
+        res_tasks = client.get("/api/operations/tasks", headers=sa_headers)
+        assert res_tasks.status_code == 200
+        assert res_tasks.json()["total_count"] >= 1

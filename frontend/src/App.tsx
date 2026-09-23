@@ -80,7 +80,7 @@ export const App: React.FC = () => {
             <Route
               path="entry"
               element={
-                <ProtectedRoute requiredModule="SALES" requiredAction="create">
+                <ProtectedRoute requiredModule="SALES" requiredAction="view">
                   <SalesEntryPage />
                 </ProtectedRoute>
               }
@@ -88,7 +88,7 @@ export const App: React.FC = () => {
             <Route
               path="new"
               element={
-                <ProtectedRoute requiredModule="SALES" requiredAction="create">
+                <ProtectedRoute requiredModule="SALES" requiredAction="view">
                   <SalesEntryPage />
                 </ProtectedRoute>
               }

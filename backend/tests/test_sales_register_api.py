@@ -653,7 +653,8 @@ def test_save_and_confirm_creates_operations_application(client: TestClient, db_
     assert data["confirmation_status"] == "CONFIRMED"
     assert data["application_id"] is not None
     assert data["application_number"].startswith("AP-")
-    assert data["operation_status"] == "UNASSIGNED"
+    assert data["operation_status"] == "ASSIGNED"
+    assert data["assigned_to_user_id"] == str(f["mansi"].user_id)
     assert db_session.query(OperationApplication).count() == initial_app_count + 1
 
 
@@ -751,7 +752,7 @@ def test_sales_register_csv_export(client: TestClient, db_session: Session, sale
 def test_sales_entry_initial_unassigned_and_empty_invoicing_notes(
     client: TestClient, db_session: Session, sales_fixture: dict
 ):
-    """Verify initial sales entry has no assigned operations member and unpopulated invoice/remarks fields remain empty."""
+    """Verify initial sales entry auto-assigns to Operations Lead (Mansi) by default and unpopulated invoice/remarks fields remain empty."""
     f = sales_fixture
     headers = auth_headers(f["rep1"])
 
@@ -773,10 +774,10 @@ def test_sales_entry_initial_unassigned_and_empty_invoicing_notes(
     assert resp.status_code == 201
     created_order = resp.json()
 
-    # Initial state must be unassigned
-    assert created_order["assigned_to_user_id"] is None
-    assert created_order["assigned_to_name"] == "Unassigned"
-    assert created_order["operation_status"] == "UNASSIGNED"
+    # Initial state auto-assigns to Mansi by default
+    assert created_order["assigned_to_user_id"] == str(f["mansi"].user_id)
+    assert created_order["assigned_to_name"] == "Mansi Sharma"
+    assert created_order["operation_status"] == "ASSIGNED"
     assert created_order["proforma_invoice_no"] is None
     assert created_order["tax_invoice_no"] is None
     assert created_order["reimbursement_note"] is None
@@ -788,9 +789,9 @@ def test_sales_entry_initial_unassigned_and_empty_invoicing_notes(
     items = reg_resp.json()["items"]
     clean_item = next(i for i in items if i["client_name"] == "Clean Entry Technologies Pvt Ltd")
 
-    assert clean_item["assigned_to_name"] == "Unassigned"
-    assert clean_item["assigned_to_user_id"] is None
-    assert clean_item["work_status"] == "UNASSIGNED"
+    assert clean_item["assigned_to_name"] == "Mansi Sharma"
+    assert clean_item["assigned_to_user_id"] == str(f["mansi"].user_id)
+    assert clean_item["work_status"] == "ASSIGNED"
     assert clean_item["salesperson_name"] == "Rohan Gupta"  # Converted By
     assert clean_item["proforma_invoice_no"] is None
     assert clean_item["tax_invoice_no"] is None
