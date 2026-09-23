@@ -286,16 +286,50 @@ def get_user_module_permission(
     user_id: uuid.UUID,
     module_code: str,
 ) -> Optional[UserModulePermission]:
-    """Load the UserModulePermission record for a specific user and module code."""
+    """Load the UserModulePermission record for a specific user and module code.
+    If not found directly and the module has a parent module, check the parent module."""
+    code_norm = module_code.strip().upper()
     stmt = (
         select(UserModulePermission)
         .join(Module, UserModulePermission.module_id == Module.module_id)
         .where(
             UserModulePermission.user_id == user_id,
-            Module.module_code == module_code.strip().upper(),
+            Module.module_code == code_norm,
         )
     )
-    return session.execute(stmt).scalar_one_or_none()
+    perm = session.execute(stmt).scalar_one_or_none()
+    if perm:
+        return perm
+
+    # Fallback to parent module from PAGE_CATALOG_CONFIG if available
+    parent_code = PAGE_CATALOG_CONFIG.get(code_norm, {}).get("module_code")
+    if parent_code and parent_code != code_norm:
+        stmt_parent = (
+            select(UserModulePermission)
+            .join(Module, UserModulePermission.module_id == Module.module_id)
+            .where(
+                UserModulePermission.user_id == user_id,
+                Module.module_code == parent_code,
+            )
+        )
+        parent_perm = session.execute(stmt_parent).scalar_one_or_none()
+        if parent_perm:
+            return parent_perm
+
+    # Fallback to module's parent_id in Module table
+    mod_stmt = select(Module).where(Module.module_code == code_norm)
+    mod = session.execute(mod_stmt).scalar_one_or_none()
+    if mod and mod.parent_id:
+        stmt_parent_id = (
+            select(UserModulePermission)
+            .where(
+                UserModulePermission.user_id == user_id,
+                UserModulePermission.module_id == mod.parent_id,
+            )
+        )
+        return session.execute(stmt_parent_id).scalar_one_or_none()
+
+    return None
 
 
 def is_permission_active_and_valid(
@@ -337,6 +371,9 @@ def has_permission(
     ).scalar_one_or_none()
 
     if not module or module.status != "ACTIVE":
+        parent_code = PAGE_CATALOG_CONFIG.get(module_code_norm, {}).get("module_code")
+        if parent_code and parent_code != module_code_norm:
+            return has_permission(session, user, parent_code, action)
         return False
 
     permission = session.execute(
@@ -347,7 +384,19 @@ def has_permission(
     ).scalar_one_or_none()
 
     if not is_permission_active_and_valid(permission):
+        parent_code = PAGE_CATALOG_CONFIG.get(module_code_norm, {}).get("module_code")
+        if parent_code and parent_code != module_code_norm:
+            return has_permission(session, user, parent_code, action)
+        p_id = getattr(module, "parent_module_id", None)
+        if isinstance(p_id, uuid.UUID):
+            parent_mod = session.get(Module, p_id)
+            if parent_mod and parent_mod.module_code != module_code_norm:
+                return has_permission(session, user, parent_mod.module_code, action)
         return False
+
+    # Super Admin bypass
+    if getattr(user, "is_super_admin", False) or getattr(user, "role_type", "") == "SUPER_ADMIN":
+        return True
 
     # All actions require can_view=True
     if not permission.can_view:
@@ -355,7 +404,18 @@ def has_permission(
 
     field_name = ACTION_FIELD_MAP.get(action_norm)
     if field_name and hasattr(permission, field_name):
-        return bool(getattr(permission, field_name, False))
+        if bool(getattr(permission, field_name, False)):
+            return True
+
+    # Check Operations workflow actions for active Operations team members or managers
+    if module_code_norm in ("OPERATIONS", "OPS_APPLICATIONS") or module_code_norm.startswith("OPERATION_"):
+        dept_name = user.department.department_name.lower() if user.department else ""
+        dept_code = user.department.department_code.upper() if user.department else ""
+        is_ops_dept = "operat" in dept_name or "operat" in dept_code or dept_code in ("OP", "OPS", "OPERATIONS") or "admin" in dept_name
+        is_mgr = bool(getattr(user, "is_reporting_manager", False) or getattr(user, "is_hod", False))
+        if action_norm in ("assign", "reassign", "edit", "update"):
+            if permission.can_edit or permission.can_assign or permission.can_reassign or is_ops_dept or is_mgr:
+                return True
 
     return False
 

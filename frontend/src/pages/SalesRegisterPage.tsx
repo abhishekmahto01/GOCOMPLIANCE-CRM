@@ -1011,11 +1011,13 @@ export const SalesRegisterPage: React.FC = () => {
                 className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
               >
                 <option value="">-- Select Operations Specialist (e.g. Mansi) --</option>
-                {operationsAssignees.map((emp) => (
-                  <option key={emp.user_id} value={emp.user_id}>
-                    {emp.full_name} ({emp.employee_code}) {emp.department_name ? `• ${emp.department_name}` : ''}
-                  </option>
-                ))}
+                {operationsAssignees
+                  .filter((emp) => !assigningOrder?.assigned_to_user_id || emp.user_id !== assigningOrder.assigned_to_user_id)
+                  .map((emp) => (
+                    <option key={emp.user_id} value={emp.user_id}>
+                      {emp.full_name} ({emp.employee_code})
+                    </option>
+                  ))}
               </select>
             </div>
 

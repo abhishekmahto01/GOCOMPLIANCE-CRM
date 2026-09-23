@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider } from './context/AuthContext';
 import { LoginPage } from './pages/LoginPage';
@@ -21,24 +21,11 @@ import { SalesDashboardPage } from './pages/SalesDashboardPage';
 import { SalesEntryPage } from './pages/SalesEntryPage';
 import { SalesRegisterPage } from './pages/SalesRegisterPage';
 
-const OperationsWorkspacePlaceholder: React.FC = () => (
-  <div className="min-h-screen w-full flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950 p-6 text-center font-sans">
-    <div className="max-w-md w-full bg-white dark:bg-slate-900 rounded-3xl p-8 shadow-xl border border-slate-200/80 dark:border-slate-800 space-y-4">
-      <div className="w-14 h-14 rounded-2xl bg-orange-100 dark:bg-orange-950/50 text-orange-600 dark:text-orange-400 mx-auto flex items-center justify-center font-bold text-xl">
-        Ops
-      </div>
-      <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Operations Workspace</h1>
-      <p className="text-sm text-slate-500 dark:text-slate-400">
-        You are authorized to access the Operations module. Workspace features will load in the next stage.
-      </p>
-      <div className="pt-2">
-        <Link to="/dashboard" className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline">
-          Return to Dashboard
-        </Link>
-      </div>
-    </div>
-  </div>
-);
+import { OperationsLayout } from './components/operations/OperationsLayout';
+import { OperationsDashboardPage } from './pages/operations/OperationsDashboardPage';
+import { MyTasksPage } from './pages/operations/MyTasksPage';
+import { UnassignedOrdersPage } from './pages/operations/UnassignedOrdersPage';
+import { TaskAssignmentPage } from './pages/operations/TaskAssignmentPage';
 
 export const App: React.FC = () => {
   return (
@@ -137,18 +124,68 @@ export const App: React.FC = () => {
             path="/operations"
             element={
               <ProtectedRoute requiredModule="OPERATIONS" requiredAction="view">
-                <OperationsWorkspacePlaceholder />
+                <OperationsLayout />
               </ProtectedRoute>
             }
-          />
-          <Route
-            path="/operations/*"
-            element={
-              <ProtectedRoute requiredModule="OPERATIONS" requiredAction="view">
-                <OperationsWorkspacePlaceholder />
-              </ProtectedRoute>
-            }
-          />
+          >
+            <Route index element={<Navigate to="/operations/dashboard" replace />} />
+            <Route
+              path="dashboard"
+              element={
+                <ProtectedRoute requiredModule="OPERATIONS" requiredAction="view">
+                  <OperationsDashboardPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="my-tasks"
+              element={
+                <ProtectedRoute requiredModule="OPERATIONS" requiredAction="view">
+                  <MyTasksPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="unassigned-orders"
+              element={
+                <ProtectedRoute requiredModule="OPERATIONS" requiredAction="view">
+                  <UnassignedOrdersPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="unassigned"
+              element={
+                <ProtectedRoute requiredModule="OPERATIONS" requiredAction="view">
+                  <UnassignedOrdersPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="task-assignment"
+              element={
+                <ProtectedRoute requiredModule="OPERATIONS" requiredAction="view">
+                  <TaskAssignmentPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="tasks"
+              element={
+                <ProtectedRoute requiredModule="OPERATIONS" requiredAction="view">
+                  <TaskAssignmentPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="all-tasks"
+              element={
+                <ProtectedRoute requiredModule="OPERATIONS" requiredAction="view">
+                  <TaskAssignmentPage />
+                </ProtectedRoute>
+              }
+            />
+          </Route>
 
           {/* Protected Administration Module (Nested Layout with Collapsible Sidebar) */}
           <Route

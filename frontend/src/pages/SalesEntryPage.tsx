@@ -582,7 +582,7 @@ export const SalesEntryPage: React.FC = () => {
                 <option value="">-- Select Salesperson --</option>
                 {(formOptions?.salespersons || []).map((sp) => (
                   <option key={sp.user_id} value={sp.user_id}>
-                    {sp.full_name} ({sp.employee_code}) {sp.designation_name ? `• ${sp.designation_name}` : ''}
+                    {sp.full_name} ({sp.employee_code})
                   </option>
                 ))}
               </select>

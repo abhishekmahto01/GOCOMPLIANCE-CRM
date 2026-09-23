@@ -22,7 +22,7 @@ from app.schemas.sales_order import (
     SalesOrderUpdate,
     SalesRegisterResponse,
 )
-from app.services import permissions, sales_service
+from app.services import operation_service, permissions, sales_service
 
 router = APIRouter(prefix="/sales", tags=["Sales Dashboard, Register & Orders"])
 
@@ -517,7 +517,7 @@ def assign_order_operations(
     except sales_service.SalesOrderNotFoundError as e:
         session.rollback()
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except sales_service.SalesOrderPermissionError as e:
+    except (sales_service.SalesOrderPermissionError, permissions.PermissionDeniedError, operation_service.AssignmentAuthorizationError) as e:
         session.rollback()
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     except ValueError as e:

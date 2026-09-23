@@ -84,21 +84,32 @@ class OperationApplicationRead(BaseModel):
     company_id: uuid.UUID
     client_id: uuid.UUID
     client_name: Optional[str] = None
+    client_phone: Optional[str] = None
+    client_email: Optional[str] = None
     service_id: uuid.UUID
     service_name: Optional[str] = None
+    service_code: Optional[str] = None
+    salesperson_name: Optional[str] = None
+    salesperson_code: Optional[str] = None
     assigned_to_user_id: Optional[uuid.UUID] = None
     assigned_to_name: Optional[str] = None
+    assigned_to_code: Optional[str] = None
     assigned_by_user_id: Optional[uuid.UUID] = None
+    assigned_by_name: Optional[str] = None
     assigned_at: Optional[datetime] = None
+    formatted_assigned_at: Optional[str] = None
     priority: str
     application_status: str
     target_due_date: Optional[date] = None
+    formatted_due_date: Optional[str] = None
     completion_date: Optional[date] = None
     assignment_notes: Optional[str] = None
     documents_completed: int = 0
     documents_total: int = 0
     is_overdue: bool = False
     is_due_soon: bool = False
+    order_date: Optional[date] = None
+    formatted_order_date: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -141,6 +152,7 @@ class TaskReassignRequest(BaseModel):
     reason: str = Field(..., min_length=2, max_length=500, description="Mandatory reason for reassignment")
     priority: Optional[str] = None
     target_due_date: Optional[date] = None
+    notes: Optional[str] = None
 
 
 class ApplicationStatusUpdateRequest(BaseModel):
@@ -168,3 +180,78 @@ class ApplicationStatusUpdateRequest(BaseModel):
             if v not in valid_statuses:
                 raise ValueError(f"Invalid application status '{v}'")
         return v
+
+
+class OperationsKpiSummary(BaseModel):
+    """Top KPI metrics for Operations Dashboard."""
+
+    total_applications: int = 0
+    assigned_count: int = 0
+    in_progress_count: int = 0
+    pending_documents_count: int = 0
+    ready_submitted_count: int = 0
+    authority_query_count: int = 0
+    approved_count: int = 0
+    overdue_count: int = 0
+    unassigned_count: int = 0
+    sla_adherence_percent: float = 100.0
+
+
+class OperationsStatusBreakdownItem(BaseModel):
+    """Status distribution breakdown item for charts."""
+
+    status: str
+    label: str
+    count: int
+    percentage: float
+    color: str
+
+
+class ExecutiveWorkloadItem(BaseModel):
+    """Workload and throughput metrics for an Operations team member."""
+
+    user_id: uuid.UUID
+    employee_code: str
+    full_name: str
+    designation_name: Optional[str] = None
+    active_tasks: int = 0
+    in_progress_tasks: int = 0
+    completed_tasks: int = 0
+    overdue_tasks: int = 0
+    sla_rating: float = 100.0
+
+
+class OperationsTaskSummary(BaseModel):
+    """Summary counts for task list header strips."""
+
+    total_tasks: int = 0
+    assigned: int = 0
+    in_progress: int = 0
+    pending_docs: int = 0
+    under_review: int = 0
+    completed: int = 0
+    overdue: int = 0
+
+
+class OperationsTaskListResponse(BaseModel):
+    """Paginated list of operations tasks."""
+
+    items: List[OperationApplicationRead]
+    total_count: int
+    page: int
+    limit: int
+    total_pages: int
+    summary: OperationsTaskSummary
+
+
+class OperationsDashboardResponse(BaseModel):
+    """Full live response for Operations Dashboard analytics."""
+
+    kpis: OperationsKpiSummary
+    status_breakdown: List[OperationsStatusBreakdownItem]
+    workload_by_executive: List[ExecutiveWorkloadItem]
+    recent_applications: List[OperationApplicationRead]
+    priority_queue: List[OperationApplicationRead]
+    scope: str
+    company_id: uuid.UUID
+    company_name: str
