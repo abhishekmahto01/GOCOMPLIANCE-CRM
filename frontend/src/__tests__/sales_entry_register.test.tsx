@@ -616,4 +616,101 @@ describe('Sales Entry & Sales Register Module Tests', () => {
     expect(options).toContain('INDIAMART');
     expect(options).toContain('WEBSITE');
   });
+
+  it('renders Actions column with Edit button and opens Edit Sales Order modal with populated values', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ThemeProvider>
+        <AuthProvider>
+          <MemoryRouter initialEntries={['/sales/register']}>
+            <Routes>
+              <Route path="/sales" element={<SalesLayout />}>
+                <Route path="register" element={<SalesRegisterPage />} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
+      </ThemeProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /sales register/i })).toBeInTheDocument();
+    });
+
+    // Check Actions header is present
+    expect(screen.getByText(/21\. Actions/i)).toBeInTheDocument();
+
+    // Find and click the Edit button for the first row
+    const editButtons = screen.getAllByRole('button', { name: /Edit/i });
+    expect(editButtons.length).toBeGreaterThan(0);
+    await user.click(editButtons[0]);
+
+    // Verify modal is open with title and pre-filled fields
+    await waitFor(() => {
+      expect(screen.getByText(/Edit Sales Order:/i)).toBeInTheDocument();
+    });
+
+    const totalInput = screen.getByLabelText(/Total Amount \(₹\)/i) as HTMLInputElement;
+    expect(totalInput).toBeInTheDocument();
+    expect(Number(totalInput.value)).toBe(50000);
+  });
+
+  it('updates sales order amounts and calls updateSalesOrderApi on submit', async () => {
+    const user = userEvent.setup();
+    const updateSpy = vi.spyOn(salesApi, 'updateSalesOrderApi').mockResolvedValue({
+      ...mockRegisterData.items[0],
+      order_value: 30000,
+      amount_received: 30000,
+      balance_amount: 0,
+      payment_status: 'FULLY_PAID',
+    });
+
+    render(
+      <ThemeProvider>
+        <AuthProvider>
+          <MemoryRouter initialEntries={['/sales/register']}>
+            <Routes>
+              <Route path="/sales" element={<SalesLayout />}>
+                <Route path="register" element={<SalesRegisterPage />} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
+      </ThemeProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /sales register/i })).toBeInTheDocument();
+    });
+
+    // Click Edit button on first row
+    const editButtons = screen.getAllByRole('button', { name: /Edit/i });
+    await user.click(editButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Edit Sales Order:/i)).toBeInTheDocument();
+    });
+
+    const totalInput = screen.getByLabelText(/Total Amount \(₹\)/i) as HTMLInputElement;
+    const advanceInput = screen.getByLabelText(/Advance \/ Recvd \(₹\)/i) as HTMLInputElement;
+
+    await user.clear(totalInput);
+    await user.type(totalInput, '30000');
+    await user.clear(advanceInput);
+    await user.type(advanceInput, '30000');
+
+    const saveBtn = screen.getByRole('button', { name: /Save Changes/i });
+    await user.click(saveBtn);
+
+    await waitFor(() => {
+      expect(updateSpy).toHaveBeenCalledWith(
+        mockRegisterData.items[0].order_id,
+        expect.objectContaining({
+          order_value: 30000,
+          amount_received: 30000,
+        })
+      );
+    });
+  });
 });

@@ -9,6 +9,7 @@ import type {
   SalesEntryFormData,
   SalesFormOptionsResponse,
   SalesOrderAssignRequest,
+  SalesOrderUpdateRequest,
   SalesRegisterFilterParams,
   SalesRegisterItem,
   SalesRegisterResponse,
@@ -172,3 +173,15 @@ export async function assignSalesOrderApi(
   const response = await apiClient.post<SalesRegisterItem>(`/sales/orders/${orderId}/assign`, data);
   return response.data;
 }
+
+/**
+ * Update existing Sales Order financial, invoice, and note fields.
+ */
+export async function updateSalesOrderApi(
+  orderId: string,
+  data: SalesOrderUpdateRequest
+): Promise<SalesRegisterItem> {
+  const response = await apiClient.put<SalesRegisterItem>(`/sales/orders/${orderId}`, data);
+  return response.data;
+}
+

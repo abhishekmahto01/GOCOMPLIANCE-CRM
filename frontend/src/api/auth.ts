@@ -1,4 +1,4 @@
-import { apiClient, ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, getAccessToken, getRefreshToken, setAuthTokens, clearAuthTokens } from './client';
+import { apiClient, REFRESH_TOKEN_KEY, getRefreshToken, setAuthTokens, clearAuthTokens } from './client';
 import type { AuthTokenResponse, CurrentUser, LoginCredentials } from '../types/auth';
 import type { AccessibleModule } from '../types/permission';
 

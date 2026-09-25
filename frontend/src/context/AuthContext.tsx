@@ -7,7 +7,7 @@ import {
   loginApi,
   logoutApi,
 } from '../api/auth';
-import { ACCESS_TOKEN_KEY, getAccessToken } from '../api/client';
+import { getAccessToken } from '../api/client';
 
 export interface AuthSession {
   isAuthenticated: boolean;

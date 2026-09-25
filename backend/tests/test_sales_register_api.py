@@ -1093,3 +1093,245 @@ def test_order_creator_can_assign_to_operations_manager_and_shows_in_ops_list(
     assert len(matched_my) == 1
 
 
+def test_owner_salesperson_can_edit_sales_order(
+    client: TestClient, db_session: Session, sales_fixture: dict
+):
+    """Test authorized salesperson owner can edit financial and sales fields."""
+    f = sales_fixture
+    rep1_headers = auth_headers(f["rep1"])
+
+    create_resp = client.post(
+        "/api/sales/orders",
+        json={
+            "client_name": "Editable Client Alpha",
+            "contact_no": "9811111111",
+            "service_id": str(f["srv1"].service_id),
+            "order_date": date.today().isoformat(),
+            "order_value": "40000.00",
+            "amount_received": "15000.00",
+            "govt_fees": "3000.00",
+            "incidental_cost": "1000.00",
+            "auto_confirm": True,
+        },
+        headers=rep1_headers,
+    )
+    assert create_resp.status_code == 201
+    order_id = create_resp.json()["order_id"]
+
+    # Rep1 updates financial fields, invoice details, remarks
+    edit_resp = client.put(
+        f"/api/sales/orders/{order_id}",
+        json={
+            "order_value": "50000.00",
+            "amount_received": "50000.00",
+            "govt_fees": "4000.00",
+            "incidental_cost": "1500.00",
+            "proforma_invoice_no": "PI-2026-0099",
+            "tax_invoice_no": "INV-2026-0099",
+            "reimbursement_note": "Courier & Stamp Duty reimbursed",
+            "notes": "Payment received in full via NEFT",
+            "lead_source": "INDIAMART",
+        },
+        headers=rep1_headers,
+    )
+    assert edit_resp.status_code == 200
+    updated = edit_resp.json()
+    assert Decimal(str(updated["order_value"])) == Decimal("50000.00")
+    assert Decimal(str(updated["amount_received"])) == Decimal("50000.00")
+    assert Decimal(str(updated["balance_amount"])) == Decimal("0.00")
+    assert Decimal(str(updated["govt_fees"])) == Decimal("4000.00")
+    assert Decimal(str(updated["incidental_cost"])) == Decimal("1500.00")
+    assert Decimal(str(updated["profit_amount"])) == Decimal("44500.00")  # 50000 - 4000 - 1500
+    assert updated["payment_status"] == "FULLY_PAID"
+    assert updated["proforma_invoice_no"] == "PI-2026-0099"
+    assert updated["tax_invoice_no"] == "INV-2026-0099"
+    assert updated["reimbursement_note"] == "Courier & Stamp Duty reimbursed"
+    assert updated["notes"] == "Payment received in full via NEFT"
+    assert updated["lead_source"] == "INDIAMART"
+
+
+def test_non_owner_forbidden_from_editing_sales_order(
+    client: TestClient, db_session: Session, sales_fixture: dict
+):
+    """Test non-owner salesperson with SELF scope cannot edit someone else's order."""
+    f = sales_fixture
+    rep1_headers = auth_headers(f["rep1"])
+    other_rep_headers = auth_headers(f["other_rep"])
+
+    create_resp = client.post(
+        "/api/sales/orders",
+        json={
+            "client_name": "Rep1 Private Client",
+            "contact_no": "9812345678",
+            "service_id": str(f["srv1"].service_id),
+            "order_date": date.today().isoformat(),
+            "order_value": "30000.00",
+            "amount_received": "10000.00",
+            "auto_confirm": True,
+        },
+        headers=rep1_headers,
+    )
+    assert create_resp.status_code == 201
+    order_id = create_resp.json()["order_id"]
+
+    # other_rep attempts to update Rep1's order
+    edit_resp = client.put(
+        f"/api/sales/orders/{order_id}",
+        json={
+            "order_value": "35000.00",
+            "amount_received": "20000.00",
+        },
+        headers=other_rep_headers,
+    )
+    assert edit_resp.status_code == 403
+    assert "not authorized" in edit_resp.json()["detail"].lower()
+
+
+def test_manager_and_admin_can_edit_sales_orders(
+    client: TestClient, db_session: Session, sales_fixture: dict
+):
+    """Test Manager (TEAM scope) and Director/Admin can edit subordinate sales orders."""
+    f = sales_fixture
+    rep1_headers = auth_headers(f["rep1"])
+    mgr_headers = auth_headers(f["manager"])
+    karishma_headers = auth_headers(f["karishma"])
+
+    create_resp = client.post(
+        "/api/sales/orders",
+        json={
+            "client_name": "Team Scope Client",
+            "contact_no": "9833333333",
+            "service_id": str(f["srv1"].service_id),
+            "order_date": date.today().isoformat(),
+            "order_value": "60000.00",
+            "amount_received": "20000.00",
+            "auto_confirm": True,
+        },
+        headers=rep1_headers,
+    )
+    assert create_resp.status_code == 201
+    order_id = create_resp.json()["order_id"]
+
+    # Manager edits order
+    mgr_edit_resp = client.put(
+        f"/api/sales/orders/{order_id}",
+        json={
+            "order_value": "65000.00",
+            "amount_received": "30000.00",
+            "notes": "Manager approved discount adjustment",
+        },
+        headers=mgr_headers,
+    )
+    assert mgr_edit_resp.status_code == 200
+    assert Decimal(str(mgr_edit_resp.json()["order_value"])) == Decimal("65000.00")
+    assert Decimal(str(mgr_edit_resp.json()["balance_amount"])) == Decimal("35000.00")
+
+    # Karishma (Company scope) edits order
+    admin_edit_resp = client.put(
+        f"/api/sales/orders/{order_id}",
+        json={
+            "order_value": "70000.00",
+            "amount_received": "70000.00",
+            "tax_invoice_no": "INV-ADMIN-01",
+        },
+        headers=karishma_headers,
+    )
+    assert admin_edit_resp.status_code == 200
+    assert Decimal(str(admin_edit_resp.json()["order_value"])) == Decimal("70000.00")
+    assert admin_edit_resp.json()["payment_status"] == "FULLY_PAID"
+
+
+def test_sales_edit_allowed_when_operations_task_is_completed(
+    client: TestClient, db_session: Session, sales_fixture: dict
+):
+    """Test editing sales fields is not locked when Operations task is APPROVED/COMPLETED."""
+    f = sales_fixture
+    rep1_headers = auth_headers(f["rep1"])
+
+    create_resp = client.post(
+        "/api/sales/orders",
+        json={
+            "client_name": "Completed Ops Client",
+            "contact_no": "9844444444",
+            "service_id": str(f["srv1"].service_id),
+            "order_date": date.today().isoformat(),
+            "order_value": "80000.00",
+            "amount_received": "40000.00",
+            "auto_confirm": True,
+        },
+        headers=rep1_headers,
+    )
+    assert create_resp.status_code == 201
+    order_id = uuid.UUID(create_resp.json()["order_id"])
+
+    # Simulate Operations completion (task marked APPROVED / COMPLETED)
+    order = db_session.get(SalesOrder, order_id)
+    assert order.application is not None
+    order.application.application_status = "APPROVED"
+    db_session.commit()
+
+    # Sales rep updates final payment after license issuance
+    edit_resp = client.put(
+        f"/api/sales/orders/{order_id}",
+        json={
+            "amount_received": "80000.00",
+            "tax_invoice_no": "TAX-FINAL-888",
+            "notes": "Client cleared remaining 50% upon license delivery",
+        },
+        headers=rep1_headers,
+    )
+    assert edit_resp.status_code == 200
+    updated = edit_resp.json()
+    assert Decimal(str(updated["amount_received"])) == Decimal("80000.00")
+    assert Decimal(str(updated["balance_amount"])) == Decimal("0.00")
+    assert updated["payment_status"] == "FULLY_PAID"
+    # Verify Operations status was NOT changed or reverted
+    assert updated["work_status"] == "APPROVED"
+    assert updated["operation_status"] == "APPROVED"
+
+
+def test_sales_edit_validation_rejects_negative_and_excessive_advance(
+    client: TestClient, db_session: Session, sales_fixture: dict
+):
+    """Test validation errors for invalid amounts."""
+    f = sales_fixture
+    rep1_headers = auth_headers(f["rep1"])
+
+    create_resp = client.post(
+        "/api/sales/orders",
+        json={
+            "client_name": "Validation Test Client",
+            "contact_no": "9855555555",
+            "service_id": str(f["srv1"].service_id),
+            "order_date": date.today().isoformat(),
+            "order_value": "50000.00",
+            "amount_received": "20000.00",
+            "auto_confirm": True,
+        },
+        headers=rep1_headers,
+    )
+    assert create_resp.status_code == 201
+    order_id = create_resp.json()["order_id"]
+
+    # Reject Advance > Total
+    bad_advance_resp = client.put(
+        f"/api/sales/orders/{order_id}",
+        json={
+            "order_value": "50000.00",
+            "amount_received": "60000.00",
+        },
+        headers=rep1_headers,
+    )
+    assert bad_advance_resp.status_code in (400, 422)
+
+    # Reject Negative Total Amount
+    neg_total_resp = client.put(
+        f"/api/sales/orders/{order_id}",
+        json={
+            "order_value": "-1000.00",
+        },
+        headers=rep1_headers,
+    )
+    assert neg_total_resp.status_code in (400, 422)
+
+

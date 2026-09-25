@@ -64,17 +64,36 @@ class SalesOrderCreate(SalesOrderBase):
 class SalesOrderUpdate(BaseModel):
     """Schema for updating a sales order."""
 
-    order_value: Optional[Decimal] = Field(None, ge=0)
-    amount_received: Optional[Decimal] = Field(None, ge=0)
-    govt_fees: Optional[Decimal] = Field(None, ge=0)
-    incidental_cost: Optional[Decimal] = Field(None, ge=0)
-    payment_status: Optional[str] = None
-    lead_source: Optional[str] = None
-    order_date: Optional[date] = None
-    proforma_invoice_no: Optional[str] = Field(None, max_length=100)
-    tax_invoice_no: Optional[str] = Field(None, max_length=100)
-    reimbursement_note: Optional[str] = Field(None, max_length=500)
-    notes: Optional[str] = Field(None, max_length=1000)
+    client_name: Optional[str] = Field(None, max_length=200, description="Client Name")
+    contact_no: Optional[str] = Field(None, max_length=20, description="Client Contact Number")
+    order_value: Optional[Decimal] = Field(None, ge=0, description="Total order amount (Total Amount) in INR")
+    amount_received: Optional[Decimal] = Field(None, ge=0, description="Advance / Received amount in INR")
+    govt_fees: Optional[Decimal] = Field(None, ge=0, description="Government fees in INR")
+    incidental_cost: Optional[Decimal] = Field(None, ge=0, description="Incidental / expense costs in INR")
+    payment_status: Optional[str] = Field(None, description="FULLY_PAID, PARTIALLY_PAID, PENDING, OVERDUE")
+    lead_source: Optional[str] = Field(None, description="WEBSITE, REFERRAL, DIRECT, JUSTDIAL, INDIAMART, OTHERS")
+    order_date: Optional[date] = Field(None, description="Date when order was recorded")
+    proforma_invoice_no: Optional[str] = Field(None, max_length=100, description="Proforma Invoice Number")
+    tax_invoice_no: Optional[str] = Field(None, max_length=100, description="Tax Invoice Number")
+    reimbursement_note: Optional[str] = Field(None, max_length=500, description="Reimbursement Note")
+    notes: Optional[str] = Field(None, max_length=1000, description="Order remarks or notes")
+
+    @field_validator("lead_source", mode="before")
+    @classmethod
+    def normalize_lead_source(cls, v: Optional[str]) -> Optional[str]:
+        if isinstance(v, str) and v.strip():
+            return v.strip().upper()
+        return v
+
+    @field_validator("payment_status", mode="before")
+    @classmethod
+    def normalize_payment_status(cls, v: Optional[str]) -> Optional[str]:
+        if isinstance(v, str) and v.strip():
+            v = v.strip().upper()
+            if v not in ("FULLY_PAID", "PARTIALLY_PAID", "PENDING", "OVERDUE"):
+                raise ValueError(f"Invalid payment status '{v}'")
+            return v
+        return None
 
     @model_validator(mode="after")
     def validate_amounts(self) -> "SalesOrderUpdate":

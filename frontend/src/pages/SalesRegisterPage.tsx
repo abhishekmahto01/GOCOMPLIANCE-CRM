@@ -15,12 +15,15 @@ import {
   UserCheck,
   AlertTriangle,
   Send,
+  Edit,
+  Save,
 } from 'lucide-react';
 import {
   getSalesRegisterApi,
   exportSalesRegisterCsvApi,
   getSalesFormOptionsApi,
   assignSalesOrderApi,
+  updateSalesOrderApi,
 } from '../api/sales';
 import { extractErrorMessage } from '../api/client';
 import type {
@@ -155,6 +158,24 @@ export const SalesRegisterPage: React.FC = () => {
   const [assignmentNotes, setAssignmentNotes] = useState<string>('');
   const [isAssigning, setIsAssigning] = useState<boolean>(false);
   const [assignError, setAssignError] = useState<string | null>(null);
+
+  // Edit Sales Order Modal State
+  const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
+  const [editingOrder, setEditingOrder] = useState<SalesRegisterItem | null>(null);
+  const [editClientName, setEditClientName] = useState<string>('');
+  const [editContactNo, setEditContactNo] = useState<string>('');
+  const [editLeadSource, setEditLeadSource] = useState<string>('WEBSITE');
+  const [editOrderDate, setEditOrderDate] = useState<string>('');
+  const [editOrderValue, setEditOrderValue] = useState<number>(0);
+  const [editAmountReceived, setEditAmountReceived] = useState<number>(0);
+  const [editGovtFees, setEditGovtFees] = useState<number>(0);
+  const [editIncidentalCost, setEditIncidentalCost] = useState<number>(0);
+  const [editProformaInvoiceNo, setEditProformaInvoiceNo] = useState<string>('');
+  const [editTaxInvoiceNo, setEditTaxInvoiceNo] = useState<string>('');
+  const [editReimbursementNote, setEditReimbursementNote] = useState<string>('');
+  const [editNotes, setEditNotes] = useState<string>('');
+  const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   // Sync state with URL params
   const syncUrl = useCallback(
@@ -343,6 +364,87 @@ export const SalesRegisterPage: React.FC = () => {
       outletCtx.addToast?.('error', 'Assignment Failed', msg);
     } finally {
       setIsAssigning(false);
+    }
+  };
+
+  // Open Edit Order Modal
+  const handleOpenEditModal = (item: SalesRegisterItem, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setEditingOrder(item);
+    setEditClientName(item.client_name || '');
+    setEditContactNo(item.contact_no || '');
+    setEditLeadSource(item.lead_source || 'DIRECT');
+    setEditOrderDate(item.order_date || new Date().toISOString().slice(0, 10));
+    setEditOrderValue(Number(item.order_value) || 0);
+    setEditAmountReceived(Number(item.amount_received) || 0);
+    setEditGovtFees(Number(item.govt_fees) || 0);
+    setEditIncidentalCost(Number(item.incidental_cost) || 0);
+    setEditProformaInvoiceNo(item.proforma_invoice_no || '');
+    setEditTaxInvoiceNo(item.tax_invoice_no || '');
+    setEditReimbursementNote(item.reimbursement_note || '');
+    setEditNotes(item.notes || item.remarks || '');
+    setEditError(null);
+    setIsEditModalOpen(true);
+  };
+
+  // Submit Sales Order Edit
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingOrder) return;
+
+    if (editOrderValue < 0) {
+      setEditError('Total Amount cannot be negative');
+      return;
+    }
+    if (editAmountReceived < 0) {
+      setEditError('Advance / Received Amount cannot be negative');
+      return;
+    }
+    if (editAmountReceived > editOrderValue) {
+      setEditError('Advance Amount cannot exceed Total Amount');
+      return;
+    }
+    if (editGovtFees < 0 || editIncidentalCost < 0) {
+      setEditError('Govt Fees and Incidental Cost cannot be negative');
+      return;
+    }
+
+    setIsSavingEdit(true);
+    setEditError(null);
+    try {
+      const updatedItem = await updateSalesOrderApi(editingOrder.order_id, {
+        client_name: editClientName.trim() || undefined,
+        contact_no: editContactNo.trim() || undefined,
+        lead_source: editLeadSource,
+        order_date: editOrderDate,
+        order_value: editOrderValue,
+        amount_received: editAmountReceived,
+        govt_fees: editGovtFees,
+        incidental_cost: editIncidentalCost,
+        proforma_invoice_no: editProformaInvoiceNo.trim() || undefined,
+        tax_invoice_no: editTaxInvoiceNo.trim() || undefined,
+        reimbursement_note: editReimbursementNote.trim() || undefined,
+        notes: editNotes.trim() || undefined,
+      });
+
+      outletCtx.addToast?.(
+        'success',
+        'Sales Order Updated',
+        `Order ${updatedItem.order_number} has been updated successfully.`
+      );
+
+      setIsEditModalOpen(false);
+      if (selectedOrder && selectedOrder.order_id === updatedItem.order_id) {
+        setSelectedOrder(updatedItem);
+      }
+      loadRegister();
+    } catch (err) {
+      console.error('Edit error:', err);
+      const msg = extractErrorMessage(err);
+      setEditError(msg);
+      outletCtx.addToast?.('error', 'Update Failed', msg);
+    } finally {
+      setIsSavingEdit(false);
     }
   };
 
@@ -633,6 +735,9 @@ export const SalesRegisterPage: React.FC = () => {
                   <th className="py-3 px-3.5 text-right">18. Incidental Cost</th>
                   <th className="py-3 px-3.5 text-right font-bold text-emerald-800 dark:text-emerald-300">19. Profits</th>
                   <th className="py-3 px-4 min-w-[150px]">20. Remarks</th>
+                  <th className="py-3 px-3.5 text-center sticky right-0 bg-slate-50 dark:bg-slate-800 z-10 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.06)] border-l border-slate-200 dark:border-slate-800 min-w-[90px]">
+                    21. Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
@@ -776,6 +881,19 @@ export const SalesRegisterPage: React.FC = () => {
                       {/* 20. Remarks (shows — when not populated) */}
                       <td className="py-3 px-4 text-slate-500 dark:text-slate-400 max-w-xs truncate" title={row.notes || row.remarks || ''}>
                         {row.notes || row.remarks || '—'}
+                      </td>
+
+                      {/* 21. Actions Column with Sticky Edit Button */}
+                      <td className="py-2 px-3 text-center sticky right-0 bg-white dark:bg-slate-900 group-hover:bg-blue-50/40 dark:group-hover:bg-slate-900 z-10 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.06)] border-l border-slate-200 dark:border-slate-800">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => handleOpenEditModal(row, e)}
+                          leftIcon={<Edit className="w-3.5 h-3.5" />}
+                          className="hover:border-blue-500 hover:text-blue-600 dark:hover:border-blue-400 dark:hover:text-blue-400 font-medium text-xs shadow-none py-1 px-2.5"
+                        >
+                          Edit
+                        </Button>
                       </td>
                     </tr>
                   );
@@ -955,7 +1073,18 @@ export const SalesRegisterPage: React.FC = () => {
               </div>
             )}
 
-            <div className="pt-4 flex justify-end gap-2">
+            <div className="pt-4 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setIsModalOpen(false);
+                  handleOpenEditModal(selectedOrder);
+                }}
+                leftIcon={<Edit className="w-3.5 h-3.5" />}
+              >
+                Edit Sales Order
+              </Button>
               <Button
                 variant="primary"
                 size="sm"
@@ -1088,6 +1217,293 @@ export const SalesRegisterPage: React.FC = () => {
                 leftIcon={<Send className="w-3.5 h-3.5" />}
               >
                 Confirm Assignment
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Sales Order Edit Modal */}
+      {editingOrder && (
+        <Modal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          title={`Edit Sales Order: ${editingOrder.order_number}`}
+        >
+          <form onSubmit={handleEditSubmit} className="space-y-4 text-xs">
+            {/* Top Order Context Header */}
+            <div className="p-3.5 rounded-2xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/60 flex items-center justify-between">
+              <div>
+                <div className="font-bold text-sm text-slate-900 dark:text-white">
+                  {editingOrder.client_name}
+                </div>
+                <div className="text-slate-600 dark:text-slate-400 mt-0.5">
+                  Service: <strong className="text-slate-900 dark:text-white">{editingOrder.service_name}</strong>
+                  <span className="mx-2">•</span>
+                  Converted By: <strong className="text-slate-900 dark:text-white">{editingOrder.salesperson_name}</strong>
+                </div>
+              </div>
+              <div>
+                {renderWorkStatusBadge(editingOrder.work_status || editingOrder.operation_status || 'UNASSIGNED')}
+              </div>
+            </div>
+
+            {editError && (
+              <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-500" />
+                <span>{editError}</span>
+              </div>
+            )}
+
+            {/* Section 1: Client & Basic Info */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="edit_client_name" className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Client Name
+                </label>
+                <input
+                  id="edit_client_name"
+                  type="text"
+                  value={editClientName}
+                  onChange={(e) => setEditClientName(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                  placeholder="Client Business or Individual Name"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="edit_contact_no" className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Contact Phone Number
+                </label>
+                <input
+                  id="edit_contact_no"
+                  type="text"
+                  value={editContactNo}
+                  onChange={(e) => setEditContactNo(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                  placeholder="10-digit Phone Number"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="edit_lead_source" className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Lead Source
+                </label>
+                <select
+                  id="edit_lead_source"
+                  value={editLeadSource}
+                  onChange={(e) => setEditLeadSource(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+                  {(formOptions?.lead_sources && formOptions.lead_sources.length > 0
+                    ? formOptions.lead_sources
+                    : ['WEBSITE', 'REFERRAL', 'DIRECT', 'JUSTDIAL', 'INDIAMART', 'OTHERS']
+                  ).map((src) => (
+                    <option key={src} value={src}>
+                      {src}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="edit_order_date" className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Order Date
+                </label>
+                <input
+                  id="edit_order_date"
+                  type="date"
+                  value={editOrderDate}
+                  onChange={(e) => setEditOrderDate(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Section 2: Financial Breakdown & Live Computation */}
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+              <span className="font-bold text-slate-900 dark:text-white text-xs uppercase tracking-wider mb-2.5 block">
+                Financial Details & Calculations
+              </span>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <label htmlFor="edit_order_value" className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Total Amount (₹) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    id="edit_order_value"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={editOrderValue}
+                    onChange={(e) => setEditOrderValue(Math.max(0, Number(e.target.value)))}
+                    required
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="edit_amount_received" className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Advance / Recvd (₹) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    id="edit_amount_received"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={editAmountReceived}
+                    onChange={(e) => setEditAmountReceived(Math.max(0, Number(e.target.value)))}
+                    required
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-emerald-600 dark:text-emerald-400 focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="edit_govt_fees" className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Govt Fees (₹)
+                  </label>
+                  <input
+                    id="edit_govt_fees"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={editGovtFees}
+                    onChange={(e) => setEditGovtFees(Math.max(0, Number(e.target.value)))}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="edit_incidental_cost" className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Incidental Cost (₹)
+                  </label>
+                  <input
+                    id="edit_incidental_cost"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={editIncidentalCost}
+                    onChange={(e) => setEditIncidentalCost(Math.max(0, Number(e.target.value)))}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Real-time Calculation Preview Ribbon */}
+              <div className="mt-3 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 grid grid-cols-3 gap-3 text-center">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Pending Balance</span>
+                  <span className="text-sm font-bold text-amber-600 dark:text-amber-400 mt-0.5 block">
+                    {formatInr(Math.max(0, editOrderValue - editAmountReceived))}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Payment Status</span>
+                  <div className="mt-1 flex justify-center">
+                    {renderPaymentBadge(
+                      editOrderValue <= 0
+                        ? 'PENDING'
+                        : editAmountReceived >= editOrderValue
+                        ? 'FULLY_PAID'
+                        : editAmountReceived > 0
+                        ? 'PARTIALLY_PAID'
+                        : 'PENDING'
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Estimated Profit</span>
+                  <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400 mt-0.5 block">
+                    {formatInr(editOrderValue - editGovtFees - editIncidentalCost)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 3: Invoicing & Notes */}
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-3">
+              <span className="font-bold text-slate-900 dark:text-white text-xs uppercase tracking-wider block">
+                Invoicing & Internal Records
+              </span>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="edit_proforma_no" className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Proforma Invoice Number
+                  </label>
+                  <input
+                    id="edit_proforma_no"
+                    type="text"
+                    value={editProformaInvoiceNo}
+                    onChange={(e) => setEditProformaInvoiceNo(e.target.value)}
+                    placeholder="e.g. PI-2025-0012"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="edit_tax_invoice_no" className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Tax Invoice Number
+                  </label>
+                  <input
+                    id="edit_tax_invoice_no"
+                    type="text"
+                    value={editTaxInvoiceNo}
+                    onChange={(e) => setEditTaxInvoiceNo(e.target.value)}
+                    placeholder="e.g. INV-2025-0048"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="edit_reimbursement_note" className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Reimbursement Note
+                </label>
+                <input
+                  id="edit_reimbursement_note"
+                  type="text"
+                  value={editReimbursementNote}
+                  onChange={(e) => setEditReimbursementNote(e.target.value)}
+                  placeholder="e.g. Client to reimburse stamp duty / notary fees upon filing"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="edit_notes" className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Remarks / Internal Sales Notes
+                </label>
+                <textarea
+                  id="edit_notes"
+                  rows={2}
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  placeholder="e.g. Special discounts agreed, balance due after license delivery..."
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsEditModalOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                isLoading={isSavingEdit}
+                leftIcon={<Save className="w-3.5 h-3.5" />}
+              >
+                Save Changes
               </Button>
             </div>
           </form>

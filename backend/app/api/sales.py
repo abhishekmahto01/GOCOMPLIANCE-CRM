@@ -449,6 +449,39 @@ def get_order_detail(
     )
 
 
+@router.put(
+    "/orders/{order_id}",
+    response_model=SalesOrderDetailRead,
+    status_code=status.HTTP_200_OK,
+    summary="Update Sales Order",
+    description="Update existing sales order financial and sales fields with permission verification and calculation updates.",
+    dependencies=[Depends(require_module_permission("SALES_MY_ORDERS", "update"))],
+)
+def update_order(
+    order_id: uuid.UUID,
+    data: SalesOrderUpdate,
+    current_user: User = Depends(get_current_active_user),
+    session: Session = Depends(get_db),
+) -> SalesOrderDetailRead:
+    """Update sales order details."""
+    try:
+        result = sales_service.update_sales_order(session, order_id, data, current_user)
+        session.commit()
+        return result
+    except sales_service.SalesOrderNotFoundError as exc:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except (sales_service.SalesOrderPermissionError, permissions.PermissionDeniedError) as exc:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except ValueError as exc:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except Exception as exc:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+
+
 @router.post(
     "/orders/{order_id}/confirm",
     response_model=SalesOrderConfirmResponse,

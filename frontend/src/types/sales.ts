@@ -300,3 +300,19 @@ export interface SalesEntryFormData {
   notes?: string;
   auto_confirm?: boolean;
 }
+
+export interface SalesOrderUpdateRequest {
+  order_value?: number;
+  amount_received?: number;
+  govt_fees?: number;
+  incidental_cost?: number;
+  payment_status?: string;
+  lead_source?: string;
+  order_date?: string;
+  proforma_invoice_no?: string;
+  tax_invoice_no?: string;
+  reimbursement_note?: string;
+  notes?: string;
+  client_name?: string;
+  contact_no?: string;
+}

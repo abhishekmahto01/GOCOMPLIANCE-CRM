@@ -46,6 +46,7 @@ from app.schemas.sales_order import (
     SalesOrderCreate,
     SalesOrderDetailRead,
     SalesOrderRead,
+    SalesOrderUpdate,
     SalesRegisterResponse,
     SalesRegisterSummary,
     SalesServiceOption,
@@ -393,6 +394,228 @@ def create_sales_order(
         confirm_sales_order(session, order.order_id, current_user, assignee_user_id=data.assignee_user_id)
 
     return order
+
+
+def update_sales_order(
+    session: Session,
+    order_id: uuid.UUID,
+    data: SalesOrderUpdate,
+    current_user: User,
+) -> SalesOrderDetailRead:
+    """Update an existing sales order's financial and sales fields with RBAC check and audit logging."""
+    order = session.get(SalesOrder, order_id)
+    if not order:
+        raise SalesOrderNotFoundError(f"Sales order with ID '{order_id}' not found.")
+
+    # Check RBAC Permission & Data Scope
+    try:
+        scope_ctx = permissions.resolve_data_scope_context(session, current_user, "SALES_MY_ORDERS")
+    except permissions.PermissionDeniedError:
+        try:
+            scope_ctx = permissions.resolve_data_scope_context(session, current_user, "SALES_ALL_ORDERS")
+        except permissions.PermissionDeniedError:
+            try:
+                scope_ctx = permissions.resolve_data_scope_context(session, current_user, "SALES_CONFIRMED_ORDER")
+            except permissions.PermissionDeniedError:
+                raise SalesOrderPermissionError("You do not have permission to edit sales orders.")
+
+    if not scope_ctx.is_user_permitted(order.salesperson_user_id, order.company_id):
+        raise SalesOrderPermissionError("You are not authorized to edit this sales order.")
+
+    # Track old values for audit trail
+    old_values = {
+        "order_value": Decimal(str(order.order_value)),
+        "amount_received": Decimal(str(order.amount_received)),
+        "balance_amount": Decimal(str(order.balance_amount)),
+        "govt_fees": Decimal(str(order.govt_fees)),
+        "incidental_cost": Decimal(str(order.incidental_cost)),
+        "profit_amount": Decimal(str(order.profit_amount)),
+        "payment_status": str(order.payment_status),
+        "lead_source": str(order.lead_source),
+        "order_date": order.order_date,
+        "proforma_invoice_no": order.proforma_invoice_no,
+        "tax_invoice_no": order.tax_invoice_no,
+        "reimbursement_note": order.reimbursement_note,
+        "notes": order.notes,
+        "client_name": order.client.client_name if order.client else "",
+        "contact_no": order.client.contact_phone if order.client else "",
+    }
+
+    # Financial Field updates & Decimal-safe validations
+    new_val = Decimal(str(data.order_value)) if data.order_value is not None else old_values["order_value"]
+    new_rcvd = Decimal(str(data.amount_received)) if data.amount_received is not None else old_values["amount_received"]
+    new_g_fee = Decimal(str(data.govt_fees)) if data.govt_fees is not None else old_values["govt_fees"]
+    new_i_cost = Decimal(str(data.incidental_cost)) if data.incidental_cost is not None else old_values["incidental_cost"]
+
+    if new_val < Decimal("0.00") or new_rcvd < Decimal("0.00") or new_g_fee < Decimal("0.00") or new_i_cost < Decimal("0.00"):
+        raise ValueError("Financial amounts cannot be negative.")
+
+    if new_rcvd > new_val:
+        raise ValueError("Advance Amount cannot be greater than Total Amount.")
+
+    # Server Calculations
+    new_bal = max(Decimal("0.00"), new_val - new_rcvd)
+    new_profit = new_val - new_g_fee - new_i_cost
+
+    # Payment status derivation
+    if data.payment_status:
+        new_pmt_status = data.payment_status.upper()
+    else:
+        if new_rcvd >= new_val and new_val > Decimal("0.00"):
+            new_pmt_status = "FULLY_PAID"
+        elif new_rcvd > Decimal("0.00"):
+            new_pmt_status = "PARTIALLY_PAID"
+        else:
+            new_pmt_status = "PENDING"
+
+    # Update SalesOrder attributes
+    order.order_value = new_val
+    order.amount_received = new_rcvd
+    order.balance_amount = new_bal
+    order.govt_fees = new_g_fee
+    order.incidental_cost = new_i_cost
+    order.profit_amount = new_profit
+    order.payment_status = new_pmt_status
+
+    if data.lead_source is not None:
+        order.lead_source = data.lead_source
+    if data.order_date is not None:
+        order.order_date = data.order_date
+    if data.proforma_invoice_no is not None:
+        order.proforma_invoice_no = data.proforma_invoice_no.strip() if data.proforma_invoice_no.strip() else None
+    if data.tax_invoice_no is not None:
+        order.tax_invoice_no = data.tax_invoice_no.strip() if data.tax_invoice_no.strip() else None
+    if data.reimbursement_note is not None:
+        order.reimbursement_note = data.reimbursement_note.strip() if data.reimbursement_note.strip() else None
+    if data.notes is not None:
+        order.notes = data.notes.strip() if data.notes.strip() else None
+
+    # Update client if client_name or contact_no provided
+    if order.client:
+        if data.client_name and data.client_name.strip():
+            order.client.client_name = data.client_name.strip()
+        if data.contact_no is not None and data.contact_no.strip():
+            order.client.contact_phone = data.contact_no.strip()
+
+    # Compare changes and create audit log
+    changes = []
+    if old_values["order_value"] != order.order_value:
+        changes.append(f"Total Amount: {format_inr(old_values['order_value'])} -> {format_inr(order.order_value)}")
+    if old_values["amount_received"] != order.amount_received:
+        changes.append(f"Advance Amount: {format_inr(old_values['amount_received'])} -> {format_inr(order.amount_received)}")
+    if old_values["balance_amount"] != order.balance_amount:
+        changes.append(f"Pending Amount: {format_inr(old_values['balance_amount'])} -> {format_inr(order.balance_amount)}")
+    if old_values["govt_fees"] != order.govt_fees:
+        changes.append(f"Govt Fees: {format_inr(old_values['govt_fees'])} -> {format_inr(order.govt_fees)}")
+    if old_values["incidental_cost"] != order.incidental_cost:
+        changes.append(f"Incidental Cost: {format_inr(old_values['incidental_cost'])} -> {format_inr(order.incidental_cost)}")
+    if old_values["profit_amount"] != order.profit_amount:
+        changes.append(f"Profits: {format_inr(old_values['profit_amount'])} -> {format_inr(order.profit_amount)}")
+    if old_values["payment_status"] != order.payment_status:
+        changes.append(f"Payment Status: {old_values['payment_status']} -> {order.payment_status}")
+    if old_values["proforma_invoice_no"] != order.proforma_invoice_no:
+        changes.append(f"Proforma Invoice: {old_values['proforma_invoice_no'] or 'None'} -> {order.proforma_invoice_no or 'None'}")
+    if old_values["tax_invoice_no"] != order.tax_invoice_no:
+        changes.append(f"Tax Invoice: {old_values['tax_invoice_no'] or 'None'} -> {order.tax_invoice_no or 'None'}")
+    if old_values["reimbursement_note"] != order.reimbursement_note:
+        changes.append(f"Reimbursement Note: {old_values['reimbursement_note'] or 'None'} -> {order.reimbursement_note or 'None'}")
+    if old_values["notes"] != order.notes:
+        changes.append(f"Remarks: {old_values['notes'] or 'None'} -> {order.notes or 'None'}")
+    if old_values["client_name"] != (order.client.client_name if order.client else ""):
+        changes.append(f"Client Name: {old_values['client_name']} -> {order.client.client_name if order.client else ''}")
+    if old_values["contact_no"] != (order.client.contact_phone if order.client else ""):
+        changes.append(f"Contact No: {old_values['contact_no']} -> {order.client.contact_phone if order.client else ''}")
+    if old_values["lead_source"] != order.lead_source:
+        changes.append(f"Lead Source: {old_values['lead_source']} -> {order.lead_source}")
+
+    if order.application:
+        comment_str = f"Sales order '{order.order_number}' updated: " + (", ".join(changes) if changes else "No field changes detected.")
+        if len(comment_str) > 1000:
+            comment_str = comment_str[:997] + "..."
+        old_val_summary = f"Val:{old_values['order_value']}|Recvd:{old_values['amount_received']}|Pmt:{old_values['payment_status']}"
+        new_val_summary = f"Val:{order.order_value}|Recvd:{order.amount_received}|Pmt:{order.payment_status}"
+        if len(old_val_summary) > 255:
+            old_val_summary = old_val_summary[:255]
+        if len(new_val_summary) > 255:
+            new_val_summary = new_val_summary[:255]
+
+        activity = ApplicationActivityLog(
+            application_id=order.application.application_id,
+            actor_user_id=current_user.user_id,
+            action_type="SALES_UPDATE",
+            old_value=old_val_summary,
+            new_value=new_val_summary,
+            comment=comment_str,
+            created_at=datetime.now(timezone.utc),
+        )
+        session.add(activity)
+
+    session.flush()
+
+    c_name = order.client.client_name if order.client else "—"
+    c_phone = order.client.contact_phone if order.client else "—"
+    s_name = order.service.service_name if order.service else "—"
+    s_code = order.service.service_code if order.service else ""
+    sp_name = f"{order.salesperson.first_name} {order.salesperson.last_name}".strip() if order.salesperson else "—"
+    sp_code = order.salesperson.employee_code if order.salesperson else ""
+
+    app_id = order.application.application_id if order.application else None
+    app_num = order.application.application_number if order.application else None
+    op_st = order.application.application_status if order.application else order.confirmation_status
+
+    assigned_to_id = order.application.assigned_to_user_id if order.application else None
+    assigned_to_name = (
+        f"{order.application.assigned_to.first_name} {order.application.assigned_to.last_name}".strip()
+        if (order.application and order.application.assigned_to)
+        else "Unassigned"
+    )
+    assigned_to_code = (
+        order.application.assigned_to.employee_code
+        if (order.application and order.application.assigned_to)
+        else None
+    )
+
+    return SalesOrderDetailRead(
+        s_no=1,
+        order_id=order.order_id,
+        order_number=order.order_number,
+        company_id=order.company_id,
+        client_id=order.client_id,
+        service_id=order.service_id,
+        salesperson_user_id=order.salesperson_user_id,
+        lead_source=order.lead_source,
+        order_date=order.order_date,
+        formatted_date=order.order_date.strftime("%d %b %Y"),
+        order_value=order.order_value,
+        amount_received=order.amount_received,
+        balance_amount=order.balance_amount,
+        govt_fees=order.govt_fees,
+        incidental_cost=order.incidental_cost,
+        profit_amount=order.profit_amount,
+        payment_status=order.payment_status,
+        confirmation_status=order.confirmation_status,
+        confirmed_at=order.confirmed_at,
+        proforma_invoice_no=order.proforma_invoice_no,
+        tax_invoice_no=order.tax_invoice_no,
+        reimbursement_note=order.reimbursement_note,
+        notes=order.notes,
+        remarks=order.notes,
+        created_at=order.created_at,
+        updated_at=order.updated_at,
+        client_name=c_name,
+        contact_no=c_phone,
+        service_name=s_name,
+        service_code=s_code,
+        salesperson_name=sp_name,
+        salesperson_code=sp_code,
+        assigned_to_user_id=assigned_to_id,
+        assigned_to_name=assigned_to_name,
+        assigned_to_code=assigned_to_code,
+        work_status=op_st,
+        application_id=app_id,
+        application_number=app_num,
+        operation_status=op_st,
+    )
 
 
 def confirm_sales_order(
