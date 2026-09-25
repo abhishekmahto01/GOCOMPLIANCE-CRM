@@ -14,6 +14,10 @@ import {
   Check,
   ArrowRight,
   RefreshCw,
+  MessageSquare,
+  MessageSquarePlus,
+  Send,
+  AlertTriangle,
 } from 'lucide-react';
 import type {
   AssigneeOption,
@@ -25,6 +29,7 @@ import {
   updateOperationTaskStatusApi,
   updateApplicationDocStatusApi,
   getOperationsAssigneesApi,
+  addOperationRemarkApi,
 } from '../../api/operations';
 
 import { useAuth } from '../../context/AuthContext';
@@ -35,6 +40,7 @@ export interface TaskDetailModalProps {
   onClose: () => void;
   onRefresh?: () => void;
   onShowToast?: (type: 'success' | 'error' | 'info', title: string, message: string) => void;
+  initialTab?: 'overview' | 'remarks' | 'documents' | 'history' | 'reassign';
 }
 
 export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
@@ -43,9 +49,10 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   onClose,
   onRefresh,
   onShowToast,
+  initialTab = 'overview',
 }) => {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'overview' | 'documents' | 'history' | 'reassign'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'remarks' | 'documents' | 'history' | 'reassign'>(initialTab);
   const [taskDetail, setTaskDetail] = useState<OperationApplicationDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +60,12 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   // Status change state
   const [statusComment, setStatusComment] = useState('');
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+
+  // Operations Remarks state
+  const [newRemarkText, setNewRemarkText] = useState('');
+  const [isSavingRemark, setIsSavingRemark] = useState(false);
+  const [remarkError, setRemarkError] = useState<string | null>(null);
+  const [remarkSuccess, setRemarkSuccess] = useState<string | null>(null);
 
   // Reassignment form state
   const [eligibleAssignees, setEligibleAssignees] = useState<AssigneeOption[]>([]);
@@ -92,15 +105,58 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     if (isOpen && applicationId) {
       loadDetail(applicationId);
       loadAssignees();
-      setActiveTab('overview');
+      setActiveTab(initialTab || 'overview');
       setStatusComment('');
       setReassignReason('');
+      setNewRemarkText('');
+      setRemarkError(null);
+      setRemarkSuccess(null);
     } else {
       setTaskDetail(null);
     }
-  }, [isOpen, applicationId]);
+  }, [isOpen, applicationId, initialTab]);
 
   if (!isOpen || !applicationId) return null;
+
+  const isSuperAdmin = user?.employee_code === 'CG0001';
+  const isAssignee = !!(taskDetail?.assigned_to_user_id && user?.user_id && taskDetail.assigned_to_user_id === user.user_id);
+  const deptName = (user?.department_name || user?.department?.name || '').toLowerCase();
+  const desigName = (user?.designation_name || user?.designation?.name || '').toLowerCase();
+  const isAdminOrDirector = isSuperAdmin || deptName.includes('admin') || desigName.includes('director') || desigName.includes('admin') || desigName.includes('manager') || desigName.includes('head');
+  const isCancelled = taskDetail?.application_status === 'CANCELLED';
+  const canAddRemark = (isAssignee || isAdminOrDirector) && !isCancelled;
+
+  const handleAddRemark = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!taskDetail) return;
+    const trimmed = newRemarkText.trim();
+    if (!trimmed) {
+      setRemarkError('Remark text cannot be empty.');
+      return;
+    }
+
+    try {
+      setIsSavingRemark(true);
+      setRemarkError(null);
+      setRemarkSuccess(null);
+      await addOperationRemarkApi(taskDetail.application_id, { remark_text: trimmed });
+      setNewRemarkText('');
+      setRemarkSuccess('Operations remark saved successfully.');
+      await loadDetail(taskDetail.application_id);
+      if (onShowToast) {
+        onShowToast('success', 'Remark Added', 'Operations remark saved to task history.');
+      }
+      if (onRefresh) onRefresh();
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || 'Failed to add operation remark.';
+      setRemarkError(msg);
+      if (onShowToast) {
+        onShowToast('error', 'Remark Failed', msg);
+      }
+    } finally {
+      setIsSavingRemark(false);
+    }
+  };
 
   const handleStatusTransition = async (newStatus: string) => {
     if (!taskDetail) return;
@@ -308,6 +364,25 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           </button>
           <button
             type="button"
+            onClick={() => setActiveTab('remarks')}
+            className={`py-3 px-4 border-b-2 transition flex items-center gap-2 ${
+              activeTab === 'remarks'
+                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+            }`}
+          >
+            <MessageSquare className="w-4 h-4" />
+            <span>
+              Operations Remarks{' '}
+              {taskDetail && (
+                <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 font-bold">
+                  {taskDetail.remarks?.length || 0}
+                </span>
+              )}
+            </span>
+          </button>
+          <button
+            type="button"
             onClick={() => setActiveTab('documents')}
             className={`py-3 px-4 border-b-2 transition flex items-center gap-2 ${
               activeTab === 'documents'
@@ -454,6 +529,148 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                     </div>
                   </div>
 
+                  {/* Highlighted Latest Remark Banner (if exists) */}
+                  {taskDetail.latest_remark && (
+                    <div className="p-4 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/70 space-y-2">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="p-1.5 rounded-lg bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300">
+                            <MessageSquare className="w-4 h-4" />
+                          </span>
+                          <span className="text-xs font-bold uppercase tracking-wider text-indigo-900 dark:text-indigo-200">
+                            Latest Operations Remark
+                          </span>
+                          <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                            by {taskDetail.latest_remark.author_name}
+                            {taskDetail.latest_remark.author_employee_code && ` (${taskDetail.latest_remark.author_employee_code})`}
+                          </span>
+                        </div>
+                        <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                          {taskDetail.latest_remark.formatted_created_at || new Date(taskDetail.latest_remark.created_at).toLocaleString()}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-800 dark:text-slate-200 bg-white/70 dark:bg-slate-900/60 p-3 rounded-lg border border-indigo-100 dark:border-indigo-950 whitespace-pre-wrap">
+                        {taskDetail.latest_remark.remark_text}
+                      </p>
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('remarks')}
+                          className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1"
+                        >
+                          View all remarks history ({taskDetail.remarks?.length || 0}) ➔
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Operations Remarks Section on Overview */}
+                  <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                        <MessageSquare className="w-4 h-4 text-indigo-600" />
+                        Operations Remarks ({taskDetail.remarks?.length || 0})
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('remarks')}
+                        className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        Open Full Remarks Log
+                      </button>
+                    </div>
+
+                    {/* Add Remark Action Box */}
+                    {canAddRemark && (
+                      <form onSubmit={handleAddRemark} className="space-y-2">
+                        {remarkError && (
+                          <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 text-xs flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 shrink-0" />
+                            <span>{remarkError}</span>
+                          </div>
+                        )}
+                        {remarkSuccess && (
+                          <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-300 text-xs flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 shrink-0" />
+                            <span>{remarkSuccess}</span>
+                          </div>
+                        )}
+                        <div className="relative">
+                          <textarea
+                            rows={2}
+                            value={newRemarkText}
+                            onChange={(e) => {
+                              setNewRemarkText(e.target.value);
+                              if (remarkError) setRemarkError(null);
+                            }}
+                            placeholder="Add explanation for delay, blocked status, awaiting client response, or statutory update..."
+                            className="w-full px-3 py-2.5 text-xs rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-blue-500 outline-hidden"
+                          />
+                        </div>
+                        <div className="flex justify-end">
+                          <button
+                            type="submit"
+                            disabled={isSavingRemark || !newRemarkText.trim()}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition disabled:opacity-50"
+                          >
+                            <MessageSquarePlus className="w-3.5 h-3.5" />
+                            <span>{isSavingRemark ? 'Saving...' : 'Add Remark'}</span>
+                          </button>
+                        </div>
+                      </form>
+                    )}
+
+                    {isCancelled && (
+                      <div className="p-3 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 text-xs flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
+                        <span>Remarks cannot be added to a cancelled or deleted task.</span>
+                      </div>
+                    )}
+
+                    {!canAddRemark && !isCancelled && (
+                      <p className="text-[11px] text-slate-500 italic">
+                        You can view the remarks history. Only the current Operations assignee or authorized managers can add remarks.
+                      </p>
+                    )}
+
+                    {/* Remarks Chronological List preview */}
+                    {taskDetail.remarks && taskDetail.remarks.length > 0 ? (
+                      <div className="space-y-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                          Remarks History (Earliest to Latest)
+                        </span>
+                        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                          {taskDetail.remarks.map((r) => (
+                            <div
+                              key={r.remark_id}
+                              className="p-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 text-xs space-y-1"
+                            >
+                              <div className="flex justify-between items-center text-[11px] text-slate-500">
+                                <span className="font-bold text-slate-800 dark:text-slate-200">
+                                  {r.author_name}
+                                  {r.author_employee_code && (
+                                    <span className="ml-1 text-slate-400 font-normal">({r.author_employee_code})</span>
+                                  )}
+                                  {r.author_department && (
+                                    <span className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                      {r.author_department}
+                                    </span>
+                                  )}
+                                </span>
+                                <span className="text-slate-400 font-mono">
+                                  {r.formatted_created_at || new Date(r.created_at).toLocaleString()}
+                                </span>
+                              </div>
+                              <p className="text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{r.remark_text}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-400 italic">No operations remarks recorded on this task yet.</p>
+                    )}
+                  </div>
+
                   {/* Internal Assignment Notes */}
                   {taskDetail.assignment_notes && (
                     <div className="p-3.5 rounded-xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200/70 dark:border-blue-900 text-xs">
@@ -504,6 +721,135 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* TAB 2: OPERATIONS REMARKS DEDICATED VIEW */}
+              {activeTab === 'remarks' && (
+                <div className="space-y-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <MessageSquare className="w-4 h-4 text-indigo-600" />
+                        Operations Remarks History
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        Permanent chronological record of delay explanations, statutory blockages, and progress notes.
+                      </p>
+                    </div>
+                    <span className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                      Total Remarks: {taskDetail.remarks?.length || 0}
+                    </span>
+                  </div>
+
+                  {/* Add Remark Form */}
+                  {canAddRemark && (
+                    <div className="p-4 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-900/60 space-y-3">
+                      <h4 className="text-xs font-bold text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5">
+                        <MessageSquarePlus className="w-4 h-4 text-indigo-600" />
+                        Add New Operations Remark
+                      </h4>
+                      {remarkError && (
+                        <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 text-xs flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4 shrink-0" />
+                          <span>{remarkError}</span>
+                        </div>
+                      )}
+                      {remarkSuccess && (
+                        <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-300 text-xs flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 shrink-0" />
+                          <span>{remarkSuccess}</span>
+                        </div>
+                      )}
+                      <textarea
+                        rows={3}
+                        value={newRemarkText}
+                        onChange={(e) => {
+                          setNewRemarkText(e.target.value);
+                          if (remarkError) setRemarkError(null);
+                        }}
+                        placeholder="Detail the reason why this application is delayed, awaiting response from client/authority, or next action scheduled..."
+                        className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-indigo-500 outline-hidden"
+                      />
+                      <div className="flex justify-between items-center">
+                        <span className="text-[11px] text-slate-500">
+                          Adding a remark preserves all earlier history and does not change task or payment status.
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleAddRemark}
+                          disabled={isSavingRemark || !newRemarkText.trim()}
+                          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition disabled:opacity-50"
+                        >
+                          <Send className="w-3.5 h-3.5" />
+                          <span>{isSavingRemark ? 'Saving Remark...' : 'Save Remark'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {isCancelled && (
+                    <div className="p-3.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                      <span>This task is cancelled or deleted. Operations remarks cannot be added.</span>
+                    </div>
+                  )}
+
+                  {/* Remarks Timeline */}
+                  {taskDetail.remarks && taskDetail.remarks.length > 0 ? (
+                    <div className="space-y-3">
+                      {taskDetail.remarks.map((r, idx) => {
+                        const isLatest = idx === taskDetail.remarks.length - 1;
+                        return (
+                          <div
+                            key={r.remark_id}
+                            className={`p-4 rounded-xl border text-xs transition space-y-2 ${
+                              isLatest
+                                ? 'bg-indigo-50/40 dark:bg-indigo-950/20 border-indigo-200 dark:border-indigo-900/60 shadow-xs'
+                                : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                              <div className="flex items-center gap-2">
+                                <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 flex items-center justify-center font-bold text-[10px]">
+                                  {r.author_name ? r.author_name.charAt(0).toUpperCase() : 'U'}
+                                </div>
+                                <span className="font-bold text-slate-900 dark:text-white">{r.author_name}</span>
+                                {r.author_employee_code && (
+                                  <span className="font-mono text-slate-500 text-[11px]">({r.author_employee_code})</span>
+                                )}
+                                {r.author_department && (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                                    {r.author_department}
+                                  </span>
+                                )}
+                                {isLatest && (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                                    Latest Remark
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[11px] font-mono text-slate-400">
+                                {r.formatted_created_at || new Date(r.created_at).toLocaleString()}
+                              </span>
+                            </div>
+                            <p className="text-slate-800 dark:text-slate-200 whitespace-pre-wrap pl-8">
+                              {r.remark_text}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="p-8 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl text-slate-400 text-xs space-y-2">
+                      <MessageSquare className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600" />
+                      <p className="font-semibold text-slate-600 dark:text-slate-300">No operations remarks recorded yet.</p>
+                      <p className="text-[11px] text-slate-400">
+                        The current assignee or authorized managers can record notes explaining progress or delays.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
 
               {/* TAB 2: REQUIRED DOCUMENTS */}
               {activeTab === 'documents' && (

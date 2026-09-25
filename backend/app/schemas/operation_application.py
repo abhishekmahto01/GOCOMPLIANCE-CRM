@@ -74,6 +74,36 @@ class ActivityLogRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class OperationRemarkCreate(BaseModel):
+    """Schema for recording a new operations remark on a task."""
+
+    remark_text: str = Field(..., min_length=1, max_length=2000, description="Remark explanation or status update text")
+
+    @field_validator("remark_text", mode="before")
+    @classmethod
+    def validate_remark_text(cls, v: str) -> str:
+        if not isinstance(v, str) or not v.strip():
+            raise ValueError("Remark text cannot be empty.")
+        return v.strip()
+
+
+class OperationRemarkRead(BaseModel):
+    """Read schema for operations remark history."""
+
+    remark_id: uuid.UUID
+    application_id: uuid.UUID
+    author_user_id: uuid.UUID
+    author_name: str
+    author_employee_code: Optional[str] = None
+    author_department: Optional[str] = None
+    author_designation: Optional[str] = None
+    remark_text: str
+    created_at: datetime
+    formatted_created_at: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class OperationApplicationRead(BaseModel):
     """Read schema for Operation Application."""
 
@@ -110,6 +140,7 @@ class OperationApplicationRead(BaseModel):
     is_due_soon: bool = False
     order_date: Optional[date] = None
     formatted_order_date: Optional[str] = None
+    latest_remark: Optional[OperationRemarkRead] = None
     created_at: datetime
     updated_at: datetime
 
@@ -122,6 +153,7 @@ class OperationApplicationDetailRead(OperationApplicationRead):
     documents: List[ApplicationDocRead] = Field(default_factory=list)
     assignment_history: List[AssignmentHistoryRead] = Field(default_factory=list)
     activity_logs: List[ActivityLogRead] = Field(default_factory=list)
+    remarks: List[OperationRemarkRead] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
 

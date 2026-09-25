@@ -9,6 +9,7 @@ from app.models.operation_application import (
     ApplicationAssignmentHistory,
     ApplicationDocument,
     OperationApplication,
+    OperationRemark,
 )
 from app.models.permission_audit import PermissionAuditLog
 from app.models.refresh_token import RefreshToken
@@ -27,6 +28,7 @@ __all__ = [
     "Designation",
     "Module",
     "OperationApplication",
+    "OperationRemark",
     "PermissionAuditLog",
     "RefreshToken",
     "SalesOrder",

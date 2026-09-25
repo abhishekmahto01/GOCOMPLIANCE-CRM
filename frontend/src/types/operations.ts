@@ -38,6 +38,23 @@ export interface ActivityLog {
   created_at: string;
 }
 
+export interface OperationRemark {
+  remark_id: string;
+  application_id: string;
+  author_user_id: string;
+  author_name: string;
+  author_employee_code?: string | null;
+  author_department?: string | null;
+  author_designation?: string | null;
+  remark_text: string;
+  created_at: string;
+  formatted_created_at?: string | null;
+}
+
+export interface OperationRemarkCreate {
+  remark_text: string;
+}
+
 export interface OperationApplication {
   application_id: string;
   application_number: string;
@@ -82,6 +99,7 @@ export interface OperationApplication {
   is_due_soon: boolean;
   order_date?: string | null;
   formatted_order_date?: string | null;
+  latest_remark?: OperationRemark | null;
   created_at: string;
   updated_at: string;
 }
@@ -90,6 +108,7 @@ export interface OperationApplicationDetail extends OperationApplication {
   documents: ApplicationDoc[];
   assignment_history: AssignmentHistory[];
   activity_logs: ActivityLog[];
+  remarks: OperationRemark[];
 }
 
 export interface OperationsKpiSummary {

@@ -8,6 +8,8 @@ import type {
   ApplicationStatusUpdateRequest,
   AssigneeOption,
   OperationApplicationDetail,
+  OperationRemark,
+  OperationRemarkCreate,
   OperationsDashboardResponse,
   OperationsTaskListResponse,
   TaskAssignRequest,
@@ -179,3 +181,30 @@ export async function getOperationsAssigneesApi(): Promise<AssigneeOption[]> {
   const response = await apiClient.get<AssigneeOption[]>('/operations/assignees');
   return response.data;
 }
+
+/**
+ * Add a new Operations Remark to an assigned task.
+ */
+export async function addOperationRemarkApi(
+  applicationId: string,
+  data: OperationRemarkCreate
+): Promise<OperationRemark> {
+  const response = await apiClient.post<OperationRemark>(
+    `/operations/tasks/${applicationId}/remarks`,
+    data
+  );
+  return response.data;
+}
+
+/**
+ * Get the full chronological remarks history for a task.
+ */
+export async function getOperationRemarksApi(
+  applicationId: string
+): Promise<OperationRemark[]> {
+  const response = await apiClient.get<OperationRemark[]>(
+    `/operations/tasks/${applicationId}/remarks`
+  );
+  return response.data;
+}
+

@@ -211,6 +211,17 @@ const mockTaskListResponse: OperationsTaskListResponse = {
       documents_total: 2,
       is_overdue: false,
       is_due_soon: false,
+      latest_remark: {
+        remark_id: 'rem-1',
+        application_id: 'app-kapper-0001',
+        author_user_id: 'usr-deepak-0005',
+        author_name: 'Deepak Kumar',
+        author_employee_code: 'CG0005',
+        author_department: 'Operations',
+        remark_text: 'Awaiting NOC clearance from state medical board.',
+        created_at: '2026-09-23T11:00:00Z',
+        formatted_created_at: '23 Sep 2026, 11:00 AM',
+      },
       created_at: '2026-09-23T10:00:00Z',
       updated_at: '2026-09-23T11:00:00Z',
     },
@@ -298,6 +309,30 @@ const mockKapperTask: OperationApplicationDetail = {
     },
   ],
   activity_logs: [],
+  latest_remark: {
+    remark_id: 'rem-1',
+    application_id: 'app-kapper-0001',
+    author_user_id: 'usr-deepak-0005',
+    author_name: 'Deepak Kumar',
+    author_employee_code: 'CG0005',
+    author_department: 'Operations',
+    remark_text: 'Awaiting NOC clearance from state medical board.',
+    created_at: '2026-09-23T11:00:00Z',
+    formatted_created_at: '23 Sep 2026, 11:00 AM',
+  },
+  remarks: [
+    {
+      remark_id: 'rem-1',
+      application_id: 'app-kapper-0001',
+      author_user_id: 'usr-deepak-0005',
+      author_name: 'Deepak Kumar',
+      author_employee_code: 'CG0005',
+      author_department: 'Operations',
+      remark_text: 'Awaiting NOC clearance from state medical board.',
+      created_at: '2026-09-23T11:00:00Z',
+      formatted_created_at: '23 Sep 2026, 11:00 AM',
+    },
+  ],
 };
 
 const mockAssignees: AssigneeOption[] = [
@@ -537,5 +572,234 @@ describe('Operations Workspace & Connected Workflow', () => {
     expect(screen.getByRole('option', { name: /all assignees/i })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /deepak kumar/i })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /mansi sharma/i })).toBeInTheDocument();
+  });
+
+  it('renders Operations Remarks on Task Detail modal and allows current assignee to add a remark', async () => {
+    const user = userEvent.setup();
+    const addRemarkSpy = vi.spyOn(operationsApi, 'addOperationRemarkApi').mockResolvedValue({
+      remark_id: 'rem-2',
+      application_id: 'app-kapper-0001',
+      author_user_id: 'usr-deepak-0005',
+      author_name: 'Deepak Kumar',
+      author_employee_code: 'CG0005',
+      author_department: 'Operations',
+      remark_text: 'Authority raised query regarding medical council registration date.',
+      created_at: '2026-09-24T14:30:00Z',
+      formatted_created_at: '24 Sep 2026, 02:30 PM',
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/operations/my-tasks']}>
+        <ThemeProvider>
+          <AuthProvider>
+            <Routes>
+              <Route path="/operations" element={<OperationsLayout />}>
+                <Route path="my-tasks" element={<MyTasksPage />} />
+              </Route>
+            </Routes>
+          </AuthProvider>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    // Open task modal
+    await waitFor(() => {
+      expect(screen.getByText('KAPPER')).toBeInTheDocument();
+    });
+    const viewButton = screen.getByRole('button', { name: /open task/i });
+    await user.click(viewButton);
+
+    // Verify Latest Operations Remark banner and Overview section
+    await waitFor(() => {
+      expect(screen.getByText('Latest Operations Remark')).toBeInTheDocument();
+    });
+    expect(screen.getAllByText('Awaiting NOC clearance from state medical board.').length).toBeGreaterThan(0);
+
+    // Type new remark
+    const remarkTextarea = screen.getByPlaceholderText(/add explanation for delay, blocked status/i);
+    await user.type(remarkTextarea, 'Authority raised query regarding medical council registration date.');
+
+    const addRemarkBtn = screen.getByRole('button', { name: /add remark/i });
+    expect(addRemarkBtn).not.toBeDisabled();
+    await user.click(addRemarkBtn);
+
+    expect(addRemarkSpy).toHaveBeenCalledWith('app-kapper-0001', {
+      remark_text: 'Authority raised query regarding medical council registration date.',
+    });
+  });
+
+  it('shows chronological remarks history and navigates to the dedicated Remarks tab', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter initialEntries={['/operations/my-tasks']}>
+        <ThemeProvider>
+          <AuthProvider>
+            <Routes>
+              <Route path="/operations" element={<OperationsLayout />}>
+                <Route path="my-tasks" element={<MyTasksPage />} />
+              </Route>
+            </Routes>
+          </AuthProvider>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('KAPPER')).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: /open task/i }));
+
+    // Verify Remarks tab button exists
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /operations remarks/i })).toBeInTheDocument();
+    });
+
+    // Click on Remarks tab
+    const remarksTabBtn = screen.getByRole('button', { name: /operations remarks/i });
+    await user.click(remarksTabBtn);
+
+    // Verify Remarks History header and existing remark content
+    expect(screen.getByText('Operations Remarks History')).toBeInTheDocument();
+    expect(screen.getAllByText('Awaiting NOC clearance from state medical board.').length).toBeGreaterThan(0);
+  });
+
+  it('displays restriction notice on cancelled tasks preventing new remarks', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(operationsApi, 'getOperationTaskDetailApi').mockResolvedValue({
+      ...mockKapperTask,
+      application_status: 'CANCELLED',
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/operations/my-tasks']}>
+        <ThemeProvider>
+          <AuthProvider>
+            <Routes>
+              <Route path="/operations" element={<OperationsLayout />}>
+                <Route path="my-tasks" element={<MyTasksPage />} />
+              </Route>
+            </Routes>
+          </AuthProvider>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('KAPPER')).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: /open task/i }));
+
+    // Check cancellation notice
+    await waitFor(() => {
+      expect(screen.getByText(/remarks cannot be added to a cancelled or deleted task/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByPlaceholderText(/add explanation for delay/i)).not.toBeInTheDocument();
+  });
+
+  it('renders Latest Remark column in My Assigned Tasks table showing remark preview and author', async () => {
+    render(
+      <MemoryRouter initialEntries={['/operations/my-tasks']}>
+        <ThemeProvider>
+          <AuthProvider>
+            <Routes>
+              <Route path="/operations" element={<OperationsLayout />}>
+                <Route path="my-tasks" element={<MyTasksPage />} />
+              </Route>
+            </Routes>
+          </AuthProvider>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    // Wait for table header and row
+    await waitFor(() => {
+      expect(screen.getByText('Latest Remark')).toBeInTheDocument();
+    });
+    expect(screen.getAllByText('Awaiting NOC clearance from state medical board.').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Deepak Kumar').length).toBeGreaterThan(0);
+  });
+
+  it('clicking on Latest Remark preview card in table opens task modal directly to remarks tab', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter initialEntries={['/operations/my-tasks']}>
+        <ThemeProvider>
+          <AuthProvider>
+            <Routes>
+              <Route path="/operations" element={<OperationsLayout />}>
+                <Route path="my-tasks" element={<MyTasksPage />} />
+              </Route>
+            </Routes>
+          </AuthProvider>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Latest Remark')).toBeInTheDocument();
+    });
+
+    const remarkPreview = screen.getByText('Awaiting NOC clearance from state medical board.');
+    await user.click(remarkPreview);
+
+    // Should open modal directly with Operations Remarks History active
+    await waitFor(() => {
+      expect(screen.getByText('Operations Remarks History')).toBeInTheDocument();
+    });
+  });
+
+  it('renders "No update yet" in table when task has no latest_remark', async () => {
+    vi.spyOn(operationsApi, 'getMyOperationsTasksApi').mockResolvedValue({
+      ...mockTaskListResponse,
+      items: [
+        {
+          ...mockTaskListResponse.items[0],
+          latest_remark: undefined,
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/operations/my-tasks']}>
+        <ThemeProvider>
+          <AuthProvider>
+            <Routes>
+              <Route path="/operations" element={<OperationsLayout />}>
+                <Route path="my-tasks" element={<MyTasksPage />} />
+              </Route>
+            </Routes>
+          </AuthProvider>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('No update yet')).toBeInTheDocument();
+    });
+  });
+
+  it('renders Latest Remark column in All Operations Tasks (TaskAssignmentPage)', async () => {
+    vi.spyOn(operationsApi, 'getOperationsTasksApi').mockResolvedValue(mockTaskListResponse);
+
+    render(
+      <MemoryRouter initialEntries={['/operations/task-assignment']}>
+        <ThemeProvider>
+          <AuthProvider>
+            <Routes>
+              <Route path="/operations" element={<OperationsLayout />}>
+                <Route path="task-assignment" element={<TaskAssignmentPage />} />
+              </Route>
+            </Routes>
+          </AuthProvider>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Latest Remark')).toBeInTheDocument();
+    });
+    expect(screen.getAllByText('Awaiting NOC clearance from state medical board.').length).toBeGreaterThan(0);
   });
 });

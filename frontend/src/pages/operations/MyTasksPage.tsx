@@ -31,6 +31,7 @@ export const MyTasksPage: React.FC = () => {
 
   // Selected task modal state
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
+  const [modalInitialTab, setModalInitialTab] = useState<'overview' | 'remarks'>('overview');
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
   const loadTasks = async () => {
@@ -64,8 +65,9 @@ export const MyTasksPage: React.FC = () => {
     loadTasks();
   };
 
-  const openTaskDetail = (appId: string) => {
+  const openTaskDetail = (appId: string, tab: 'overview' | 'remarks' = 'overview') => {
     setSelectedAppId(appId);
+    setModalInitialTab(tab);
     setIsDetailModalOpen(true);
   };
 
@@ -262,6 +264,7 @@ export const MyTasksPage: React.FC = () => {
                   <th className="py-3.5 px-4">Target Due</th>
                   <th className="py-3.5 px-4">Priority</th>
                   <th className="py-3.5 px-4">Status</th>
+                  <th className="py-3.5 px-4 min-w-[200px] max-w-[280px]">Latest Remark</th>
                   <th className="py-3.5 px-4 text-right">Action</th>
                 </tr>
               </thead>
@@ -270,7 +273,7 @@ export const MyTasksPage: React.FC = () => {
                   <tr
                     key={task.application_id}
                     className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition cursor-pointer"
-                    onClick={() => openTaskDetail(task.application_id)}
+                    onClick={() => openTaskDetail(task.application_id, 'overview')}
                   >
                     <td className="py-3.5 px-4 font-mono font-bold text-blue-600 dark:text-blue-400">
                       {task.application_number}
@@ -300,10 +303,38 @@ export const MyTasksPage: React.FC = () => {
                     </td>
                     <td className="py-3.5 px-4">{getPriorityBadge(task.priority)}</td>
                     <td className="py-3.5 px-4">{getStatusBadge(task.application_status)}</td>
+                    <td
+                      className="py-3.5 px-4 max-w-[280px]"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openTaskDetail(task.application_id, 'remarks');
+                      }}
+                    >
+                      {task.latest_remark ? (
+                        <div
+                          className="p-2 rounded-xl bg-slate-50/90 dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700/60 hover:border-blue-300 dark:hover:border-blue-700/70 hover:bg-blue-50/40 dark:hover:bg-blue-950/30 transition shadow-2xs cursor-pointer group"
+                          title={`${task.latest_remark.remark_text}\n— ${task.latest_remark.author_name} (${task.latest_remark.formatted_created_at || new Date(task.latest_remark.created_at).toLocaleDateString()})`}
+                        >
+                          <p className="text-xs text-slate-700 dark:text-slate-300 line-clamp-2 leading-relaxed font-normal whitespace-pre-wrap break-words">
+                            {task.latest_remark.remark_text}
+                          </p>
+                          <div className="flex items-center justify-between gap-1 text-[10px] text-slate-400 dark:text-slate-500 mt-1 pt-1 border-t border-slate-200/50 dark:border-slate-700/50">
+                            <span className="font-semibold text-slate-600 dark:text-slate-400 truncate max-w-[120px]">
+                              {task.latest_remark.author_name}
+                            </span>
+                            <span className="shrink-0 font-mono text-[9.5px]">
+                              {task.latest_remark.formatted_created_at ? task.latest_remark.formatted_created_at.split(',')[0] : new Date(task.latest_remark.created_at).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 dark:text-slate-500 italic text-[11px]">No update yet</span>
+                      )}
+                    </td>
                     <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                       <button
                         type="button"
-                        onClick={() => openTaskDetail(task.application_id)}
+                        onClick={() => openTaskDetail(task.application_id, 'overview')}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-950 dark:text-blue-300 text-xs font-bold transition"
                       >
                         <Eye className="w-3.5 h-3.5" />
@@ -349,9 +380,11 @@ export const MyTasksPage: React.FC = () => {
       <TaskDetailModal
         applicationId={selectedAppId}
         isOpen={isDetailModalOpen}
+        initialTab={modalInitialTab}
         onClose={() => {
           setIsDetailModalOpen(false);
           setSelectedAppId(null);
+          setModalInitialTab('overview');
         }}
         onRefresh={loadTasks}
         onShowToast={context?.addToast}

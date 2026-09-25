@@ -51,6 +51,7 @@ def test_designation_model_table_name_and_metadata() -> None:
         "application_document",
         "application_assignment_history",
         "application_activity_log",
+        "operation_remark",
     }
 
 

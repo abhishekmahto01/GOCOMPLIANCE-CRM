@@ -243,6 +243,14 @@ class OperationApplication(Base):
         order_by="ApplicationActivityLog.created_at.desc()",
     )
 
+    remarks: Mapped[List["OperationRemark"]] = relationship(
+        "OperationRemark",
+        back_populates="application",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="OperationRemark.created_at.asc()",
+    )
+
     def __repr__(self) -> str:
         return (
             f"<OperationApplication(number='{self.application_number}', "
@@ -547,3 +555,76 @@ class ApplicationActivityLog(Base):
         "User",
         foreign_keys=[actor_user_id],
     )
+
+
+class OperationRemark(Base):
+    """Operations remarks recorded on compliance tasks/applications for delay reasons, blockers, or updates."""
+
+    __tablename__ = "operation_remark"
+    __table_args__ = (
+        {"comment": "Operations remarks history tracking reasons for delays, blockers, or progress context"},
+    )
+
+    remark_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        nullable=False,
+        comment="Unique identifier for the operation remark (UUIDv4)",
+    )
+
+    application_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "operation_application.application_id",
+            ondelete="CASCADE",
+            name="fk_op_remark_application_id",
+        ),
+        nullable=False,
+        index=True,
+        comment="Foreign key referencing operation_application.application_id (ON DELETE CASCADE)",
+    )
+
+    author_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "user_master.user_id",
+            ondelete="RESTRICT",
+            name="fk_op_remark_author_user_id",
+        ),
+        nullable=False,
+        index=True,
+        comment="User who authored this operation remark",
+    )
+
+    remark_text: Mapped[str] = mapped_column(
+        String(2000),
+        nullable=False,
+        comment="Remark explanation or status update text",
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        index=True,
+        comment="Timestamp when remark was recorded (UTC)",
+    )
+
+    # Relationships
+    application: Mapped["OperationApplication"] = relationship(
+        "OperationApplication",
+        back_populates="remarks",
+    )
+
+    author: Mapped["User"] = relationship(
+        "User",
+        foreign_keys=[author_user_id],
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<OperationRemark(remark_id='{self.remark_id}', "
+            f"app_id='{self.application_id}', "
+            f"author_id='{self.author_user_id}')>"
+        )

@@ -15,6 +15,8 @@ from app.schemas.operation_application import (
     ApplicationStatusUpdateRequest,
     OperationApplicationDetailRead,
     OperationApplicationRead,
+    OperationRemarkCreate,
+    OperationRemarkRead,
     OperationsDashboardResponse,
     OperationsTaskListResponse,
     TaskAssignRequest,
@@ -378,3 +380,67 @@ def list_operations_assignees(
         )
         for u in users
     ]
+
+
+@router.post(
+    "/tasks/{application_id}/remarks",
+    response_model=OperationRemarkRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Add Operations Remark to Task",
+    description="Add a chronological remark regarding delay reasons, blockers, or statutory follow-ups to an assigned task.",
+    dependencies=[Depends(require_module_permission("OPERATIONS", "view"))],
+)
+def add_operation_remark(
+    application_id: uuid.UUID,
+    payload: OperationRemarkCreate,
+    current_user: User = Depends(require_fully_activated_user),
+    session: Session = Depends(get_db),
+) -> OperationRemarkRead:
+    try:
+        remark = operation_service.add_operation_remark(
+            session=session,
+            application_id=application_id,
+            remark_text=payload.remark_text,
+            author=current_user,
+        )
+        session.commit()
+        session.refresh(remark)
+        return operation_service._to_remark_read(remark)
+    except operation_service.ApplicationNotFoundError as e:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except permissions.PermissionDeniedError as e:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except ValueError as e:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.get(
+    "/tasks/{application_id}/remarks",
+    response_model=List[OperationRemarkRead],
+    status_code=status.HTTP_200_OK,
+    summary="Get Operations Remarks History",
+    description="Retrieve all chronological remarks recorded on the task.",
+    dependencies=[Depends(require_module_permission("OPERATIONS", "view"))],
+)
+def list_operation_remarks(
+    application_id: uuid.UUID,
+    current_user: User = Depends(require_fully_activated_user),
+    session: Session = Depends(get_db),
+) -> List[OperationRemarkRead]:
+    try:
+        return operation_service.get_operation_remarks(
+            session=session,
+            application_id=application_id,
+            user=current_user,
+        )
+    except operation_service.ApplicationNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except permissions.PermissionDeniedError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+

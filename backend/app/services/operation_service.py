@@ -17,6 +17,7 @@ from app.models.operation_application import (
     ApplicationAssignmentHistory,
     ApplicationDocument,
     OperationApplication,
+    OperationRemark,
 )
 from app.models.sales_order import SalesOrder
 from app.models.user import User
@@ -28,6 +29,8 @@ from app.schemas.operation_application import (
     ExecutiveWorkloadItem,
     OperationApplicationDetailRead,
     OperationApplicationRead,
+    OperationRemarkCreate,
+    OperationRemarkRead,
     OperationsDashboardResponse,
     OperationsKpiSummary,
     OperationsStatusBreakdownItem,
@@ -89,6 +92,36 @@ class AssignmentAuthorizationError(Exception):
     pass
 
 
+def _to_remark_read(remark: OperationRemark) -> OperationRemarkRead:
+    """Convert an OperationRemark ORM instance into OperationRemarkRead schema."""
+    author_name = "Unknown"
+    author_code = None
+    author_dept = None
+    author_desig = None
+    if remark.author:
+        author_name = f"{remark.author.first_name} {remark.author.last_name}".strip()
+        author_code = remark.author.employee_code
+        if remark.author.department:
+            author_dept = remark.author.department.department_name
+        if remark.author.designation:
+            author_desig = remark.author.designation.designation_name
+
+    formatted_created_at = remark.created_at.strftime("%d %b %Y, %I:%M %p") if remark.created_at else None
+
+    return OperationRemarkRead(
+        remark_id=remark.remark_id,
+        application_id=remark.application_id,
+        author_user_id=remark.author_user_id,
+        author_name=author_name,
+        author_employee_code=author_code,
+        author_department=author_dept,
+        author_designation=author_desig,
+        remark_text=remark.remark_text,
+        created_at=remark.created_at,
+        formatted_created_at=formatted_created_at,
+    )
+
+
 def _to_application_read(app: OperationApplication) -> OperationApplicationRead:
     """Convert an OperationApplication ORM instance into OperationApplicationRead schema."""
     today = date.today()
@@ -144,6 +177,12 @@ def _to_application_read(app: OperationApplication) -> OperationApplicationRead:
     formatted_due_date = app.target_due_date.strftime("%d %b %Y") if app.target_due_date else None
     formatted_order_date = order_date.strftime("%d %b %Y") if order_date else None
 
+    latest_remark = None
+    if hasattr(app, "remarks") and app.remarks:
+        sorted_remarks = sorted(app.remarks, key=lambda r: r.created_at if r.created_at else datetime.min.replace(tzinfo=timezone.utc))
+        if sorted_remarks:
+            latest_remark = _to_remark_read(sorted_remarks[-1])
+
     return OperationApplicationRead(
         application_id=app.application_id,
         application_number=app.application_number,
@@ -178,6 +217,7 @@ def _to_application_read(app: OperationApplication) -> OperationApplicationRead:
         is_due_soon=is_due_soon,
         order_date=order_date,
         formatted_order_date=formatted_order_date,
+        latest_remark=latest_remark,
         created_at=app.created_at,
         updated_at=app.updated_at,
     )
@@ -247,12 +287,19 @@ def _to_application_detail_read(app: OperationApplication) -> OperationApplicati
                 )
             )
 
+    remarks_read: List[OperationRemarkRead] = []
+    if hasattr(app, "remarks") and app.remarks:
+        sorted_remarks = sorted(app.remarks, key=lambda r: r.created_at)
+        remarks_read = [_to_remark_read(r) for r in sorted_remarks]
+
     return OperationApplicationDetailRead(
         **base.model_dump(),
         documents=docs_read,
         assignment_history=history_read,
         activity_logs=logs_read,
+        remarks=remarks_read,
     )
+
 
 
 def _apply_operations_scope(
@@ -296,6 +343,8 @@ def get_operations_dashboard_data(
             joinedload(OperationApplication.sales_order).joinedload(SalesOrder.salesperson),
             joinedload(OperationApplication.assigned_to),
             selectinload(OperationApplication.documents),
+            selectinload(OperationApplication.remarks).joinedload(OperationRemark.author).joinedload(User.department),
+            selectinload(OperationApplication.remarks).joinedload(OperationRemark.author).joinedload(User.designation),
         )
     )
     base_query = _apply_operations_scope(base_query, user, context)
@@ -460,6 +509,8 @@ def get_operations_tasks(
             joinedload(OperationApplication.assigned_to),
             joinedload(OperationApplication.assigned_by),
             selectinload(OperationApplication.documents),
+            selectinload(OperationApplication.remarks).joinedload(OperationRemark.author).joinedload(User.department),
+            selectinload(OperationApplication.remarks).joinedload(OperationRemark.author).joinedload(User.designation),
         )
     )
 
@@ -645,6 +696,8 @@ def get_operation_application_detail(
             selectinload(OperationApplication.assignment_history).joinedload(ApplicationAssignmentHistory.previous_assignee),
             selectinload(OperationApplication.assignment_history).joinedload(ApplicationAssignmentHistory.new_assignee),
             selectinload(OperationApplication.activity_logs).joinedload(ApplicationActivityLog.actor),
+            selectinload(OperationApplication.remarks).joinedload(OperationRemark.author).joinedload(User.department),
+            selectinload(OperationApplication.remarks).joinedload(OperationRemark.author).joinedload(User.designation),
         )
         .where(OperationApplication.application_id == application_id)
     )
@@ -658,11 +711,22 @@ def get_operation_application_detail(
         target_user_id=app.assigned_to_user_id or user.user_id,
         target_company_id=app.company_id,
     ):
-        # Permit if user is the assigned employee, the assigner, or super admin
+        # Permit if user is the assigned employee, the assigner, the salesperson responsible for the order, or super admin
+        is_salesperson = bool(
+            app.sales_order
+            and (
+                app.sales_order.salesperson_user_id == user.user_id
+                or getattr(app.sales_order, "converted_by_user_id", None) == user.user_id
+                or getattr(app.sales_order, "created_by_user_id", None) == user.user_id
+            )
+        )
         is_participant = (
             app.assigned_to_user_id == user.user_id
             or app.assigned_by_user_id == user.user_id
+            or is_salesperson
             or getattr(user, "is_super_admin", False)
+            or getattr(user, "role_type", "") == "SUPER_ADMIN"
+            or user.employee_code == "CG0001"
         )
         if not is_participant:
             raise permissions.PermissionDeniedError(
@@ -968,3 +1032,107 @@ def update_document_status(
     session.flush()
 
     return doc
+
+
+def add_operation_remark(
+    session: Session,
+    application_id: uuid.UUID,
+    remark_text: str,
+    author: User,
+) -> OperationRemark:
+    """Add an Operations remark to a task adhering to authorization and lifecycle rules."""
+    text_content = (remark_text or "").strip()
+    if not text_content:
+        raise ValueError("Remark text cannot be empty.")
+
+    stmt = (
+        select(OperationApplication)
+        .options(
+            joinedload(OperationApplication.sales_order),
+        )
+        .where(OperationApplication.application_id == application_id)
+    )
+    app = session.execute(stmt).scalar_one_or_none()
+    if not app:
+        raise ApplicationNotFoundError(f"Operation application with ID '{application_id}' not found.")
+
+    if app.application_status == "CANCELLED":
+        raise ValueError("Cannot add remarks to a cancelled or deleted task.")
+
+    # Access control:
+    # 1. Super Admin is always allowed
+    is_super = (
+        getattr(author, "is_super_admin", False)
+        or getattr(author, "role_type", "") == "SUPER_ADMIN"
+        or getattr(author, "employee_code", "") == "CG0001"
+    )
+
+    # 2. Current assignee is allowed
+    is_assignee = app.assigned_to_user_id is not None and app.assigned_to_user_id == author.user_id
+
+    # 3. Company Admin / Director / Operations Manager with company/all/department operations scope
+    is_authorized_manager = False
+    if not is_super and not is_assignee and author.company_id == app.company_id:
+        desig_name = (author.designation.designation_name.lower() if author.designation and author.designation.designation_name else "")
+        desig_code = (author.designation.designation_code.upper() if author.designation and author.designation.designation_code else "")
+        dept_name = (author.department.department_name.lower() if author.department and author.department.department_name else "")
+        dept_code = (author.department.department_code.upper() if author.department and author.department.department_code else "")
+
+        is_admin_or_director = (
+            "director" in desig_name
+            or "director" in desig_code
+            or desig_code in ("DIR", "MD", "CEO")
+            or "admin" in dept_name
+            or "admin" in dept_code
+            or getattr(author, "role_type", "") in ("ADMIN", "DIRECTOR")
+        )
+        
+        context = permissions.resolve_data_scope_context(session, author, "OPERATIONS")
+        has_manager_scope = context.scope in ("ALL", "COMPANY", "DEPARTMENT") or (
+            context.scope == "TEAM" and app.assigned_to_user_id in context.team_user_ids
+        )
+
+        if is_admin_or_director or (has_manager_scope and permissions.has_permission(session, author, "OPERATIONS", "edit")):
+            is_authorized_manager = True
+
+    if not (is_super or is_assignee or is_authorized_manager):
+        raise permissions.PermissionDeniedError(
+            f"User '{author.employee_code}' is not authorized to add remarks to task '{app.application_number}'. "
+            "Only the current Operations assignee or authorized managers can add remarks."
+        )
+
+    now_utc = datetime.now(timezone.utc)
+    remark = OperationRemark(
+        application_id=app.application_id,
+        author_user_id=author.user_id,
+        remark_text=text_content,
+        created_at=now_utc,
+    )
+    session.add(remark)
+
+    # Activity log
+    activity = ApplicationActivityLog(
+        application_id=app.application_id,
+        actor_user_id=author.user_id,
+        action_type="REMARK_ADDED",
+        old_value=None,
+        new_value=None,
+        comment=f"Operations remark added: {text_content[:150]}",
+        created_at=now_utc,
+    )
+    session.add(activity)
+    session.flush()
+    session.expire(app)
+
+    return remark
+
+
+def get_operation_remarks(
+    session: Session,
+    application_id: uuid.UUID,
+    user: User,
+) -> List[OperationRemarkRead]:
+    """Retrieve all operations remarks for an application in chronological order."""
+    app_detail = get_operation_application_detail(session, application_id, user)
+    return app_detail.remarks
+

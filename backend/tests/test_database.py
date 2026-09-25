@@ -74,6 +74,7 @@ def test_registered_tables_in_metadata() -> None:
         "application_document",
         "application_assignment_history",
         "application_activity_log",
+        "operation_remark",
     }
 
 

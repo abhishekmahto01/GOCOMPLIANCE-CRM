@@ -956,3 +956,285 @@ class TestOperationsAPI:
         assert detail_data["assignment_history"][1]["new_assignee_name"] == "Mansi Sharma"
         assert detail_data["assignment_history"][1]["previous_assignee_name"] is None
 
+
+class TestOperationsRemarks:
+    """Focused test suite for Operations Remarks on assigned tasks."""
+
+    def test_current_assignee_can_add_remark_successfully(
+        self, client: TestClient, db_session: Session, ops_test_fixture: dict
+    ):
+        """Verify that the current assignee can add an Operations remark and view it in detail."""
+        ops_deepak = ops_test_fixture["ops_deepak"]
+        app1 = ops_test_fixture["app1"]  # Assigned to Deepak
+
+        headers = auth_header(ops_deepak)
+
+        payload = {"remark_text": "Awaiting municipal inspection report. Department inspector scheduled for next Monday."}
+        res = client.post(f"/api/operations/tasks/{app1.application_id}/remarks", json=payload, headers=headers)
+        assert res.status_code == 201
+        data = res.json()
+        assert data["remark_text"] == payload["remark_text"]
+        assert data["author_user_id"] == str(ops_deepak.user_id)
+        assert data["author_name"] == "Deepak Kumar"
+        assert data["author_employee_code"] == "OP0002"
+        assert data["author_department"] == "Operations Department"
+        assert data["formatted_created_at"] is not None
+
+        # Verify task detail includes remarks and latest_remark
+        detail_res = client.get(f"/api/operations/tasks/{app1.application_id}", headers=headers)
+        assert detail_res.status_code == 200
+        detail = detail_res.json()
+        assert len(detail["remarks"]) == 1
+        assert detail["remarks"][0]["remark_text"] == payload["remark_text"]
+        assert detail["latest_remark"] is not None
+        assert detail["latest_remark"]["remark_text"] == payload["remark_text"]
+
+    def test_unauthorized_employee_denied_from_adding_remark(
+        self, client: TestClient, db_session: Session, ops_test_fixture: dict
+    ):
+        """Verify that an Operations employee NOT assigned to the task is denied (HTTP 403)."""
+        ops_mansi = ops_test_fixture["ops_mansi"]  # Not assigned to app1 (app1 is assigned to Deepak)
+        app1 = ops_test_fixture["app1"]
+
+        headers = auth_header(ops_mansi)
+
+        payload = {"remark_text": "Crafted remark attempt by another employee."}
+        res = client.post(f"/api/operations/tasks/{app1.application_id}/remarks", json=payload, headers=headers)
+        assert res.status_code == 403
+        assert "not authorized" in res.json()["detail"].lower()
+
+    def test_chronological_remarks_history_preserved_in_order(
+        self, client: TestClient, db_session: Session, ops_test_fixture: dict
+    ):
+        """Verify that multiple sequential remarks are preserved in chronological order without overwriting."""
+        ops_deepak = ops_test_fixture["ops_deepak"]
+        app1 = ops_test_fixture["app1"]
+
+        headers = auth_header(ops_deepak)
+
+        remarks_texts = [
+            "Month 1: Initial dossier submitted to statutory portal. Awaiting acknowledgement number.",
+            "Month 2: Authority raised query regarding electricity bill clarity. Re-uploaded high-res scan.",
+            "Month 3: Physical verification completed by field officer. Final clearance certificate pending signature.",
+        ]
+
+        for text in remarks_texts:
+            res = client.post(f"/api/operations/tasks/{app1.application_id}/remarks", json={"remark_text": text}, headers=headers)
+            assert res.status_code == 201
+
+        # Check list endpoint
+        list_res = client.get(f"/api/operations/tasks/{app1.application_id}/remarks", headers=headers)
+        assert list_res.status_code == 200
+        remarks_list = list_res.json()
+        assert len(remarks_list) == 3
+        assert [r["remark_text"] for r in remarks_list] == remarks_texts
+
+        # Check detail endpoint
+        detail_res = client.get(f"/api/operations/tasks/{app1.application_id}", headers=headers)
+        assert detail_res.status_code == 200
+        detail = detail_res.json()
+        assert len(detail["remarks"]) == 3
+        assert [r["remark_text"] for r in detail["remarks"]] == remarks_texts
+        # Latest remark matches last item
+        assert detail["latest_remark"]["remark_text"] == remarks_texts[-1]
+
+    def test_completed_task_allows_remarks_without_changing_status(
+        self, client: TestClient, db_session: Session, ops_test_fixture: dict
+    ):
+        """Verify that completed (APPROVED) tasks accept remarks for follow-up context without changing status or sales order."""
+        ops_manager = ops_test_fixture["ops_manager"]
+        ops_deepak = ops_test_fixture["ops_deepak"]
+        app1 = ops_test_fixture["app1"]
+
+        # Advance app1 to APPROVED
+        manager_headers = auth_header(ops_manager)
+
+        client.post(f"/api/operations/tasks/{app1.application_id}/status", json={"new_status": "IN_PROGRESS"}, headers=manager_headers)
+        client.post(f"/api/operations/tasks/{app1.application_id}/status", json={"new_status": "SUBMITTED"}, headers=manager_headers)
+        approved_res = client.post(f"/api/operations/tasks/{app1.application_id}/status", json={"new_status": "APPROVED"}, headers=manager_headers)
+        assert approved_res.status_code == 200
+        approved_detail = approved_res.json()
+        assert approved_detail["application_status"] == "APPROVED"
+        assert approved_detail["completion_date"] is not None
+
+        # Deepak adds remark on completed task
+        deepak_headers = auth_header(ops_deepak)
+
+        follow_up_text = "Follow-up: License soft copy emailed to client. Hard copy dispatched via SpeedPost tracking #SP98765."
+        rem_res = client.post(
+            f"/api/operations/tasks/{app1.application_id}/remarks",
+            json={"remark_text": follow_up_text},
+            headers=deepak_headers,
+        )
+        assert rem_res.status_code == 201
+
+        # Check detail: status remains APPROVED and completion date is unchanged
+        detail_res = client.get(f"/api/operations/tasks/{app1.application_id}", headers=deepak_headers)
+        assert detail_res.status_code == 200
+        detail = detail_res.json()
+        assert detail["application_status"] == "APPROVED"
+        assert detail["completion_date"] == approved_detail["completion_date"]
+        assert len(detail["remarks"]) == 1
+        assert detail["remarks"][0]["remark_text"] == follow_up_text
+
+        # Verify sales order was not altered
+        sales_order = db_session.get(SalesOrder, app1.sales_order_id)
+        assert sales_order.order_value == Decimal("45000.00")
+
+    def test_cancelled_deleted_task_denies_remarks(
+        self, client: TestClient, db_session: Session, ops_test_fixture: dict
+    ):
+        """Verify that cancelled / deleted tasks reject adding remarks (HTTP 400)."""
+        ops_manager = ops_test_fixture["ops_manager"]
+        ops_deepak = ops_test_fixture["ops_deepak"]
+        app1 = ops_test_fixture["app1"]
+
+        manager_headers = auth_header(ops_manager)
+
+        # Cancel the task
+        cancel_res = client.post(f"/api/operations/tasks/{app1.application_id}/status", json={"new_status": "CANCELLED"}, headers=manager_headers)
+        assert cancel_res.status_code == 200
+
+        # Attempt to add remark
+        deepak_headers = auth_header(ops_deepak)
+
+        rem_res = client.post(
+            f"/api/operations/tasks/{app1.application_id}/remarks",
+            json={"remark_text": "Remark on cancelled task should fail."},
+            headers=deepak_headers,
+        )
+        assert rem_res.status_code == 400
+        assert "cancelled or deleted" in rem_res.json()["detail"].lower()
+
+    def test_remark_validation_rejects_empty_or_whitespace_text(
+        self, client: TestClient, db_session: Session, ops_test_fixture: dict
+    ):
+        """Verify that empty or whitespace-only remark text is rejected."""
+        ops_deepak = ops_test_fixture["ops_deepak"]
+        app1 = ops_test_fixture["app1"]
+
+        headers = auth_header(ops_deepak)
+
+        # Empty string
+        res1 = client.post(f"/api/operations/tasks/{app1.application_id}/remarks", json={"remark_text": ""}, headers=headers)
+        assert res1.status_code == 422
+
+        # Whitespace-only string
+        res2 = client.post(f"/api/operations/tasks/{app1.application_id}/remarks", json={"remark_text": "     "}, headers=headers)
+        assert res2.status_code == 422
+
+    def test_originating_salesperson_and_admin_can_view_remarks_history(
+        self, client: TestClient, db_session: Session, ops_test_fixture: dict
+    ):
+        """Verify that the salesperson responsible for the order and Admin/Super Admin can view remarks history."""
+        company = ops_test_fixture["company"]
+        ops_manager = ops_test_fixture["ops_manager"]
+        ops_deepak = ops_test_fixture["ops_deepak"]
+        app1 = ops_test_fixture["app1"]  # Converted by ops_manager, assigned to Deepak
+
+        deepak_headers = auth_header(ops_deepak)
+        client.post(
+            f"/api/operations/tasks/{app1.application_id}/remarks",
+            json={"remark_text": "Application under scrutiny at the zonal directorate."},
+            headers=deepak_headers,
+        )
+
+        # Salesperson (ops_manager who converted order1) views task remarks
+        manager_headers = auth_header(ops_manager)
+        sales_res = client.get(f"/api/operations/tasks/{app1.application_id}/remarks", headers=manager_headers)
+        assert sales_res.status_code == 200
+        sales_remarks = sales_res.json()
+        assert len(sales_remarks) == 1
+        assert sales_remarks[0]["author_name"] == "Deepak Kumar"
+
+        # Super Admin views task detail and remarks
+        super_admin_user = User(
+            employee_code="CG0001",
+            company_id=company.company_id,
+            department_id=ops_manager.department_id,
+            designation_id=ops_manager.designation_id,
+            first_name="Super",
+            last_name="Admin",
+            official_email="superadmin.remarks@testcorp.com",
+            mobile_number="+919876540099",
+            date_of_joining=date(2024, 1, 1),
+            employment_type="FULL_TIME",
+            account_status="ACTIVE",
+            must_change_password=False,
+        )
+        db_session.add(super_admin_user)
+        db_session.flush()
+
+        sa_headers = auth_header(super_admin_user)
+        sa_res = client.get(f"/api/operations/tasks/{app1.application_id}", headers=sa_headers)
+        assert sa_res.status_code == 200
+        sa_detail = sa_res.json()
+        assert len(sa_detail["remarks"]) == 1
+        assert sa_detail["latest_remark"]["remark_text"] == "Application under scrutiny at the zonal directorate."
+
+    def test_task_list_includes_latest_remark_and_no_remark_state(
+        self, client: TestClient, db_session: Session, ops_test_fixture: dict
+    ):
+        """Verify that list endpoint returns newest remark preview, None for un-remarked tasks, and updates on new remark."""
+        ops_deepak = ops_test_fixture["ops_deepak"]
+        ops_manager = ops_test_fixture["ops_manager"]
+        app1 = ops_test_fixture["app1"]  # assigned to Deepak
+        app2 = ops_test_fixture["app2"]  # unassigned
+
+        deepak_headers = auth_header(ops_deepak)
+        manager_headers = auth_header(ops_manager)
+
+        # 1. Initially app1 has no remarks -> latest_remark is None
+        list_res1 = client.get("/api/operations/tasks/my-tasks", headers=deepak_headers)
+        assert list_res1.status_code == 200
+        items1 = list_res1.json()["items"]
+        app1_item = next((i for i in items1 if i["application_id"] == str(app1.application_id)), None)
+        assert app1_item is not None
+        assert app1_item["latest_remark"] is None
+
+        # 2. Add initial remark
+        rem1_res = client.post(
+            f"/api/operations/tasks/{app1.application_id}/remarks",
+            json={"remark_text": "Remark 1: Waiting for client bank statement."},
+            headers=deepak_headers,
+        )
+        assert rem1_res.status_code == 201
+
+        # Check list endpoint reflects first remark
+        list_res2 = client.get("/api/operations/tasks/my-tasks", headers=deepak_headers)
+        assert list_res2.status_code == 200
+        items2 = list_res2.json()["items"]
+        app1_item_updated = next(i for i in items2 if i["application_id"] == str(app1.application_id))
+        assert app1_item_updated["latest_remark"] is not None
+        assert app1_item_updated["latest_remark"]["remark_text"] == "Remark 1: Waiting for client bank statement."
+        assert app1_item_updated["latest_remark"]["author_name"] == "Deepak Kumar"
+
+        # 3. Add second, newer remark
+        rem2_res = client.post(
+            f"/api/operations/tasks/{app1.application_id}/remarks",
+            json={"remark_text": "Remark 2: Bank statement received and submitted to portal."},
+            headers=deepak_headers,
+        )
+        assert rem2_res.status_code == 201
+
+        # Check list endpoint reflects newest remark immediately
+        list_res3 = client.get("/api/operations/tasks/my-tasks", headers=deepak_headers)
+        assert list_res3.status_code == 200
+        items3 = list_res3.json()["items"]
+        app1_item_newest = next(i for i in items3 if i["application_id"] == str(app1.application_id))
+        assert app1_item_newest["latest_remark"]["remark_text"] == "Remark 2: Bank statement received and submitted to portal."
+
+        # Verify manager list also shows newest remark
+        mgr_list_res = client.get("/api/operations/tasks", headers=manager_headers)
+        assert mgr_list_res.status_code == 200
+        mgr_items = mgr_list_res.json()["items"]
+        mgr_app1 = next(i for i in mgr_items if i["application_id"] == str(app1.application_id))
+        assert mgr_app1["latest_remark"]["remark_text"] == "Remark 2: Bank statement received and submitted to portal."
+        # app2 (which has no remark) still has None
+        mgr_app2 = next((i for i in mgr_items if i["application_id"] == str(app2.application_id)), None)
+        if mgr_app2:
+            assert mgr_app2["latest_remark"] is None
+
+
+
+
