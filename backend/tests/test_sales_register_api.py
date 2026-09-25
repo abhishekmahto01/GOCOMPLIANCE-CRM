@@ -272,7 +272,7 @@ def sales_fixture(db_session: Session):
                 can_view=True,
                 can_create=True,
                 can_edit=True,
-                can_delete=False,
+                can_delete=True,
                 can_export=True,
                 data_scope="SELF",
                 status="ACTIVE",
@@ -288,7 +288,7 @@ def sales_fixture(db_session: Session):
                 can_view=True,
                 can_create=True,
                 can_edit=True,
-                can_delete=False,
+                can_delete=True,
                 can_export=True,
                 data_scope="SELF",
                 status="ACTIVE",
@@ -1619,6 +1619,366 @@ def test_sales_form_options_and_dashboard_filter_contain_only_sales_employees(
     assert str(f["rep1"].user_id) in filter_emp_ids
     assert str(f["karishma"].user_id) not in filter_emp_ids
     assert str(f["mansi"].user_id) not in filter_emp_ids
+
+
+def test_sales_order_delete_by_owner_succeeds_for_unassigned_order(
+    client: TestClient, db_session: Session, sales_fixture: dict
+):
+    """Test that a salesperson can successfully delete their own unassigned sales order."""
+    f = sales_fixture
+    rep1 = f["rep1"]
+    rep1_headers = auth_headers(rep1)
+
+    # Create unassigned sales order
+    create_resp = client.post(
+        "/api/sales/orders",
+        json={
+            "client_name": "Acme Deletion Corp",
+            "contact_no": "+919111122222",
+            "service_id": str(f["srv1"].service_id),
+            "lead_source": "DIRECT",
+            "order_date": "2025-02-10",
+            "order_value": 50000.0,
+            "amount_received": 15000.0,
+            "govt_fees": 5000.0,
+            "incidental_cost": 2000.0,
+            "auto_confirm": False,
+        },
+        headers=rep1_headers,
+    )
+    assert create_resp.status_code == 201
+    created_order = create_resp.json()
+    order_id = created_order["order_id"]
+    order_num = created_order["order_number"]
+
+    # Rep 1 deletes their own order
+    del_resp = client.delete(f"/api/sales/orders/{order_id}", headers=rep1_headers)
+    assert del_resp.status_code == 200
+    del_data = del_resp.json()
+    assert del_data["order_id"] == order_id
+    assert del_data["confirmation_status"] == "CANCELLED"
+    assert del_data["work_status"] == "CANCELLED"
+
+    # Subsequent GET returns 404
+    get_resp = client.get(f"/api/sales/orders/{order_id}", headers=rep1_headers)
+    assert get_resp.status_code == 404
+
+    # Disappears from default Sales Register view
+    reg_resp = client.get("/api/sales/register", headers=rep1_headers)
+    assert reg_resp.status_code == 200
+    reg_items = reg_resp.json()["items"]
+    assert not any(item["order_id"] == order_id for item in reg_items)
+
+
+def test_sales_order_delete_by_owner_succeeds_and_cancels_assigned_ops_task(
+    client: TestClient, db_session: Session, sales_fixture: dict
+):
+    """Test that deleting an assigned sales entry atomically cancels the Operations task and removes it from assignee's queue."""
+    f = sales_fixture
+    rep1 = f["rep1"]
+    mansi = f["mansi"]
+    rep1_headers = auth_headers(rep1)
+    mansi_headers = auth_headers(mansi)
+
+    # 1. Create order and assign to Mansi
+    create_resp = client.post(
+        "/api/sales/orders",
+        json={
+            "client_name": "Task Disappear Ltd",
+            "contact_no": "+919333344444",
+            "service_id": str(f["srv1"].service_id),
+            "lead_source": "WEBSITE",
+            "order_date": "2025-02-12",
+            "order_value": 75000.0,
+            "amount_received": 25000.0,
+            "govt_fees": 10000.0,
+            "incidental_cost": 5000.0,
+            "auto_confirm": True,
+            "assignee_user_id": str(mansi.user_id),
+        },
+        headers=rep1_headers,
+    )
+    assert create_resp.status_code == 201
+    order = create_resp.json()
+    order_id = order["order_id"]
+
+    # 2. Verify Mansi sees this task in My Assigned Tasks
+    tasks_resp = client.get("/api/operations/tasks/my-tasks", headers=mansi_headers)
+    assert tasks_resp.status_code == 200
+    my_tasks = tasks_resp.json()["items"]
+    assert any(t["sales_order_id"] == order_id for t in my_tasks)
+
+    # 3. Rep 1 deletes the sales order
+    del_resp = client.delete(f"/api/sales/orders/{order_id}", headers=rep1_headers)
+    assert del_resp.status_code == 200
+
+    # 4. Verify task is immediately removed from Mansi's My Assigned Tasks
+    tasks_after_resp = client.get("/api/operations/tasks/my-tasks", headers=mansi_headers)
+    assert tasks_after_resp.status_code == 200
+    my_tasks_after = tasks_after_resp.json()["items"]
+    assert not any(t["sales_order_id"] == order_id for t in my_tasks_after)
+
+    # 5. Verify task is also not in unassigned queue
+    unassigned_resp = client.get("/api/operations/tasks/unassigned", headers=mansi_headers)
+    assert unassigned_resp.status_code == 200
+    unassigned_tasks = unassigned_resp.json()["items"]
+    assert not any(t["sales_order_id"] == order_id for t in unassigned_tasks)
+
+    # 6. Check database state of OperationApplication
+    app = db_session.query(OperationApplication).filter(OperationApplication.sales_order_id == uuid.UUID(order_id)).first()
+    assert app is not None
+    assert app.application_status == "CANCELLED"
+    assert app.assigned_to_user_id is None
+
+
+def test_sales_order_delete_by_another_salesperson_denied_403(
+    client: TestClient, db_session: Session, sales_fixture: dict
+):
+    """Test that a salesperson cannot delete an order owned by another salesperson."""
+    f = sales_fixture
+    rep1_headers = auth_headers(f["rep1"])
+    other_rep_headers = auth_headers(f["other_rep"])
+
+    # Rep 1 creates an order
+    create_resp = client.post(
+        "/api/sales/orders",
+        json={
+            "client_name": "Protected Client Inc",
+            "contact_no": "+919555566666",
+            "service_id": str(f["srv1"].service_id),
+            "lead_source": "DIRECT",
+            "order_date": "2025-02-14",
+            "order_value": 40000.0,
+            "amount_received": 10000.0,
+            "govt_fees": 5000.0,
+            "incidental_cost": 1000.0,
+            "auto_confirm": False,
+        },
+        headers=rep1_headers,
+    )
+    assert create_resp.status_code == 201
+    order_id = create_resp.json()["order_id"]
+
+    # Other Rep attempts to delete Rep 1's order -> 403 Forbidden
+    del_resp = client.delete(f"/api/sales/orders/{order_id}", headers=other_rep_headers)
+    assert del_resp.status_code == 403
+
+    # Verify order is still intact
+    order_in_db = db_session.query(SalesOrder).filter(SalesOrder.order_id == uuid.UUID(order_id)).first()
+    assert order_in_db is not None
+    assert order_in_db.confirmation_status != "CANCELLED"
+
+
+def test_sales_order_delete_by_admin_succeeds_for_eligible_order(
+    client: TestClient, db_session: Session, sales_fixture: dict
+):
+    """Test that Admin (COMPANY scope) can delete an eligible sales order within company."""
+    f = sales_fixture
+    rep1_headers = auth_headers(f["rep1"])
+    admin_headers = auth_headers(f["karishma"])
+
+    # Rep 1 creates order
+    create_resp = client.post(
+        "/api/sales/orders",
+        json={
+            "client_name": "Admin Eligible Corp",
+            "contact_no": "+919777788888",
+            "service_id": str(f["srv1"].service_id),
+            "lead_source": "REFERRAL",
+            "order_date": "2025-02-15",
+            "order_value": 60000.0,
+            "amount_received": 20000.0,
+            "govt_fees": 8000.0,
+            "incidental_cost": 3000.0,
+            "auto_confirm": True,
+            "assignee_user_id": str(f["mansi"].user_id),
+        },
+        headers=rep1_headers,
+    )
+    assert create_resp.status_code == 201
+    order_id = create_resp.json()["order_id"]
+
+    # Admin deletes the order
+    del_resp = client.delete(f"/api/sales/orders/{order_id}", headers=admin_headers)
+    assert del_resp.status_code == 200
+    del_data = del_resp.json()
+    assert del_data["confirmation_status"] == "CANCELLED"
+
+    # Verify soft deleted in DB
+    order_in_db = db_session.query(SalesOrder).filter(SalesOrder.order_id == uuid.UUID(order_id)).first()
+    assert order_in_db.confirmation_status == "CANCELLED"
+
+
+def test_sales_order_delete_rejected_when_ops_task_completed_for_all_roles(
+    client: TestClient, db_session: Session, sales_fixture: dict
+):
+    """Test that if Operations task is Completed/Approved, deletion is strictly blocked for Rep, Manager, Admin."""
+    f = sales_fixture
+    rep1_headers = auth_headers(f["rep1"])
+    mgr_headers = auth_headers(f["manager"])
+    admin_headers = auth_headers(f["karishma"])
+
+    # 1. Create order and assign to Mansi
+    create_resp = client.post(
+        "/api/sales/orders",
+        json={
+            "client_name": "Completed Work Corp",
+            "contact_no": "+919888899999",
+            "service_id": str(f["srv1"].service_id),
+            "lead_source": "WEBSITE",
+            "order_date": "2025-02-16",
+            "order_value": 100000.0,
+            "amount_received": 50000.0,
+            "govt_fees": 20000.0,
+            "incidental_cost": 5000.0,
+            "auto_confirm": True,
+            "assignee_user_id": str(f["mansi"].user_id),
+        },
+        headers=rep1_headers,
+    )
+    assert create_resp.status_code == 201
+    order_id = create_resp.json()["order_id"]
+
+    # 2. Operations completes the task (mark as APPROVED)
+    app = db_session.query(OperationApplication).filter(OperationApplication.sales_order_id == uuid.UUID(order_id)).first()
+    assert app is not None
+    app.application_status = "APPROVED"
+    db_session.commit()
+
+    # 3. Rep 1 attempts to delete -> 400 Bad Request with specific message
+    rep_del = client.delete(f"/api/sales/orders/{order_id}", headers=rep1_headers)
+    assert rep_del.status_code == 400
+    assert rep_del.json()["detail"] == "This entry cannot be deleted because Operations has completed the task."
+
+    # 4. Manager attempts to delete -> 400 Bad Request
+    mgr_del = client.delete(f"/api/sales/orders/{order_id}", headers=mgr_headers)
+    assert mgr_del.status_code == 400
+    assert mgr_del.json()["detail"] == "This entry cannot be deleted because Operations has completed the task."
+
+    # 5. Admin attempts to delete -> 400 Bad Request
+    admin_del = client.delete(f"/api/sales/orders/{order_id}", headers=admin_headers)
+    assert admin_del.status_code == 400
+    assert admin_del.json()["detail"] == "This entry cannot be deleted because Operations has completed the task."
+
+    # Verify order and app remain intact
+    db_session.refresh(app)
+    assert app.application_status == "APPROVED"
+    order_in_db = db_session.query(SalesOrder).filter(SalesOrder.order_id == uuid.UUID(order_id)).first()
+    assert order_in_db.confirmation_status != "CANCELLED"
+
+
+def test_sales_order_delete_live_server_check_blocks_race_condition_completion(
+    client: TestClient, db_session: Session, sales_fixture: dict
+):
+    """Test race condition: task was in progress when modal opened, but Operations completed before confirming."""
+    f = sales_fixture
+    rep1_headers = auth_headers(f["rep1"])
+
+    # 1. Create order in progress
+    create_resp = client.post(
+        "/api/sales/orders",
+        json={
+            "client_name": "Race Condition Client",
+            "contact_no": "+919123456780",
+            "service_id": str(f["srv1"].service_id),
+            "lead_source": "DIRECT",
+            "order_date": "2025-02-18",
+            "order_value": 80000.0,
+            "amount_received": 30000.0,
+            "govt_fees": 15000.0,
+            "incidental_cost": 4000.0,
+            "auto_confirm": True,
+            "assignee_user_id": str(f["mansi"].user_id),
+        },
+        headers=rep1_headers,
+    )
+    assert create_resp.status_code == 201
+    order_id = create_resp.json()["order_id"]
+
+    # 2. Simulate Operations completing the task concurrently
+    app = db_session.query(OperationApplication).filter(OperationApplication.sales_order_id == uuid.UUID(order_id)).first()
+    app.application_status = "APPROVED"
+    db_session.commit()
+
+    # 3. Client confirms deletion
+    del_resp = client.delete(f"/api/sales/orders/{order_id}", headers=rep1_headers)
+    assert del_resp.status_code == 400
+    assert del_resp.json()["detail"] == "This entry cannot be deleted because Operations has completed the task."
+
+
+def test_deleted_sales_order_excluded_from_register_and_csv(
+    client: TestClient, db_session: Session, sales_fixture: dict
+):
+    """Test that soft-deleted sales order disappears from normal register and CSV export, but remains in audit."""
+    f = sales_fixture
+    rep1_headers = auth_headers(f["rep1"])
+
+    # Create Order 1 (to keep)
+    r1 = client.post(
+        "/api/sales/orders",
+        json={
+            "client_name": "Keep This Client",
+            "contact_no": "+919111111111",
+            "service_id": str(f["srv1"].service_id),
+            "lead_source": "WEBSITE",
+            "order_date": "2025-02-20",
+            "order_value": 50000.0,
+            "amount_received": 50000.0,
+            "govt_fees": 5000.0,
+            "incidental_cost": 2000.0,
+            "auto_confirm": False,
+        },
+        headers=rep1_headers,
+    )
+    assert r1.status_code == 201
+    order1 = r1.json()
+
+    # Create Order 2 (to delete)
+    r2 = client.post(
+        "/api/sales/orders",
+        json={
+            "client_name": "Delete This Client",
+            "contact_no": "+919222222222",
+            "service_id": str(f["srv1"].service_id),
+            "lead_source": "DIRECT",
+            "order_date": "2025-02-21",
+            "order_value": 45000.0,
+            "amount_received": 10000.0,
+            "govt_fees": 4000.0,
+            "incidental_cost": 1000.0,
+            "auto_confirm": False,
+        },
+        headers=rep1_headers,
+    )
+    assert r2.status_code == 201
+    order2 = r2.json()
+
+    # Delete Order 2
+    del_resp = client.delete(f"/api/sales/orders/{order2['order_id']}", headers=rep1_headers)
+    assert del_resp.status_code == 200
+
+    # 1. Normal Register: contains Order 1, does NOT contain Order 2
+    reg_resp = client.get("/api/sales/register", headers=rep1_headers)
+    assert reg_resp.status_code == 200
+    reg_items = reg_resp.json()["items"]
+    reg_ids = [item["order_id"] for item in reg_items]
+    assert order1["order_id"] in reg_ids
+    assert order2["order_id"] not in reg_ids
+
+    # 2. CSV Export: contains Order 1, does NOT contain Order 2
+    csv_resp = client.get("/api/sales/register/export", headers=rep1_headers)
+    assert csv_resp.status_code == 200
+    csv_text = csv_resp.text
+    assert "Keep This Client" in csv_text
+    assert "Delete This Client" not in csv_text
+
+    # 3. Audit view (filtering by CANCELLED): contains Order 2
+    cancelled_resp = client.get("/api/sales/register?work_status=CANCELLED", headers=rep1_headers)
+    assert cancelled_resp.status_code == 200
+    cancelled_items = cancelled_resp.json()["items"]
+    cancelled_ids = [item["order_id"] for item in cancelled_items]
+    assert order2["order_id"] in cancelled_ids
+
 
 
 

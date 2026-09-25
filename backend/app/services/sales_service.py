@@ -64,6 +64,11 @@ class SalesOrderPermissionError(Exception):
     pass
 
 
+class SalesOrderDeletionError(Exception):
+    """Raised when a sales order cannot be deleted due to business rules (e.g. Operations completed)."""
+    pass
+
+
 def is_sales_department_employee(u: Optional[User]) -> bool:
     """Validate that a user is an active employee belonging to the Sales department.
     
@@ -459,7 +464,7 @@ def update_sales_order(
 ) -> SalesOrderDetailRead:
     """Update an existing sales order's financial and sales fields with RBAC check and audit logging."""
     order = session.get(SalesOrder, order_id)
-    if not order:
+    if not order or order.confirmation_status == "CANCELLED":
         raise SalesOrderNotFoundError(f"Sales order with ID '{order_id}' not found.")
 
     # Check RBAC Permission & Data Scope
@@ -697,6 +702,137 @@ def update_sales_order(
     )
 
 
+def delete_sales_order(
+    session: Session,
+    order_id: uuid.UUID,
+    current_user: User,
+) -> SalesOrderDetailRead:
+    """Safely soft-delete a sales order and atomically cancel any non-completed Operations task.
+
+    Business Rules:
+    - Salesperson can delete only their own authorized sales entry (within data scope).
+    - Super Admin and Director/Admin can delete entries they are authorized to manage.
+    - An entry may be deleted while unassigned or assigned but not completed.
+    - If Operations task is COMPLETED/APPROVED, deletion is strictly blocked for all roles with message:
+      'This entry cannot be deleted because Operations has completed the task.'
+    - Checks live Operations status on the server in the current transaction.
+    - Atomically cancels the Operations application and removes assignee so it disappears from active task lists.
+    - Preserves order number in database for audit trail.
+    """
+    order = session.get(SalesOrder, order_id)
+    if not order or order.confirmation_status == "CANCELLED":
+        raise SalesOrderNotFoundError(f"Sales order with ID '{order_id}' not found.")
+
+    # 1. Check RBAC Permission & Data Scope
+    try:
+        scope_ctx = permissions.resolve_data_scope_context(session, current_user, "SALES_MY_ORDERS")
+    except permissions.PermissionDeniedError:
+        try:
+            scope_ctx = permissions.resolve_data_scope_context(session, current_user, "SALES_ALL_ORDERS")
+        except permissions.PermissionDeniedError:
+            raise SalesOrderPermissionError("You do not have permission to delete sales orders.")
+
+    if not scope_ctx.is_user_permitted(order.salesperson_user_id, order.company_id):
+        raise SalesOrderPermissionError("You are not authorized to delete this sales order.")
+
+    # 2. Check live Operations task status at deletion time
+    app = session.execute(
+        select(OperationApplication).where(OperationApplication.sales_order_id == order.order_id)
+    ).scalar_one_or_none()
+
+    if app:
+        if app.application_status in ("APPROVED", "COMPLETED"):
+            raise SalesOrderDeletionError("This entry cannot be deleted because Operations has completed the task.")
+
+    # 3. Soft delete order & cancel application atomically within transaction
+    order.confirmation_status = "CANCELLED"
+    order.updated_at = datetime.now(timezone.utc)
+
+    if app:
+        prev_assignee_id = app.assigned_to_user_id
+        prev_status = app.application_status
+
+        app.application_status = "CANCELLED"
+        app.assigned_to_user_id = None
+        app.updated_at = datetime.now(timezone.utc)
+
+        if prev_assignee_id:
+            unassign_history = ApplicationAssignmentHistory(
+                application_id=app.application_id,
+                previous_assignee_user_id=prev_assignee_id,
+                new_assignee_user_id=None,
+                assigned_by_user_id=current_user.user_id,
+                reason=f"Sales entry '{order.order_number}' deleted by {current_user.first_name} {current_user.last_name}.",
+                assigned_at=datetime.now(timezone.utc),
+            )
+            session.add(unassign_history)
+
+        activity = ApplicationActivityLog(
+            application_id=app.application_id,
+            actor_user_id=current_user.user_id,
+            action_type="APPLICATION_CANCELLED",
+            old_value=f"Status:{prev_status}|Assignee:{prev_assignee_id}",
+            new_value="Status:CANCELLED|Assignee:None",
+            comment=f"Sales order '{order.order_number}' deleted by {current_user.first_name} {current_user.last_name}.",
+            created_at=datetime.now(timezone.utc),
+        )
+        session.add(activity)
+
+    session.flush()
+
+    c_name = order.client.client_name if order.client else "—"
+    c_phone = order.client.contact_phone if order.client else "—"
+    s_name = order.service.service_name if order.service else "—"
+    s_code = order.service.service_code if order.service else ""
+    sp_name = f"{order.salesperson.first_name} {order.salesperson.last_name}".strip() if order.salesperson else "—"
+    sp_code = order.salesperson.employee_code if order.salesperson else ""
+
+    app_id = app.application_id if app else None
+    app_num = app.application_number if app else None
+
+    return SalesOrderDetailRead(
+        s_no=1,
+        order_id=order.order_id,
+        order_number=order.order_number,
+        company_id=order.company_id,
+        client_id=order.client_id,
+        service_id=order.service_id,
+        salesperson_user_id=order.salesperson_user_id,
+        lead_source=order.lead_source,
+        order_date=order.order_date,
+        formatted_date=order.order_date.strftime("%d %b %Y"),
+        order_value=order.order_value,
+        amount_received=order.amount_received,
+        balance_amount=order.balance_amount,
+        govt_fees=order.govt_fees,
+        incidental_cost=order.incidental_cost,
+        profit_amount=order.profit_amount,
+        payment_status=order.payment_status,
+        confirmation_status=order.confirmation_status,
+        confirmed_at=order.confirmed_at,
+        proforma_invoice_no=order.proforma_invoice_no,
+        tax_invoice_no=order.tax_invoice_no,
+        reimbursement_note=order.reimbursement_note,
+        notes=order.notes,
+        remarks=order.notes,
+        created_at=order.created_at,
+        updated_at=order.updated_at,
+        client_name=c_name,
+        contact_no=c_phone,
+        service_name=s_name,
+        service_code=s_code,
+        salesperson_name=sp_name,
+        salesperson_code=sp_code,
+        assigned_to_user_id=None,
+        assigned_to_name="Unassigned",
+        assigned_to_code=None,
+        work_status="CANCELLED",
+        application_id=app_id,
+        application_number=app_num,
+        operation_status="CANCELLED",
+    )
+
+
 def confirm_sales_order(
     session: Session,
     order_id: uuid.UUID,
@@ -705,7 +841,7 @@ def confirm_sales_order(
 ) -> SalesOrderConfirmResponse:
     """Confirm a sales order and execute idempotent transactional handoff to Operations."""
     order = session.get(SalesOrder, order_id)
-    if not order:
+    if not order or order.confirmation_status == "CANCELLED":
         raise SalesOrderNotFoundError(f"Sales order with ID '{order_id}' not found.")
 
     existing_app = session.execute(
@@ -858,6 +994,7 @@ def _apply_sales_filters(
     service_id: Optional[uuid.UUID] = None,
     lead_source: Optional[str] = None,
     payment_status: Optional[str] = None,
+    include_cancelled: bool = False,
 ) -> Any:
     """Apply RBAC data scoping and query filters to SalesOrder select query."""
     # 1. Base Scope
@@ -884,13 +1021,17 @@ def _apply_sales_filters(
         if employee_id:
             query = query.where(SalesOrder.salesperson_user_id == employee_id)
 
-    # 2. Date Range
+    # 2. Exclude soft-deleted/cancelled orders unless explicitly included
+    if not include_cancelled:
+        query = query.where(SalesOrder.confirmation_status != "CANCELLED")
+
+    # 3. Date Range
     if start_date:
         query = query.where(SalesOrder.order_date >= start_date)
     if end_date:
         query = query.where(SalesOrder.order_date <= end_date)
 
-    # 3. Attributes
+    # 4. Attributes
     if service_id:
         query = query.where(SalesOrder.service_id == service_id)
     if lead_source and lead_source != "ALL":
@@ -1470,6 +1611,8 @@ def get_sales_register_data(
         .outerjoin(OperationApplication, SalesOrder.order_id == OperationApplication.sales_order_id)
     )
 
+    include_cancelled = bool(work_status and work_status.strip().upper() == "CANCELLED")
+
     query = _apply_sales_filters(
         query,
         scope_ctx=scope_ctx,
@@ -1479,6 +1622,7 @@ def get_sales_register_data(
         service_id=service_id,
         lead_source=lead_source,
         payment_status=payment_status,
+        include_cancelled=include_cancelled,
     )
 
     if work_status and work_status != "ALL":
@@ -1798,7 +1942,7 @@ def assign_sales_order_operations(
 ) -> SalesOrderDetailRead:
     """Assign or reassign an order's operations application to an eligible Operations team member."""
     order = session.get(SalesOrder, order_id)
-    if not order:
+    if not order or order.confirmation_status == "CANCELLED":
         raise SalesOrderNotFoundError(f"Sales order with ID '{order_id}' not found.")
 
     # Authorization Check: order creator / salesperson, Operations manager / head / super admin / director

@@ -801,5 +801,138 @@ describe('Sales Entry & Sales Register Module Tests', () => {
       );
     });
   });
+
+  it('renders Delete button beside Edit in each row and opens confirmation modal', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ThemeProvider>
+        <AuthProvider>
+          <MemoryRouter initialEntries={['/sales/register']}>
+            <Routes>
+              <Route path="/sales" element={<SalesLayout />}>
+                <Route path="register" element={<SalesRegisterPage />} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
+      </ThemeProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /sales register/i })).toBeInTheDocument();
+    });
+
+    const deleteButtons = screen.getAllByRole('button', { name: /Delete/i });
+    expect(deleteButtons.length).toBeGreaterThan(0);
+
+    // Click Delete button on first row
+    await user.click(deleteButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Delete Sales Entry: SO-2026-0001/i)).toBeInTheDocument();
+    });
+
+    // Check modal displays client, work, amount and warning
+    expect(screen.getAllByText('Acme Agro Foods Pvt Ltd').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('FSSAI Registration - New License').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText(/Are you sure you want to delete this entry\?/i)).toBeInTheDocument();
+    expect(screen.getByText(/immediately remove the linked task from the Operations assignee's active task list/i)).toBeInTheDocument();
+
+    // Cancel button closes modal
+    const cancelBtn = screen.getByRole('button', { name: /Cancel/i });
+    await user.click(cancelBtn);
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Delete Sales Entry: SO-2026-0001/i)).not.toBeInTheDocument();
+    });
+  });
+
+  it('successfully deletes sales order when Delete Entry is confirmed', async () => {
+    const user = userEvent.setup();
+    const deleteSpy = vi.spyOn(salesApi, 'deleteSalesOrderApi').mockResolvedValue({
+      ...mockRegisterData.items[0],
+      confirmation_status: 'CANCELLED',
+      work_status: 'CANCELLED',
+    });
+
+    render(
+      <ThemeProvider>
+        <AuthProvider>
+          <MemoryRouter initialEntries={['/sales/register']}>
+            <Routes>
+              <Route path="/sales" element={<SalesLayout />}>
+                <Route path="register" element={<SalesRegisterPage />} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
+      </ThemeProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /sales register/i })).toBeInTheDocument();
+    });
+
+    const deleteButtons = screen.getAllByRole('button', { name: /Delete/i });
+    await user.click(deleteButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Delete Sales Entry: SO-2026-0001/i)).toBeInTheDocument();
+    });
+
+    // Click confirm "Delete Entry"
+    const confirmDeleteBtn = screen.getByRole('button', { name: /^Delete Entry$/i });
+    await user.click(confirmDeleteBtn);
+
+    await waitFor(() => {
+      expect(deleteSpy).toHaveBeenCalledWith(mockRegisterData.items[0].order_id);
+    });
+  });
+
+  it('displays server rejection error when Operations has completed the task', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(salesApi, 'deleteSalesOrderApi').mockRejectedValue({
+      response: {
+        status: 400,
+        data: {
+          detail: 'This entry cannot be deleted because Operations has completed the task.',
+        },
+      },
+    });
+
+    render(
+      <ThemeProvider>
+        <AuthProvider>
+          <MemoryRouter initialEntries={['/sales/register']}>
+            <Routes>
+              <Route path="/sales" element={<SalesLayout />}>
+                <Route path="register" element={<SalesRegisterPage />} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
+      </ThemeProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /sales register/i })).toBeInTheDocument();
+    });
+
+    const deleteButtons = screen.getAllByRole('button', { name: /Delete/i });
+    await user.click(deleteButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Delete Sales Entry: SO-2026-0001/i)).toBeInTheDocument();
+    });
+
+    const confirmDeleteBtn = screen.getByRole('button', { name: /^Delete Entry$/i });
+    fireEvent.click(confirmDeleteBtn);
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('This entry cannot be deleted because Operations has completed the task.');
+    });
+  });
 });
+
 

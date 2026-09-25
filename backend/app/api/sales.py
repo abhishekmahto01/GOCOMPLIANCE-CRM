@@ -389,7 +389,7 @@ def get_order_detail(
 ) -> SalesOrderDetailRead:
     """Get single sales order details."""
     order = session.get(SalesOrder, order_id)
-    if not order:
+    if not order or order.confirmation_status == "CANCELLED":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sales order not found.")
 
     scope_ctx = permissions.resolve_data_scope_context(session, current_user, "SALES_MY_ORDERS")
@@ -475,6 +475,38 @@ def update_order(
         session.rollback()
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     except ValueError as exc:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except Exception as exc:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+
+
+@router.delete(
+    "/orders/{order_id}",
+    response_model=SalesOrderDetailRead,
+    status_code=status.HTTP_200_OK,
+    summary="Delete Sales Order",
+    description="Safely soft-delete a sales entry and remove linked Operations task if not completed.",
+    dependencies=[Depends(require_module_permission("SALES_MY_ORDERS", "delete"))],
+)
+def delete_order(
+    order_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_user),
+    session: Session = Depends(get_db),
+) -> SalesOrderDetailRead:
+    """Delete a sales order and cancel linked operations application atomically."""
+    try:
+        result = sales_service.delete_sales_order(session, order_id, current_user)
+        session.commit()
+        return result
+    except sales_service.SalesOrderNotFoundError as exc:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except (sales_service.SalesOrderPermissionError, permissions.PermissionDeniedError) as exc:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except sales_service.SalesOrderDeletionError as exc:
         session.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except Exception as exc:

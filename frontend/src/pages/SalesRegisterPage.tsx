@@ -17,6 +17,7 @@ import {
   Send,
   Edit,
   Save,
+  Trash2,
 } from 'lucide-react';
 import {
   getSalesRegisterApi,
@@ -24,6 +25,7 @@ import {
   getSalesFormOptionsApi,
   assignSalesOrderApi,
   updateSalesOrderApi,
+  deleteSalesOrderApi,
 } from '../api/sales';
 import { extractErrorMessage } from '../api/client';
 import type {
@@ -177,6 +179,12 @@ export const SalesRegisterPage: React.FC = () => {
   const [editNotes, setEditNotes] = useState<string>('');
   const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
   const [editError, setEditError] = useState<string | null>(null);
+
+  // Delete Sales Order Modal State
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
+  const [deletingOrder, setDeletingOrder] = useState<SalesRegisterItem | null>(null);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Sync state with URL params
   const syncUrl = useCallback(
@@ -448,6 +456,44 @@ export const SalesRegisterPage: React.FC = () => {
       outletCtx.addToast?.('error', 'Update Failed', msg);
     } finally {
       setIsSavingEdit(false);
+    }
+  };
+
+  // Open Delete Order Modal
+  const handleOpenDeleteModal = (item: SalesRegisterItem, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    setDeletingOrder(item);
+    setDeleteError(null);
+    setIsDeleteModalOpen(true);
+  };
+
+  // Confirm and Execute Deletion
+  const handleDeleteConfirm = async () => {
+    if (!deletingOrder) return;
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteSalesOrderApi(deletingOrder.order_id);
+      outletCtx.addToast?.(
+        'success',
+        'Sales Entry Deleted',
+        `Order ${deletingOrder.order_number} has been deleted and its Operations task removed.`
+      );
+      setIsDeleteModalOpen(false);
+      if (selectedOrder && selectedOrder.order_id === deletingOrder.order_id) {
+        setSelectedOrder(null);
+      }
+      setDeletingOrder(null);
+      loadRegister();
+    } catch (err) {
+      console.error('Delete error:', err);
+      const msg = extractErrorMessage(err);
+      setDeleteError(msg);
+      outletCtx.addToast?.('error', 'Deletion Failed', msg);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -886,17 +932,28 @@ export const SalesRegisterPage: React.FC = () => {
                         {row.notes || row.remarks || '—'}
                       </td>
 
-                      {/* 21. Actions Column with Sticky Edit Button */}
+                      {/* 21. Actions Column with Sticky Edit & Delete Buttons */}
                       <td className="py-2 px-3 text-center sticky right-0 bg-white dark:bg-slate-900 group-hover:bg-blue-50/40 dark:group-hover:bg-slate-900 z-10 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.06)] border-l border-slate-200 dark:border-slate-800">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={(e) => handleOpenEditModal(row, e)}
-                          leftIcon={<Edit className="w-3.5 h-3.5" />}
-                          className="hover:border-blue-500 hover:text-blue-600 dark:hover:border-blue-400 dark:hover:text-blue-400 font-medium text-xs shadow-none py-1 px-2.5"
-                        >
-                          Edit
-                        </Button>
+                        <div className="flex items-center gap-1.5 justify-center">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => handleOpenEditModal(row, e)}
+                            leftIcon={<Edit className="w-3.5 h-3.5" />}
+                            className="hover:border-blue-500 hover:text-blue-600 dark:hover:border-blue-400 dark:hover:text-blue-400 font-medium text-xs shadow-none py-1 px-2.5"
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => handleOpenDeleteModal(row, e)}
+                            leftIcon={<Trash2 className="w-3.5 h-3.5" />}
+                            className="hover:border-rose-500 hover:text-rose-600 text-rose-600 dark:text-rose-400 dark:hover:border-rose-400 font-medium text-xs shadow-none py-1 px-2.5"
+                          >
+                            Delete
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1077,6 +1134,18 @@ export const SalesRegisterPage: React.FC = () => {
             )}
 
             <div className="pt-4 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setIsModalOpen(false);
+                  handleOpenDeleteModal(selectedOrder);
+                }}
+                leftIcon={<Trash2 className="w-3.5 h-3.5 text-rose-600" />}
+                className="border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-900/60 dark:text-rose-400 dark:hover:bg-rose-950/40"
+              >
+                Delete
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -1535,6 +1604,107 @@ export const SalesRegisterPage: React.FC = () => {
               </Button>
             </div>
           </form>
+        </Modal>
+      )}
+
+      {/* Delete Sales Order Confirmation Modal */}
+      {deletingOrder && (
+        <Modal
+          isOpen={isDeleteModalOpen}
+          onClose={() => {
+            if (!isDeleting) {
+              setIsDeleteModalOpen(false);
+              setDeletingOrder(null);
+              setDeleteError(null);
+            }
+          }}
+          title={`Delete Sales Entry: ${deletingOrder.order_number}`}
+        >
+          <div className="space-y-4 text-xs">
+            {deleteError && (
+              <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold block">Cannot Delete Entry</span>
+                  <span>{deleteError}</span>
+                </div>
+              </div>
+            )}
+
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-sm text-slate-900 dark:text-white">
+                  {deletingOrder.client_name}
+                </span>
+                <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200">
+                  {deletingOrder.order_number}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-slate-600 dark:text-slate-400">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Work / Service</span>
+                  <span className="font-medium text-slate-900 dark:text-slate-200 text-xs">
+                    {deletingOrder.service_name}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Amount</span>
+                  <span className="font-bold text-slate-900 dark:text-slate-100 text-xs">
+                    {formatInr(deletingOrder.order_value)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Converted By</span>
+                  <span className="font-medium text-slate-900 dark:text-slate-200 text-xs">
+                    {deletingOrder.salesperson_name || '—'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Operations Assignee</span>
+                  <span className="font-medium text-slate-900 dark:text-slate-200 text-xs">
+                    {deletingOrder.assigned_to_name || 'Unassigned'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/80 text-amber-800 dark:text-amber-300 flex items-start gap-2.5">
+              <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <span className="font-bold block">Are you sure you want to delete this entry?</span>
+                <p className="text-[11px] leading-relaxed text-amber-700 dark:text-amber-400">
+                  Deleting this sales entry will remove it from the Sales Register and also immediately remove the linked task from the Operations assignee's active task list.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isDeleting}
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  setDeletingOrder(null);
+                  setDeleteError(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                isLoading={isDeleting}
+                onClick={handleDeleteConfirm}
+                leftIcon={<Trash2 className="w-3.5 h-3.5" />}
+                className="bg-rose-600 hover:bg-rose-700 text-white font-medium"
+              >
+                Delete Entry
+              </Button>
+            </div>
+          </div>
         </Modal>
       )}
     </div>

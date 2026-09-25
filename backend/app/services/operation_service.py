@@ -464,13 +464,17 @@ def get_operations_tasks(
     )
 
     if my_tasks_only:
-        stmt = stmt.where(OperationApplication.assigned_to_user_id == user.user_id)
+        stmt = stmt.where(
+            OperationApplication.assigned_to_user_id == user.user_id,
+            OperationApplication.application_status != "CANCELLED",
+        )
     elif unassigned_only:
         stmt = stmt.where(
             or_(
                 OperationApplication.application_status == "UNASSIGNED",
                 OperationApplication.assigned_to_user_id.is_(None),
-            )
+            ),
+            OperationApplication.application_status != "CANCELLED",
         )
         stmt = _apply_operations_scope(stmt, user, context)
     else:
@@ -486,6 +490,8 @@ def get_operations_tasks(
             )
         elif stat_upper != "ALL":
             stmt = stmt.where(OperationApplication.application_status == stat_upper)
+    else:
+        stmt = stmt.where(OperationApplication.application_status != "CANCELLED")
 
     if priority and priority.strip().upper() != "ALL":
         stmt = stmt.where(OperationApplication.priority == priority.strip().upper())

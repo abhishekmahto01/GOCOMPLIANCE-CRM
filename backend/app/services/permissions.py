@@ -89,10 +89,11 @@ PAGE_CATALOG_CONFIG: Dict[str, Dict[str, Any]] = {
         "page_name": "My Sales Orders",
         "route": "/sales/my-orders",
         "display_order": 30,
-        "supported_actions": ["read", "update", "export"],
+        "supported_actions": ["read", "update", "delete", "export"],
         "slugs": {
             "read": "sales.my_orders.read",
             "update": "sales.my_orders.update",
+            "delete": "sales.my_orders.delete",
             "export": "sales.my_orders.export",
         },
     },
@@ -452,6 +453,17 @@ def has_permission(
         is_mgr = bool(getattr(user, "is_reporting_manager", False) or getattr(user, "is_hod", False))
         if action_norm in ("assign", "reassign", "edit", "update"):
             if permission.can_edit or permission.can_assign or permission.can_reassign or is_ops_dept or is_mgr:
+                return True
+
+    # For SALES_MY_ORDERS, also inherit permissions from SALES_ALL_ORDERS or parent SALES module
+    if module_code_norm == "SALES_MY_ORDERS":
+        all_orders_perm = get_user_module_permission(session, user.user_id, "SALES_ALL_ORDERS")
+        if all_orders_perm and is_permission_active_and_valid(all_orders_perm):
+            if field_name and hasattr(all_orders_perm, field_name) and bool(getattr(all_orders_perm, field_name, False)):
+                return True
+        parent_sales_perm = get_user_module_permission(session, user.user_id, "SALES")
+        if parent_sales_perm and is_permission_active_and_valid(parent_sales_perm):
+            if field_name and hasattr(parent_sales_perm, field_name) and bool(getattr(parent_sales_perm, field_name, False)):
                 return True
 
     return False
