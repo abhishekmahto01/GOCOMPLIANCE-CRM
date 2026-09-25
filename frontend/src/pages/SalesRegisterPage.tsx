@@ -164,6 +164,7 @@ export const SalesRegisterPage: React.FC = () => {
   const [editingOrder, setEditingOrder] = useState<SalesRegisterItem | null>(null);
   const [editClientName, setEditClientName] = useState<string>('');
   const [editContactNo, setEditContactNo] = useState<string>('');
+  const [editSalespersonId, setEditSalespersonId] = useState<string>('');
   const [editLeadSource, setEditLeadSource] = useState<string>('WEBSITE');
   const [editOrderDate, setEditOrderDate] = useState<string>('');
   const [editOrderValue, setEditOrderValue] = useState<number>(0);
@@ -373,6 +374,7 @@ export const SalesRegisterPage: React.FC = () => {
     setEditingOrder(item);
     setEditClientName(item.client_name || '');
     setEditContactNo(item.contact_no || '');
+    setEditSalespersonId(item.salesperson_user_id || '');
     setEditLeadSource(item.lead_source || 'DIRECT');
     setEditOrderDate(item.order_date || new Date().toISOString().slice(0, 10));
     setEditOrderValue(Number(item.order_value) || 0);
@@ -415,6 +417,7 @@ export const SalesRegisterPage: React.FC = () => {
       const updatedItem = await updateSalesOrderApi(editingOrder.order_id, {
         client_name: editClientName.trim() || undefined,
         contact_no: editContactNo.trim() || undefined,
+        salesperson_user_id: editSalespersonId && editSalespersonId !== editingOrder.salesperson_user_id ? editSalespersonId : undefined,
         lead_source: editLeadSource,
         order_date: editOrderDate,
         order_value: editOrderValue,
@@ -1283,6 +1286,31 @@ export const SalesRegisterPage: React.FC = () => {
                   className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
                   placeholder="10-digit Phone Number"
                 />
+              </div>
+
+              <div>
+                <label htmlFor="edit_salesperson_id" className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Converted By (Sales Employee)
+                </label>
+                <select
+                  id="edit_salesperson_id"
+                  value={editSalespersonId}
+                  onChange={(e) => setEditSalespersonId(e.target.value)}
+                  disabled={!formOptions?.can_select_salesperson && Boolean(formOptions?.default_salesperson_id)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-75 disabled:cursor-not-allowed"
+                >
+                  {editingOrder.salesperson_user_id &&
+                    !formOptions?.salespersons?.some((sp) => sp.user_id === editingOrder.salesperson_user_id) && (
+                      <option value={editingOrder.salesperson_user_id}>
+                        {editingOrder.salesperson_name || 'Current Assignee'} (Current / Legacy)
+                      </option>
+                    )}
+                  {(formOptions?.salespersons || []).map((sp) => (
+                    <option key={sp.user_id} value={sp.user_id}>
+                      {sp.full_name} ({sp.employee_code})
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>

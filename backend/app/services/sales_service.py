@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import case, desc, func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.models.client import ClientMaster
 from app.models.company import Company
@@ -62,6 +62,53 @@ class SalesOrderNotFoundError(Exception):
 class SalesOrderPermissionError(Exception):
     """Raised when user is not authorized to access or modify sales order."""
     pass
+
+
+def is_sales_department_employee(u: Optional[User]) -> bool:
+    """Validate that a user is an active employee belonging to the Sales department.
+    
+    Strictly excludes Operations, Admin, and Director roles unless designated as Sales.
+    """
+    if not u or u.account_status != "ACTIVE":
+        return False
+
+    # Disallow Super Admin / CG0001
+    if getattr(u, "is_super_admin", False) or getattr(u, "role_type", "") == "SUPER_ADMIN" or getattr(u, "employee_code", "") == "CG0001":
+        return False
+
+    dept_name = (u.department.department_name.lower() if u.department and u.department.department_name else "")
+    dept_code = (u.department.department_code.upper() if u.department and u.department.department_code else "")
+    desig_name = (u.designation.designation_name.lower() if u.designation and u.designation.designation_name else "")
+    desig_code = (u.designation.designation_code.upper() if u.designation and u.designation.designation_code else "")
+
+    # Disallow Operations
+    if "operat" in dept_name or "operat" in dept_code or dept_code in ("OP", "OPS", "OPERATIONS"):
+        return False
+    if "operat" in desig_name or "operat" in desig_code or desig_code in ("OPS_EXEC", "OPS_HEAD", "OPS_MGR"):
+        return False
+
+    # Disallow Admin / Administration unless sales is specified
+    if ("admin" in dept_name or "admin" in dept_code or dept_code in ("AD", "ADM", "ADMIN", "ADMINISTRATION")) and not ("sale" in dept_name or "sale" in desig_name):
+        return False
+    if ("admin" in desig_name or "admin" in desig_code) and not ("sale" in desig_name or "sale" in dept_name):
+        return False
+
+    # Disallow Directors / MD / CEO unless sales director
+    if ("director" in desig_name or "director" in desig_code or desig_code in ("DIR", "MD", "CEO")) and not ("sale" in desig_name or "sale" in dept_name or "sale" in desig_code):
+        return False
+    if ("managing director" in desig_name or "ceo" in desig_name or "chief" in desig_name) and not ("sale" in desig_name or "sale" in dept_name):
+        return False
+
+    # Check if department is Sales
+    if "sale" in dept_name or "sale" in dept_code or dept_code in ("SL", "SALES", "SALE"):
+        return True
+
+    # Check if designation is Sales
+    if "sale" in desig_name or "sale" in desig_code or desig_code in ("SALES_REP", "SALES_MGR", "SALES_EXEC", "SALES_DIR"):
+        return True
+
+    return False
+
 
 
 def format_inr(value: Decimal) -> str:
@@ -317,26 +364,34 @@ def create_sales_order(
     except permissions.PermissionDeniedError:
         scope_ctx = None
 
-    if scope_ctx:
-        if scope_ctx.scope == "SELF":
-            salesperson_id = current_user.user_id
-        elif data.salesperson_user_id:
-            salesperson_id = data.salesperson_user_id
-            if scope_ctx.scope == "TEAM":
-                if salesperson_id not in scope_ctx.team_user_ids:
-                    raise ValueError("Selected salesperson is not within your permitted team.")
-            elif scope_ctx.scope in ("COMPANY", "DEPARTMENT"):
-                sp_user = session.get(User, salesperson_id)
-                if not sp_user or sp_user.company_id != current_user.company_id:
-                    raise ValueError("Selected salesperson does not belong to your company.")
-        else:
-            salesperson_id = current_user.user_id
+    salesperson: Optional[User] = None
+    if scope_ctx and scope_ctx.scope == "SELF":
+        salesperson_id = current_user.user_id
+    elif data.salesperson_user_id:
+        target_sp = session.get(User, data.salesperson_user_id)
+        if not target_sp or target_sp.account_status != "ACTIVE":
+            raise ValueError(f"Active salesperson with ID '{data.salesperson_user_id}' not found.")
+        if not is_sales_department_employee(target_sp):
+            raise ValueError(
+                f"Selected employee '{target_sp.first_name} {target_sp.last_name}' does not belong to the Sales department. Converted By must be an active Sales employee."
+            )
+        if target_sp.company_id != company_id:
+            raise ValueError("Selected salesperson does not belong to specified company.")
+        if scope_ctx and scope_ctx.scope == "TEAM" and target_sp.user_id not in scope_ctx.team_user_ids:
+            raise ValueError("Selected salesperson is not within your permitted team.")
+        salesperson_id = target_sp.user_id
+        salesperson = target_sp
     else:
-        salesperson_id = data.salesperson_user_id or current_user.user_id
+        salesperson_id = current_user.user_id
 
-    salesperson = session.get(User, salesperson_id)
-    if not salesperson or salesperson.account_status != "ACTIVE":
-        raise ValueError(f"Active salesperson with ID '{salesperson_id}' not found.")
+    if salesperson is None:
+        salesperson = session.get(User, salesperson_id)
+        if not salesperson or salesperson.account_status != "ACTIVE":
+            raise ValueError(f"Active salesperson with ID '{salesperson_id}' not found.")
+        if not is_sales_department_employee(salesperson):
+            raise ValueError(
+                f"Selected employee '{salesperson.first_name} {salesperson.last_name}' does not belong to the Sales department. Converted By must be an active Sales employee."
+            )
 
     # 4. Financial Calculations & Validations
     val = Decimal(str(data.order_value))
@@ -433,6 +488,8 @@ def update_sales_order(
         "payment_status": str(order.payment_status),
         "lead_source": str(order.lead_source),
         "order_date": order.order_date,
+        "salesperson_user_id": order.salesperson_user_id,
+        "salesperson_name": f"{order.salesperson.first_name} {order.salesperson.last_name}" if order.salesperson else "",
         "proforma_invoice_no": order.proforma_invoice_no,
         "tax_invoice_no": order.tax_invoice_no,
         "reimbursement_note": order.reimbursement_note,
@@ -477,6 +534,25 @@ def update_sales_order(
     order.profit_amount = new_profit
     order.payment_status = new_pmt_status
 
+    if data.salesperson_user_id is not None and data.salesperson_user_id != order.salesperson_user_id:
+        new_sp = session.get(User, data.salesperson_user_id)
+        if not new_sp or new_sp.account_status != "ACTIVE":
+            raise ValueError(f"Active salesperson with ID '{data.salesperson_user_id}' not found.")
+        if not is_sales_department_employee(new_sp):
+            raise ValueError(
+                f"Selected employee '{new_sp.first_name} {new_sp.last_name}' does not belong to the Sales department. Converted By must be an active Sales employee."
+            )
+        if new_sp.company_id != order.company_id:
+            raise ValueError("Selected salesperson does not belong to the same company as the sales order.")
+
+        if scope_ctx.scope == "TEAM" and new_sp.user_id not in scope_ctx.team_user_ids:
+            raise ValueError("Selected salesperson is not within your permitted team.")
+        elif scope_ctx.scope == "SELF" and new_sp.user_id != current_user.user_id:
+            raise SalesOrderPermissionError("You cannot reassign Converted By to another salesperson.")
+
+        order.salesperson_user_id = new_sp.user_id
+        order.salesperson = new_sp
+
     if data.lead_source is not None:
         order.lead_source = data.lead_source
     if data.order_date is not None:
@@ -499,6 +575,9 @@ def update_sales_order(
 
     # Compare changes and create audit log
     changes = []
+    if old_values["salesperson_user_id"] != order.salesperson_user_id:
+        new_sp_name = f"{order.salesperson.first_name} {order.salesperson.last_name}" if order.salesperson else str(order.salesperson_user_id)
+        changes.append(f"Converted By: {old_values['salesperson_name']} -> {new_sp_name}")
     if old_values["order_value"] != order.order_value:
         changes.append(f"Total Amount: {format_inr(old_values['order_value'])} -> {format_inr(order.order_value)}")
     if old_values["amount_received"] != order.amount_received:
@@ -1172,37 +1251,25 @@ def get_sales_dashboard_data(
     default_emp_id = str(current_user.user_id) if scope_ctx.scope == "SELF" else None
 
     if scope_ctx.scope == "SELF":
-        emp_options.append(
-            FilterOptionItem(
-                id=str(current_user.user_id),
-                label=f"{current_user.first_name} {current_user.last_name}",
+        if is_sales_department_employee(current_user):
+            emp_options.append(
+                FilterOptionItem(
+                    id=str(current_user.user_id),
+                    label=f"{current_user.first_name} {current_user.last_name}",
+                )
             )
-        )
     elif scope_ctx.scope == "TEAM":
         team_users = session.execute(
             select(User)
-            .outerjoin(Department, User.department_id == Department.department_id)
-            .outerjoin(Designation, User.designation_id == Designation.designation_id)
+            .options(joinedload(User.department), joinedload(User.designation))
             .where(
                 User.user_id.in_(scope_ctx.team_user_ids),
                 User.account_status == "ACTIVE",
-                or_(
-                    Department.department_name.ilike("%sales%"),
-                    Department.department_code.ilike("%sales%"),
-                    Designation.designation_name.ilike("%sales%"),
-                    Designation.designation_code.ilike("%sales%"),
-                    User.user_id.in_(select(SalesOrder.salesperson_user_id)),
-                ),
             )
-            .order_by(User.first_name.asc())
+            .order_by(User.first_name.asc(), User.last_name.asc())
         ).scalars().all()
-        # Fallback if no specific sales dept tagged yet in team
-        if not team_users:
-            team_users = session.execute(
-                select(User).where(User.user_id.in_(scope_ctx.team_user_ids)).order_by(User.first_name.asc())
-            ).scalars().all()
-
-        for u in team_users:
+        sales_team_users = [u for u in team_users if is_sales_department_employee(u)]
+        for u in sales_team_users:
             emp_options.append(
                 FilterOptionItem(
                     id=str(u.user_id),
@@ -1212,34 +1279,16 @@ def get_sales_dashboard_data(
     else:  # COMPANY, ALL
         comp_users_query = (
             select(User)
-            .outerjoin(Department, User.department_id == Department.department_id)
-            .outerjoin(Designation, User.designation_id == Designation.designation_id)
+            .options(joinedload(User.department), joinedload(User.designation))
             .where(
                 User.account_status == "ACTIVE",
                 User.company_id == current_user.company_id if scope_ctx.scope == "COMPANY" else True,
-                or_(
-                    Department.department_name.ilike("%sales%"),
-                    Department.department_code.ilike("%sales%"),
-                    Designation.designation_name.ilike("%sales%"),
-                    Designation.designation_code.ilike("%sales%"),
-                    User.user_id.in_(select(SalesOrder.salesperson_user_id)),
-                ),
             )
-            .order_by(User.first_name.asc())
+            .order_by(User.first_name.asc(), User.last_name.asc())
         )
         comp_users = session.execute(comp_users_query).scalars().all()
-        # Fallback if no specific sales tag found
-        if not comp_users:
-            comp_users = session.execute(
-                select(User)
-                .where(
-                    User.account_status == "ACTIVE",
-                    User.company_id == current_user.company_id if scope_ctx.scope == "COMPANY" else True,
-                )
-                .order_by(User.first_name.asc())
-            ).scalars().all()
-
-        for u in comp_users:
+        sales_comp_users = [u for u in comp_users if is_sales_department_employee(u)]
+        for u in sales_comp_users:
             emp_options.append(
                 FilterOptionItem(
                     id=str(u.user_id),
@@ -1615,31 +1664,31 @@ def get_sales_form_options(
         )
 
     if scope_ctx.scope == "SELF":
-        sp_users = [current_user]
+        sp_users = [current_user] if is_sales_department_employee(current_user) else []
         can_select = False
     elif scope_ctx.scope == "TEAM":
-        sp_users = session.execute(
+        all_team_users = session.execute(
             select(User)
-            .outerjoin(Department, User.department_id == Department.department_id)
-            .outerjoin(Designation, User.designation_id == Designation.designation_id)
+            .options(joinedload(User.department), joinedload(User.designation))
             .where(
                 User.user_id.in_(scope_ctx.team_user_ids),
                 User.account_status == "ACTIVE",
             )
-            .order_by(User.first_name.asc())
+            .order_by(User.first_name.asc(), User.last_name.asc())
         ).scalars().all()
+        sp_users = [u for u in all_team_users if is_sales_department_employee(u)]
         can_select = True
     else:  # COMPANY, ALL
-        sp_users = session.execute(
+        all_comp_users = session.execute(
             select(User)
-            .outerjoin(Department, User.department_id == Department.department_id)
-            .outerjoin(Designation, User.designation_id == Designation.designation_id)
+            .options(joinedload(User.department), joinedload(User.designation))
             .where(
                 User.company_id == current_user.company_id if scope_ctx.scope == "COMPANY" else True,
                 User.account_status == "ACTIVE",
             )
-            .order_by(User.first_name.asc())
+            .order_by(User.first_name.asc(), User.last_name.asc())
         ).scalars().all()
+        sp_users = [u for u in all_comp_users if is_sales_department_employee(u)]
         can_select = True
 
     employee_opts = [
@@ -1652,6 +1701,12 @@ def get_sales_form_options(
         )
         for u in sp_users
     ]
+
+    default_salesperson_id = (
+        current_user.user_id
+        if is_sales_department_employee(current_user)
+        else (sp_users[0].user_id if sp_users else None)
+    )
 
     # 3. Clients in company
     clients = session.execute(
@@ -1686,7 +1741,7 @@ def get_sales_form_options(
         clients=client_opts,
         lead_sources=lead_sources,
         operations_assignees=ops_assignees,
-        default_salesperson_id=current_user.user_id,
+        default_salesperson_id=default_salesperson_id,
         can_select_salesperson=can_select,
         company_id=current_user.company_id,
         company_name=comp_name,

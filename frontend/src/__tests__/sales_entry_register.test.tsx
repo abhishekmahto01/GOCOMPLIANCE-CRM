@@ -713,4 +713,93 @@ describe('Sales Entry & Sales Register Module Tests', () => {
       );
     });
   });
+
+  it('populates Converted By filter with only Sales department employees and All', async () => {
+    render(
+      <ThemeProvider>
+        <AuthProvider>
+          <MemoryRouter initialEntries={['/sales/register']}>
+            <Routes>
+              <Route path="/sales" element={<SalesLayout />}>
+                <Route path="register" element={<SalesRegisterPage />} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
+      </ThemeProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /sales register/i })).toBeInTheDocument();
+    });
+
+    // Converted By filter dropdown
+    const convertedByFilter = screen.getByDisplayValue('Converted By: All') as HTMLSelectElement;
+    expect(convertedByFilter).toBeInTheDocument();
+
+    const options = Array.from(convertedByFilter.options).map((opt) => opt.text);
+    expect(options).toContain('Converted By: All');
+    expect(options).toContain('Karishma Upadhyay');
+    expect(options).toContain('Rajesh Sharma');
+    expect(options).not.toContain('Mansi Singhal');
+    expect(options).not.toContain('Deepak Kumar');
+  });
+
+  it('allows updating Converted By in Edit modal to a Sales department employee', async () => {
+    const user = userEvent.setup();
+    const updateSpy = vi.spyOn(salesApi, 'updateSalesOrderApi').mockResolvedValue({
+      ...mockRegisterData.items[0],
+      salesperson_user_id: 'b0000000-0000-0000-0000-000000000002',
+      salesperson_name: 'Rajesh Sharma',
+    });
+
+    render(
+      <ThemeProvider>
+        <AuthProvider>
+          <MemoryRouter initialEntries={['/sales/register']}>
+            <Routes>
+              <Route path="/sales" element={<SalesLayout />}>
+                <Route path="register" element={<SalesRegisterPage />} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
+      </ThemeProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /sales register/i })).toBeInTheDocument();
+    });
+
+    const editButtons = screen.getAllByRole('button', { name: /Edit/i });
+    await user.click(editButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Edit Sales Order:/i)).toBeInTheDocument();
+    });
+
+    const spSelect = screen.getByLabelText(/Converted By \(Sales Employee\)/i) as HTMLSelectElement;
+    expect(spSelect).toBeInTheDocument();
+
+    const spOptions = Array.from(spSelect.options).map((o) => o.text);
+    expect(spOptions.some((t) => t.includes('Karishma Upadhyay'))).toBe(true);
+    expect(spOptions.some((t) => t.includes('Rajesh Sharma'))).toBe(true);
+    expect(spOptions.some((t) => t.includes('Mansi Singhal'))).toBe(false);
+
+    // Select Rajesh Sharma
+    await user.selectOptions(spSelect, 'b0000000-0000-0000-0000-000000000002');
+
+    const saveBtn = screen.getByRole('button', { name: /Save Changes/i });
+    await user.click(saveBtn);
+
+    await waitFor(() => {
+      expect(updateSpy).toHaveBeenCalledWith(
+        mockRegisterData.items[0].order_id,
+        expect.objectContaining({
+          salesperson_user_id: 'b0000000-0000-0000-0000-000000000002',
+        })
+      );
+    });
+  });
 });
+

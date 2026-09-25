@@ -66,6 +66,7 @@ class SalesOrderUpdate(BaseModel):
 
     client_name: Optional[str] = Field(None, max_length=200, description="Client Name")
     contact_no: Optional[str] = Field(None, max_length=20, description="Client Contact Number")
+    salesperson_user_id: Optional[uuid.UUID] = Field(None, description="Sales employee who converted the order (must belong to Sales department)")
     order_value: Optional[Decimal] = Field(None, ge=0, description="Total order amount (Total Amount) in INR")
     amount_received: Optional[Decimal] = Field(None, ge=0, description="Advance / Received amount in INR")
     govt_fees: Optional[Decimal] = Field(None, ge=0, description="Government fees in INR")

@@ -309,6 +309,7 @@ export interface SalesOrderUpdateRequest {
   payment_status?: string;
   lead_source?: string;
   order_date?: string;
+  salesperson_user_id?: string;
   proforma_invoice_no?: string;
   tax_invoice_no?: string;
   reimbursement_note?: string;
@@ -316,3 +317,4 @@ export interface SalesOrderUpdateRequest {
   client_name?: string;
   contact_no?: string;
 }
+

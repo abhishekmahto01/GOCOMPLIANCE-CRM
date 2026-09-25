@@ -326,7 +326,7 @@ def sales_fixture(db_session: Session):
         )
     )
 
-    db_session.flush()
+    db_session.commit()
 
     return {
         "company": company,
@@ -1333,5 +1333,292 @@ def test_sales_edit_validation_rejects_negative_and_excessive_advance(
         headers=rep1_headers,
     )
     assert neg_total_resp.status_code in (400, 422)
+
+
+def test_sales_order_creation_accepts_sales_department_employee(
+    client: TestClient, db_session: Session, sales_fixture: dict
+):
+    """Test that active Sales department employees are accepted as converted_by."""
+    f = sales_fixture
+    mgr_headers = auth_headers(f["manager"])
+
+    resp = client.post(
+        "/api/sales/orders",
+        json={
+            "client_name": "Sales Rep Accept Corp",
+            "contact_no": "9811112222",
+            "service_id": str(f["srv1"].service_id),
+            "salesperson_user_id": str(f["rep1"].user_id),
+            "order_date": date.today().isoformat(),
+            "order_value": "45000.00",
+            "amount_received": "15000.00",
+            "auto_confirm": False,
+        },
+        headers=mgr_headers,
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["salesperson_user_id"] == str(f["rep1"].user_id)
+
+
+def test_sales_order_creation_rejects_operations_and_admin_employee(
+    client: TestClient, db_session: Session, sales_fixture: dict
+):
+    """Test that Operations or Admin employees are rejected as converted_by with a clear validation error."""
+    f = sales_fixture
+    mgr_headers = auth_headers(f["manager"])
+
+    # Attempt with Karishma (Operations Manager)
+    resp = client.post(
+        "/api/sales/orders",
+        json={
+            "client_name": "Ops Rep Reject Corp",
+            "contact_no": "9811113333",
+            "service_id": str(f["srv1"].service_id),
+            "salesperson_user_id": str(f["karishma"].user_id),
+            "order_date": date.today().isoformat(),
+            "order_value": "45000.00",
+            "amount_received": "15000.00",
+            "auto_confirm": False,
+        },
+        headers=mgr_headers,
+    )
+    assert resp.status_code == 400
+    err_detail = resp.json().get("detail", "")
+    assert "Sales department" in err_detail or "Converted By" in err_detail
+
+    # Attempt with Mansi (Operations Executive)
+    resp_mansi = client.post(
+        "/api/sales/orders",
+        json={
+            "client_name": "Mansi Rep Reject Corp",
+            "contact_no": "9811114444",
+            "service_id": str(f["srv1"].service_id),
+            "salesperson_user_id": str(f["mansi"].user_id),
+            "order_date": date.today().isoformat(),
+            "order_value": "45000.00",
+            "amount_received": "15000.00",
+            "auto_confirm": False,
+        },
+        headers=mgr_headers,
+    )
+    assert resp_mansi.status_code == 400
+    assert "Sales department" in resp_mansi.json().get("detail", "")
+
+
+def test_sales_order_creation_rejects_inactive_sales_employee(
+    client: TestClient, db_session: Session, sales_fixture: dict
+):
+    """Test that inactive Sales employee is rejected as converted_by."""
+    f = sales_fixture
+    mgr_headers = auth_headers(f["manager"])
+
+    # Create inactive sales employee
+    inactive_rep = User(
+        employee_code="GCT999",
+        company_id=f["company"].company_id,
+        department_id=f["rep1"].department_id,
+        designation_id=f["rep1"].designation_id,
+        first_name="Inactive",
+        last_name="SalesPerson",
+        official_email="inactive.sp@gocompliance.test",
+        mobile_number="+919888800999",
+        date_of_joining=date(2023, 1, 1),
+        employment_type="FULL_TIME",
+        account_status="INACTIVE",
+        must_change_password=False,
+    )
+    db_session.add(inactive_rep)
+    db_session.commit()
+
+    resp = client.post(
+        "/api/sales/orders",
+        json={
+            "client_name": "Inactive Rep Corp",
+            "contact_no": "9811115555",
+            "service_id": str(f["srv1"].service_id),
+            "salesperson_user_id": str(inactive_rep.user_id),
+            "order_date": date.today().isoformat(),
+            "order_value": "45000.00",
+            "amount_received": "15000.00",
+            "auto_confirm": False,
+        },
+        headers=mgr_headers,
+    )
+    assert resp.status_code == 400
+    assert "Active salesperson" in resp.json().get("detail", "") or "Sales department" in resp.json().get("detail", "")
+
+
+def test_sales_order_edit_can_update_converted_by_to_sales_employee(
+    client: TestClient, db_session: Session, sales_fixture: dict
+):
+    """Test that an authorized user can reassign Converted By to another active Sales employee."""
+    f = sales_fixture
+    mgr_headers = auth_headers(f["manager"])
+
+    # Create order by rep1
+    create_resp = client.post(
+        "/api/sales/orders",
+        json={
+            "client_name": "Reassign SP Corp",
+            "contact_no": "9811116666",
+            "service_id": str(f["srv1"].service_id),
+            "salesperson_user_id": str(f["rep1"].user_id),
+            "order_date": date.today().isoformat(),
+            "order_value": "50000.00",
+            "amount_received": "20000.00",
+            "auto_confirm": False,
+        },
+        headers=mgr_headers,
+    )
+    assert create_resp.status_code == 201
+    order_id = create_resp.json()["order_id"]
+
+    # Manager edits order to reassign to rep2 (within team)
+    edit_resp = client.put(
+        f"/api/sales/orders/{order_id}",
+        json={
+            "salesperson_user_id": str(f["rep2"].user_id),
+            "notes": "Reassigned to Simran Kaur for account management",
+        },
+        headers=mgr_headers,
+    )
+    assert edit_resp.status_code == 200
+    updated = edit_resp.json()
+    assert updated["salesperson_user_id"] == str(f["rep2"].user_id)
+    assert "Simran Kaur" in updated["salesperson_name"]
+
+
+def test_sales_order_edit_rejects_updating_converted_by_to_operations_employee(
+    client: TestClient, db_session: Session, sales_fixture: dict
+):
+    """Test that editing an order to set converted_by to an Operations employee is rejected."""
+    f = sales_fixture
+    mgr_headers = auth_headers(f["manager"])
+
+    # Create order by rep1
+    create_resp = client.post(
+        "/api/sales/orders",
+        json={
+            "client_name": "Reject Ops Edit Corp",
+            "contact_no": "9811117777",
+            "service_id": str(f["srv1"].service_id),
+            "salesperson_user_id": str(f["rep1"].user_id),
+            "order_date": date.today().isoformat(),
+            "order_value": "50000.00",
+            "amount_received": "20000.00",
+            "auto_confirm": False,
+        },
+        headers=mgr_headers,
+    )
+    assert create_resp.status_code == 201
+    order_id = create_resp.json()["order_id"]
+
+    # Attempt to change salesperson to Karishma (Operations)
+    edit_resp = client.put(
+        f"/api/sales/orders/{order_id}",
+        json={
+            "salesperson_user_id": str(f["karishma"].user_id),
+        },
+        headers=mgr_headers,
+    )
+    assert edit_resp.status_code == 400
+    assert "Sales department" in edit_resp.json().get("detail", "")
+
+
+def test_legacy_sales_order_with_non_sales_employee_preserved_on_edit(
+    client: TestClient, db_session: Session, sales_fixture: dict
+):
+    """Test that existing legacy orders referencing non-sales employees are preserved on edit unless explicitly corrected."""
+    f = sales_fixture
+    mgr_headers = auth_headers(f["manager"])
+
+    # Create a legacy order in the database directly where salesperson is Karishma (Operations Head)
+    legacy_order = SalesOrder(
+        order_number="SO-2024-9999",
+        company_id=f["company"].company_id,
+        client_id=f["existing_client"].client_id,
+        service_id=f["srv1"].service_id,
+        salesperson_user_id=f["karishma"].user_id,
+        lead_source="WEBSITE",
+        order_date=date(2024, 1, 15),
+        order_value=Decimal("75000.00"),
+        amount_received=Decimal("30000.00"),
+        balance_amount=Decimal("45000.00"),
+        govt_fees=Decimal("4000.00"),
+        incidental_cost=Decimal("1000.00"),
+        profit_amount=Decimal("70000.00"),
+        payment_status="PARTIALLY_PAID",
+        confirmation_status="CONFIRMED",
+        notes="Legacy order created before department validation",
+    )
+    db_session.add(legacy_order)
+    db_session.commit()
+
+    # 1. Edit financial fields without changing salesperson_user_id
+    edit_resp = client.put(
+        f"/api/sales/orders/{legacy_order.order_id}",
+        json={
+            "amount_received": "75000.00",
+            "notes": "Updated final payment, legacy salesperson preserved",
+        },
+        headers=auth_headers(f["karishma"]),
+    )
+    assert edit_resp.status_code == 200
+    updated = edit_resp.json()
+    # Ensure legacy salesperson is preserved
+    assert updated["salesperson_user_id"] == str(f["karishma"].user_id)
+    assert Decimal(str(updated["amount_received"])) == Decimal("75000.00")
+    assert updated["payment_status"] == "FULLY_PAID"
+
+    # 2. Correct the legacy salesperson to an active Sales employee (rep1)
+    correct_resp = client.put(
+        f"/api/sales/orders/{legacy_order.order_id}",
+        json={
+            "salesperson_user_id": str(f["rep1"].user_id),
+            "notes": "Corrected converted_by to Sales department employee",
+        },
+        headers=auth_headers(f["karishma"]),
+    )
+    assert correct_resp.status_code == 200
+    corrected = correct_resp.json()
+    assert corrected["salesperson_user_id"] == str(f["rep1"].user_id)
+    assert "Rohan Gupta" in corrected["salesperson_name"]
+
+
+def test_sales_form_options_and_dashboard_filter_contain_only_sales_employees(
+    client: TestClient, db_session: Session, sales_fixture: dict
+):
+    """Test that form-options and dashboard filter options only return active Sales department employees."""
+    f = sales_fixture
+    mgr_headers = auth_headers(f["manager"])
+
+    # 1. Form options
+    form_resp = client.get("/api/sales/form-options", headers=mgr_headers)
+    assert form_resp.status_code == 200
+    form_data = form_resp.json()
+    sp_ids = [sp["user_id"] for sp in form_data["salespersons"]]
+    assert str(f["manager"].user_id) in sp_ids
+    assert str(f["rep1"].user_id) in sp_ids
+    assert str(f["rep2"].user_id) in sp_ids
+    # Operations employees must NOT be in salespersons
+    assert str(f["karishma"].user_id) not in sp_ids
+    assert str(f["mansi"].user_id) not in sp_ids
+
+    # Operations assignees must continue to have operations employees
+    ops_assignee_ids = [op["user_id"] for op in form_data["operations_assignees"]]
+    assert str(f["mansi"].user_id) in ops_assignee_ids
+    assert str(f["rep1"].user_id) not in ops_assignee_ids
+
+    # 2. Dashboard filter options
+    dash_resp = client.get("/api/sales/dashboard", headers=mgr_headers)
+    assert dash_resp.status_code == 200
+    dash_data = dash_resp.json()
+    filter_emp_ids = [e["id"] for e in dash_data["filter_options"]["employees"]]
+    assert str(f["manager"].user_id) in filter_emp_ids
+    assert str(f["rep1"].user_id) in filter_emp_ids
+    assert str(f["karishma"].user_id) not in filter_emp_ids
+    assert str(f["mansi"].user_id) not in filter_emp_ids
+
 
 
