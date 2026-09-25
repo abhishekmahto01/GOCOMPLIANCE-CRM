@@ -7,7 +7,7 @@ import {
   loginApi,
   logoutApi,
 } from '../api/auth';
-import { ACCESS_TOKEN_KEY } from '../api/client';
+import { ACCESS_TOKEN_KEY, getAccessToken } from '../api/client';
 
 export interface AuthSession {
   isAuthenticated: boolean;
@@ -59,7 +59,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [permissionError, setPermissionError] = useState<string | null>(null);
 
   const loadUserData = useCallback(async () => {
-    const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+    const token = getAccessToken();
     if (!token) {
       setUser(null);
       setModules([]);

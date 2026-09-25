@@ -102,7 +102,7 @@ const mockFormOptions: SalesFormOptionsResponse = {
       entity_type: 'PRIVATE_LIMITED',
     },
   ],
-  lead_sources: ['Website', 'Referral', 'Direct', 'Walk-in', 'Other'],
+  lead_sources: ['WEBSITE', 'REFERRAL', 'DIRECT', 'JUSTDIAL', 'INDIAMART', 'OTHERS'],
   operations_assignees: [
     {
       user_id: 'b0000000-0000-0000-0000-000000000003',
@@ -535,5 +535,85 @@ describe('Sales Entry & Sales Register Module Tests', () => {
     await waitFor(() => {
       expect(exportSpy).toHaveBeenCalled();
     });
+  });
+
+  it('renders service dropdown with service name only and does not auto-fill/overwrite pricing on selection', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ThemeProvider>
+        <AuthProvider>
+          <MemoryRouter initialEntries={['/sales/entry']}>
+            <Routes>
+              <Route path="/sales" element={<SalesLayout />}>
+                <Route path="entry" element={<SalesEntryPage />} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
+      </ThemeProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /new sales entry/i })).toBeInTheDocument();
+    });
+
+    // Verify service options only show service_name (no "Base: ₹" text)
+    const serviceSelect = screen.getByLabelText(/Work \/ Service/i) as HTMLSelectElement;
+    const optionTexts = Array.from(serviceSelect.options).map((o) => o.text);
+    expect(optionTexts).toContain('FSSAI Registration - New License');
+    expect(optionTexts).toContain('GST Registration');
+    expect(optionTexts.every((txt) => !txt.includes('Base: ₹'))).toBe(true);
+
+    // Enter a custom quote of 45,000 and govt fee 2,500
+    const totalInput = screen.getByLabelText(/Total Amount \(₹\)/i) as HTMLInputElement;
+    const govtFeeInput = screen.getByLabelText(/Govt Fees \(₹\)/i) as HTMLInputElement;
+
+    await user.clear(totalInput);
+    await user.type(totalInput, '45000');
+    await user.clear(govtFeeInput);
+    await user.type(govtFeeInput, '2500');
+
+    // Change service selection
+    fireEvent.change(serviceSelect, {
+      target: { value: 'a0000000-0000-0000-0000-000000000001' },
+    });
+
+    // Verify custom quote is NOT overwritten
+    expect(totalInput.value).toBe('45000');
+    expect(govtFeeInput.value).toBe('2500');
+
+    // Change to another service
+    fireEvent.change(serviceSelect, {
+      target: { value: 'a0000000-0000-0000-0000-000000000002' },
+    });
+    expect(totalInput.value).toBe('45000');
+    expect(govtFeeInput.value).toBe('2500');
+  });
+
+  it('renders lead sources including JUSTDIAL and INDIAMART in the Sales Source dropdown', async () => {
+    render(
+      <ThemeProvider>
+        <AuthProvider>
+          <MemoryRouter initialEntries={['/sales/entry']}>
+            <Routes>
+              <Route path="/sales" element={<SalesLayout />}>
+                <Route path="entry" element={<SalesEntryPage />} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
+      </ThemeProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /new sales entry/i })).toBeInTheDocument();
+    });
+
+    const sourceSelect = screen.getByLabelText(/Source/i) as HTMLSelectElement;
+    const options = Array.from(sourceSelect.options).map((o) => o.value.toUpperCase());
+    expect(options).toContain('JUSTDIAL');
+    expect(options).toContain('INDIAMART');
+    expect(options).toContain('WEBSITE');
   });
 });

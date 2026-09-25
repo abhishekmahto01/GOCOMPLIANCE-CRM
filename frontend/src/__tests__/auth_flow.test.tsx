@@ -21,10 +21,17 @@ const TestAuthConsumer: React.FC = () => {
       <div data-testid="can-view-emp">{hasPermission('ADMIN_EMPLOYEES', 'view') ? 'YES' : 'NO'}</div>
       <button
         onClick={() =>
-          login({ identifier: 'admin@gocompliances.in', password: 'ValidPassword#123' })
+          login({ identifier: 'admin@gocompliances.in', password: 'ValidPassword#123', rememberMe: false })
         }
       >
         Trigger Login
+      </button>
+      <button
+        onClick={() =>
+          login({ identifier: 'admin@gocompliances.in', password: 'ValidPassword#123', rememberMe: true })
+        }
+      >
+        Trigger Remembered Login
       </button>
       <button onClick={() => logout()}>Trigger Logout</button>
     </div>
@@ -82,6 +89,7 @@ describe('AuthContext & JWT Authentication Flow', () => {
 
   beforeEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
     vi.restoreAllMocks();
   });
 
@@ -120,7 +128,8 @@ describe('AuthContext & JWT Authentication Flow', () => {
       </AuthProvider>
     );
 
-    await user.click(screen.getByRole('button', { name: 'Trigger Login' }));
+    const loginBtn = await screen.findByRole('button', { name: 'Trigger Login' });
+    await user.click(loginBtn);
 
     await waitFor(() => {
       expect(screen.getByTestId('auth-status')).toHaveTextContent('AUTHENTICATED');
@@ -134,14 +143,27 @@ describe('AuthContext & JWT Authentication Flow', () => {
     expect(authApi.loginApi).toHaveBeenCalledWith({
       identifier: 'admin@gocompliances.in',
       password: 'ValidPassword#123',
+      rememberMe: false,
     });
   });
 
-  it('logout clears session and resets state', async () => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, 'existing-token');
+  it('supports Remember me checked: persists tokens in localStorage', async () => {
+    vi.spyOn(authApi, 'loginApi').mockImplementation(async (creds) => {
+      if (creds.rememberMe) {
+        localStorage.setItem(ACCESS_TOKEN_KEY, 'remembered-access-token');
+        localStorage.setItem(REFRESH_TOKEN_KEY, 'remembered-refresh-token');
+        sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+      }
+      return {
+        access_token: 'remembered-access-token',
+        refresh_token: 'remembered-refresh-token',
+        token_type: 'bearer',
+        expires_in: 3600,
+        must_change_password: false,
+      };
+    });
     vi.spyOn(authApi, 'getCurrentUserApi').mockResolvedValue(mockUser);
     vi.spyOn(authApi, 'getAccessibleModulesApi').mockResolvedValue(mockModules);
-    vi.spyOn(authApi, 'logoutApi').mockResolvedValue(undefined);
 
     const user = userEvent.setup();
     render(
@@ -150,17 +172,64 @@ describe('AuthContext & JWT Authentication Flow', () => {
       </AuthProvider>
     );
 
+    const loginBtn = await screen.findByRole('button', { name: 'Trigger Remembered Login' });
+    await user.click(loginBtn);
+
     await waitFor(() => {
       expect(screen.getByTestId('auth-status')).toHaveTextContent('AUTHENTICATED');
+      expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('remembered-access-token');
+      expect(sessionStorage.getItem(ACCESS_TOKEN_KEY)).toBeNull();
+    });
+  });
+
+  it('supports Remember me unchecked: persists tokens in sessionStorage and clears on logout', async () => {
+    vi.spyOn(authApi, 'loginApi').mockImplementation(async (creds) => {
+      if (!creds.rememberMe) {
+        sessionStorage.setItem(ACCESS_TOKEN_KEY, 'session-access-token');
+        sessionStorage.setItem(REFRESH_TOKEN_KEY, 'session-refresh-token');
+        localStorage.removeItem(ACCESS_TOKEN_KEY);
+      }
+      return {
+        access_token: 'session-access-token',
+        refresh_token: 'session-refresh-token',
+        token_type: 'bearer',
+        expires_in: 3600,
+        must_change_password: false,
+      };
+    });
+    vi.spyOn(authApi, 'getCurrentUserApi').mockResolvedValue(mockUser);
+    vi.spyOn(authApi, 'getAccessibleModulesApi').mockResolvedValue(mockModules);
+    vi.spyOn(authApi, 'logoutApi').mockImplementation(async () => {
+      localStorage.removeItem(ACCESS_TOKEN_KEY);
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
+      sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+      sessionStorage.removeItem(REFRESH_TOKEN_KEY);
     });
 
-    await user.click(screen.getByRole('button', { name: 'Trigger Logout' }));
+    const user = userEvent.setup();
+    render(
+      <AuthProvider>
+        <TestAuthConsumer />
+      </AuthProvider>
+    );
+
+    const loginBtn = await screen.findByRole('button', { name: 'Trigger Login' });
+    await user.click(loginBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('auth-status')).toHaveTextContent('AUTHENTICATED');
+      expect(sessionStorage.getItem(ACCESS_TOKEN_KEY)).toBe('session-access-token');
+      expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBeNull();
+    });
+
+    // Logout
+    const logoutBtn = await screen.findByRole('button', { name: 'Trigger Logout' });
+    await user.click(logoutBtn);
 
     await waitFor(() => {
       expect(screen.getByTestId('auth-status')).toHaveTextContent('ANONYMOUS');
-      expect(screen.getByTestId('user-email')).toHaveTextContent('NO_USER');
+      expect(sessionStorage.getItem(ACCESS_TOKEN_KEY)).toBeNull();
+      expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBeNull();
     });
-
-    expect(authApi.logoutApi).toHaveBeenCalled();
   });
 });

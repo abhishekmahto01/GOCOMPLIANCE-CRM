@@ -11,6 +11,8 @@ const COLOR_MAP: Record<string, string> = {
   WEBSITE: '#1e3a8a', // dark blue
   REFERRAL: '#38bdf8', // sky blue
   DIRECT: '#f97316', // orange
+  JUSTDIAL: '#e11d48', // rose / justdial red-pink
+  INDIAMART: '#059669', // emerald / indiamart green
   OTHERS: '#a855f7', // purple
 };
 

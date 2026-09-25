@@ -171,10 +171,10 @@ export const TaskAssignmentPage: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
             <UserCheck className="w-6 h-6 text-blue-600" />
-            Task Assignment & Workload Management
+            All Operations Tasks & Work Assignment
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Monitor, assign, and balance compliance applications across the Operations team.
+            View, assign, reassign, and monitor all compliance applications across the Operations team.
           </p>
         </div>
 
@@ -188,6 +188,48 @@ export const TaskAssignmentPage: React.FC = () => {
           <span>Refresh</span>
         </button>
       </div>
+
+      {/* Metric Summary Strip */}
+      {taskListResponse && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
+            <span className="text-[11px] font-semibold text-slate-500">Total Tasks</span>
+            <p className="text-xl font-bold text-slate-900 dark:text-white mt-1">
+              {taskListResponse.summary.total_tasks}
+            </p>
+          </div>
+          <div className="p-3.5 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/60 dark:border-blue-900/40 shadow-xs">
+            <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400">Assigned</span>
+            <p className="text-xl font-bold text-blue-700 dark:text-blue-300 mt-1">
+              {taskListResponse.summary.assigned}
+            </p>
+          </div>
+          <div className="p-3.5 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/60 dark:border-indigo-900/40 shadow-xs">
+            <span className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400">In Progress</span>
+            <p className="text-xl font-bold text-indigo-600 dark:text-indigo-400 mt-1">
+              {taskListResponse.summary.in_progress}
+            </p>
+          </div>
+          <div className="p-3.5 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 shadow-xs">
+            <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">Pending Docs</span>
+            <p className="text-xl font-bold text-amber-600 dark:text-amber-400 mt-1">
+              {taskListResponse.summary.pending_docs}
+            </p>
+          </div>
+          <div className="p-3.5 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40 shadow-xs">
+            <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">Completed</span>
+            <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
+              {taskListResponse.summary.completed}
+            </p>
+          </div>
+          <div className="p-3.5 rounded-xl bg-red-50/50 dark:bg-red-950/20 border border-red-200/60 dark:border-red-900/40 shadow-xs">
+            <span className="text-[11px] font-semibold text-red-600 dark:text-red-400">Overdue</span>
+            <p className="text-xl font-bold text-red-600 dark:text-red-400 mt-1">
+              {taskListResponse.summary.overdue}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Filter and Search Bar */}
       <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col md:flex-row gap-3 items-center justify-between">
@@ -288,6 +330,7 @@ export const TaskAssignmentPage: React.FC = () => {
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 text-slate-500 dark:text-slate-400 uppercase text-[10px] font-bold">
                   <th className="py-3.5 px-4">Application #</th>
+                  <th className="py-3.5 px-4">Order #</th>
                   <th className="py-3.5 px-4">Client Name</th>
                   <th className="py-3.5 px-4">Service</th>
                   <th className="py-3.5 px-4">Current Assignee</th>
@@ -304,8 +347,12 @@ export const TaskAssignmentPage: React.FC = () => {
                     <td className="py-3.5 px-4 font-mono font-bold text-blue-600 dark:text-blue-400">
                       {task.application_number}
                     </td>
+                    <td className="py-3.5 px-4 font-mono text-slate-500">{task.sales_order_number || '—'}</td>
                     <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-white">
                       {task.client_name}
+                      {task.client_phone && (
+                        <div className="text-[11px] font-normal text-slate-400">{task.client_phone}</div>
+                      )}
                     </td>
                     <td className="py-3.5 px-4 font-semibold text-slate-700 dark:text-slate-300">
                       {task.service_name}

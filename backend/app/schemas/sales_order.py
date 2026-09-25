@@ -16,7 +16,7 @@ class SalesOrderBase(BaseModel):
     contact_no: Optional[str] = Field(None, max_length=20, description="Client contact / phone number")
     service_id: uuid.UUID = Field(..., description="Service / Work identifier")
     salesperson_user_id: Optional[uuid.UUID] = Field(None, description="Salesperson who converted the order")
-    lead_source: str = Field(default="DIRECT", description="WEBSITE, REFERRAL, DIRECT, OTHERS")
+    lead_source: str = Field(default="DIRECT", description="WEBSITE, REFERRAL, DIRECT, JUSTDIAL, INDIAMART, OTHERS")
     order_date: date = Field(..., description="Date when order was recorded")
     order_value: Decimal = Field(..., ge=0, description="Total order amount (Total Amount) in INR")
     amount_received: Decimal = Field(default=Decimal("0.00"), ge=0, description="Advance collected in INR")
@@ -50,6 +50,7 @@ class SalesOrderCreate(SalesOrderBase):
     """Schema for creating a sales order."""
 
     auto_confirm: bool = Field(default=False, description="Automatically confirm order and hand over to operations")
+    assignee_user_id: Optional[uuid.UUID] = Field(default=None, description="Optional Operations employee ID to assign the work to immediately")
 
     @model_validator(mode="after")
     def validate_amounts_and_client(self) -> "SalesOrderCreate":

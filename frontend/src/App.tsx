@@ -170,6 +170,22 @@ export const App: React.FC = () => {
               }
             />
             <Route
+              path="work-assign"
+              element={
+                <ProtectedRoute requiredModule="OPERATIONS" requiredAction="view">
+                  <TaskAssignmentPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="work-assignment"
+              element={
+                <ProtectedRoute requiredModule="OPERATIONS" requiredAction="view">
+                  <TaskAssignmentPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="tasks"
               element={
                 <ProtectedRoute requiredModule="OPERATIONS" requiredAction="view">

@@ -4,6 +4,47 @@ export const ACCESS_TOKEN_KEY = 'gocompliance_crm_access_token';
 export const REFRESH_TOKEN_KEY = 'gocompliance_crm_refresh_token';
 
 /**
+ * Get JWT access token from localStorage (remembered) or sessionStorage (browser session).
+ */
+export function getAccessToken(): string | null {
+  return localStorage.getItem(ACCESS_TOKEN_KEY) || sessionStorage.getItem(ACCESS_TOKEN_KEY);
+}
+
+/**
+ * Get JWT refresh token from localStorage (remembered) or sessionStorage (browser session).
+ */
+export function getRefreshToken(): string | null {
+  return localStorage.getItem(REFRESH_TOKEN_KEY) || sessionStorage.getItem(REFRESH_TOKEN_KEY);
+}
+
+/**
+ * Persist tokens in localStorage when rememberMe is true; otherwise use sessionStorage.
+ */
+export function setAuthTokens(accessToken: string, refreshToken: string, rememberMe: boolean = false): void {
+  if (rememberMe) {
+    localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+    localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+    sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+    sessionStorage.removeItem(REFRESH_TOKEN_KEY);
+  } else {
+    sessionStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+    sessionStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+    localStorage.removeItem(ACCESS_TOKEN_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
+  }
+}
+
+/**
+ * Clear tokens from both storage locations upon logout or authentication failure.
+ */
+export function clearAuthTokens(): void {
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+  sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+  sessionStorage.removeItem(REFRESH_TOKEN_KEY);
+}
+
+/**
  * Resolves the base API URL:
  * - When envBaseUrl / VITE_API_BASE_URL is a non-empty string, normalizes it and appends '/api'.
  * - When VITE_API_BASE_URL is explicitly empty string '' (demo/relative mode) or unset/undefined, returns '/api' for same-origin proxying.
@@ -31,7 +72,7 @@ export const apiClient = axios.create({
 // Request Interceptor: Attach JWT Access Token
 apiClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+    const token = getAccessToken();
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -45,9 +86,8 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     if (error.response?.status === 401) {
-      // Clear session
-      localStorage.removeItem(ACCESS_TOKEN_KEY);
-      localStorage.removeItem(REFRESH_TOKEN_KEY);
+      // Clear session from both storages
+      clearAuthTokens();
 
       // Redirect to login if not already there
       if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {

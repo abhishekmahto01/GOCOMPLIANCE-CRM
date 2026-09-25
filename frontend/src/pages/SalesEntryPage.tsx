@@ -102,7 +102,7 @@ export const SalesEntryPage: React.FC = () => {
       client_name: '',
       client_id: '',
       contact_no: '',
-      lead_source: 'Website',
+      lead_source: 'WEBSITE',
       service_id: '',
       salesperson_user_id: '',
       order_value: 0,
@@ -179,23 +179,6 @@ export const SalesEntryPage: React.FC = () => {
       setValue('contact_no', client.contact_phone, { shouldValidate: true });
     }
     setIsClientDropdownOpen(false);
-  };
-
-  // Handle service selection to auto-populate pricing defaults
-  const handleServiceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const serviceId = e.target.value;
-    setValue('service_id', serviceId, { shouldValidate: true });
-    if (!formOptions?.services) return;
-    const selectedService = formOptions.services.find((s) => s.service_id === serviceId);
-    if (selectedService) {
-      // If order value is 0 or unassigned, auto-fill base price
-      if (!watchedOrderValue || watchedOrderValue === 0) {
-        setValue('order_value', Number(selectedService.base_price) || 0, { shouldValidate: true });
-      }
-      if (selectedService.govt_fee > 0 && (!watchedGovtFees || watchedGovtFees === 0)) {
-        setValue('govt_fees', Number(selectedService.govt_fee) || 0, { shouldValidate: true });
-      }
-    }
   };
 
   // Form Submit Handler
@@ -524,15 +507,12 @@ export const SalesEntryPage: React.FC = () => {
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
               >
                 {(formOptions?.lead_sources || [
-                  'Website',
-                  'Referral',
-                  'Direct',
-                  'Walk-in',
-                  'Social Media',
-                  'Email Campaign',
-                  'Channel Partner',
-                  'Cold Call',
-                  'Other',
+                  'WEBSITE',
+                  'REFERRAL',
+                  'DIRECT',
+                  'JUSTDIAL',
+                  'INDIAMART',
+                  'OTHERS',
                 ]).map((src) => (
                   <option key={src} value={src}>
                     {src}
@@ -551,15 +531,13 @@ export const SalesEntryPage: React.FC = () => {
               </label>
               <select
                 id="service_id"
-                {...register('service_id', {
-                  onChange: handleServiceChange,
-                })}
+                {...register('service_id')}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
               >
                 <option value="">-- Select Service / Work --</option>
                 {(formOptions?.services || []).map((srv) => (
                   <option key={srv.service_id} value={srv.service_id}>
-                    {srv.service_name} ({srv.service_code}) - Base: {formatInr(srv.base_price)}
+                    {srv.service_name}
                   </option>
                 ))}
               </select>

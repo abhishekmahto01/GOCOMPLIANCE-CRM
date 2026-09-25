@@ -464,12 +464,7 @@ def get_operations_tasks(
     )
 
     if my_tasks_only:
-        stmt = stmt.where(
-            or_(
-                OperationApplication.assigned_to_user_id == user.user_id,
-                OperationApplication.assigned_by_user_id == user.user_id,
-            )
-        )
+        stmt = stmt.where(OperationApplication.assigned_to_user_id == user.user_id)
     elif unassigned_only:
         stmt = stmt.where(
             or_(

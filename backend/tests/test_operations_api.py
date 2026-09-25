@@ -684,3 +684,275 @@ class TestOperationsAPI:
         res_tasks = client.get("/api/operations/tasks", headers=sa_headers)
         assert res_tasks.status_code == 200
         assert res_tasks.json()["total_count"] >= 1
+
+    def test_sales_to_operations_assignment_reassignment_and_visibility_flow(
+        self, client: TestClient, db_session: Session, ops_test_fixture: dict
+    ):
+        """Complete verification of:
+        1. Sales-to-Operations assignment (Karishma creates PESO order assigned to Mansi)
+        2. Reassignment from Mansi to Deepak with audit trail (no duplicate task created)
+        3. Deepak sees it in My Assigned Tasks; Mansi does NOT see it in My Assigned Tasks
+        4. Super Admin and Director see all tasks in All Operations Tasks with assignee filtering
+        5. KPI counts agree with records returned on every view.
+        """
+        f = ops_test_fixture
+        company = f["company"]
+        ops_deepak = f["ops_deepak"]
+        ops_mansi = f["ops_mansi"]
+
+        # 1. Create Sales Department & Salesperson Karishma
+        dept_sales = db_session.query(Department).filter(
+            Department.company_id == company.company_id,
+            Department.department_code == "SALES",
+        ).first()
+
+        desig_sales_exec = Designation(
+            company_id=company.company_id,
+            designation_code="SALES_EXEC",
+            designation_name="Sales Executive",
+            level_rank=5,
+            status="ACTIVE",
+        )
+        desig_director = Designation(
+            company_id=company.company_id,
+            designation_code="DIR",
+            designation_name="Director",
+            level_rank=20,
+            status="ACTIVE",
+        )
+        db_session.add_all([desig_sales_exec, desig_director])
+        db_session.flush()
+
+        karishma_sales = User(
+            employee_code="SL0001",
+            company_id=company.company_id,
+            department_id=dept_sales.department_id,
+            designation_id=desig_sales_exec.designation_id,
+            first_name="Karishma",
+            last_name="Sales",
+            official_email="karishma.sales@opstest.com",
+            mobile_number="+919876543111",
+            date_of_joining=date(2024, 1, 1),
+            employment_type="FULL_TIME",
+            account_status="ACTIVE",
+            must_change_password=False,
+        )
+        director_user = User(
+            employee_code="DR0001",
+            company_id=company.company_id,
+            department_id=dept_sales.department_id,
+            designation_id=desig_director.designation_id,
+            first_name="Director",
+            last_name="Executive",
+            official_email="director@opstest.com",
+            mobile_number="+919876543222",
+            date_of_joining=date(2024, 1, 1),
+            employment_type="FULL_TIME",
+            account_status="ACTIVE",
+            must_change_password=False,
+        )
+        super_admin_user = User(
+            employee_code="CG0001",
+            company_id=company.company_id,
+            department_id=dept_sales.department_id,
+            designation_id=desig_director.designation_id,
+            first_name="Super",
+            last_name="Admin",
+            official_email="admin.super@opstest.com",
+            mobile_number="+919876543333",
+            date_of_joining=date(2024, 1, 1),
+            employment_type="FULL_TIME",
+            account_status="ACTIVE",
+            must_change_password=False,
+        )
+        db_session.add_all([karishma_sales, director_user, super_admin_user])
+        db_session.flush()
+
+        # Grant permissions
+        mod_sales = Module(module_code="SALES", module_name="Sales Module", display_order=10, status="ACTIVE")
+        mod_ops = db_session.query(Module).filter(Module.module_code == "OPERATIONS").first()
+        db_session.add(mod_sales)
+        db_session.flush()
+
+        grant_or_update_permission(
+            session=db_session,
+            user_id=karishma_sales.user_id,
+            module_id=mod_sales.module_id,
+            can_view=True,
+            can_create=True,
+            can_edit=True,
+            data_scope="SELF",
+            is_bootstrap=True,
+        )
+        grant_or_update_permission(
+            session=db_session,
+            user_id=director_user.user_id,
+            module_id=mod_ops.module_id,
+            can_view=True,
+            can_create=True,
+            can_edit=True,
+            can_assign=True,
+            can_reassign=True,
+            data_scope="COMPANY",
+            is_bootstrap=True,
+        )
+
+        # Create PESO Service
+        service_peso = ServiceMaster(
+            service_code="SRV_PESO",
+            service_name="PESO Approval",
+            category="LICENCE",
+            base_price=Decimal("60000.00"),
+            govt_fee=Decimal("10000.00"),
+            standard_turnaround_days=30,
+            status="ACTIVE",
+        )
+        db_session.add(service_peso)
+        db_session.flush()
+
+        # Client
+        client_test = ClientMaster(
+            company_id=company.company_id,
+            client_name="PESO Client Ltd",
+            entity_type="PRIVATE_LIMITED",
+            contact_email="peso@client.com",
+            contact_phone="+919876598888",
+            status="ACTIVE",
+            created_by_user_id=karishma_sales.user_id,
+        )
+        db_session.add(client_test)
+        db_session.flush()
+
+        # Step 1: Karishma creates PESO Sales Order assigned to Mansi
+        from app.schemas.sales_order import SalesOrderCreate
+        peso_order_data = SalesOrderCreate(
+            company_id=company.company_id,
+            client_id=client_test.client_id,
+            service_id=service_peso.service_id,
+            salesperson_user_id=karishma_sales.user_id,
+            assignee_user_id=ops_mansi.user_id,
+            order_date=date.today(),
+            order_value=Decimal("75000.00"),
+            amount_received=Decimal("40000.00"),
+            govt_fees=Decimal("10000.00"),
+            incidental_cost=Decimal("2000.00"),
+            lead_source="JUSTDIAL",
+            payment_status="PARTIALLY_PAID",
+            auto_confirm=True,
+            notes="PESO licence expedited filing",
+        )
+        peso_order = create_sales_order(session=db_session, data=peso_order_data, current_user=karishma_sales)
+        db_session.flush()
+
+        # Check: exactly 1 OperationApplication created with Mansi assigned
+        peso_apps = db_session.query(OperationApplication).filter(
+            OperationApplication.sales_order_id == peso_order.order_id
+        ).all()
+        assert len(peso_apps) == 1
+        peso_app = peso_apps[0]
+        assert peso_app.assigned_to_user_id == ops_mansi.user_id
+        assert peso_app.application_status == "ASSIGNED"
+
+        # Check initial assignment history
+        histories = db_session.query(ApplicationAssignmentHistory).filter(
+            ApplicationAssignmentHistory.application_id == peso_app.application_id
+        ).all()
+        assert len(histories) == 1
+        assert histories[0].new_assignee_user_id == ops_mansi.user_id
+        assert histories[0].previous_assignee_user_id is None
+
+        # Step 2: Karishma reassigns the order to Deepak
+        from app.services.sales_service import assign_sales_order_operations
+        updated_read = assign_sales_order_operations(
+            session=db_session,
+            order_id=peso_order.order_id,
+            assignee_user_id=ops_deepak.user_id,
+            assigned_by=karishma_sales,
+            priority="URGENT",
+            notes="Reassigned from Mansi to Deepak due to technical specialization",
+        )
+        db_session.flush()
+
+        # Check: still exactly 1 OperationApplication for this order (no duplicates)
+        peso_apps_after = db_session.query(OperationApplication).filter(
+            OperationApplication.sales_order_id == peso_order.order_id
+        ).all()
+        assert len(peso_apps_after) == 1
+        assert peso_apps_after[0].assigned_to_user_id == ops_deepak.user_id
+        assert peso_apps_after[0].priority == "URGENT"
+
+        # Check history has both assignments (None -> Mansi, Mansi -> Deepak)
+        histories_after = db_session.query(ApplicationAssignmentHistory).filter(
+            ApplicationAssignmentHistory.application_id == peso_app.application_id
+        ).order_by(ApplicationAssignmentHistory.assigned_at.asc()).all()
+        assert len(histories_after) == 2
+        assert histories_after[0].new_assignee_user_id == ops_mansi.user_id
+        assert histories_after[1].previous_assignee_user_id == ops_mansi.user_id
+        assert histories_after[1].new_assignee_user_id == ops_deepak.user_id
+        assert histories_after[1].assigned_by_user_id == karishma_sales.user_id
+
+        # Step 3: Deepak checks "My Assigned Tasks"
+        deepak_headers = auth_header(ops_deepak)
+        deepak_res = client.get("/api/operations/tasks/my-tasks", headers=deepak_headers)
+        assert deepak_res.status_code == 200
+        deepak_data = deepak_res.json()
+        deepak_app_numbers = [item["application_number"] for item in deepak_data["items"]]
+        assert peso_app.application_number in deepak_app_numbers
+        assert deepak_data["total_count"] == len(deepak_data["items"])
+        assert deepak_data["summary"]["total_tasks"] == len(deepak_data["items"])
+
+        # Step 4: Mansi checks "My Assigned Tasks" -> PESO order must NOT appear
+        mansi_headers = auth_header(ops_mansi)
+        mansi_res = client.get("/api/operations/tasks/my-tasks", headers=mansi_headers)
+        assert mansi_res.status_code == 200
+        mansi_data = mansi_res.json()
+        mansi_app_numbers = [item["application_number"] for item in mansi_data["items"]]
+        assert peso_app.application_number not in mansi_app_numbers
+        assert mansi_data["total_count"] == len(mansi_data["items"])
+
+        # Step 5: Super Admin checks "All Operations Tasks" -> Sees all 4 applications
+        sa_headers = auth_header(super_admin_user)
+        sa_res = client.get("/api/operations/tasks", headers=sa_headers)
+        assert sa_res.status_code == 200
+        sa_data = sa_res.json()
+        assert sa_data["total_count"] == 4  # AP-TEST-0001, AP-TEST-0002, AP-TEST-0003, and PESO
+        sa_app_numbers = [item["application_number"] for item in sa_data["items"]]
+        assert peso_app.application_number in sa_app_numbers
+
+        # Verify Super Admin can filter by Deepak
+        sa_deepak_res = client.get(f"/api/operations/tasks?assigned_to_user_id={ops_deepak.user_id}", headers=sa_headers)
+        assert sa_deepak_res.status_code == 200
+        sa_deepak_data = sa_deepak_res.json()
+        assert all(item["assigned_to_user_id"] == str(ops_deepak.user_id) for item in sa_deepak_data["items"])
+        assert peso_app.application_number in [item["application_number"] for item in sa_deepak_data["items"]]
+        assert sa_deepak_data["total_count"] == len(sa_deepak_data["items"])
+
+        # Verify Super Admin can filter by Mansi
+        sa_mansi_res = client.get(f"/api/operations/tasks?assigned_to_user_id={ops_mansi.user_id}", headers=sa_headers)
+        assert sa_mansi_res.status_code == 200
+        sa_mansi_data = sa_mansi_res.json()
+        assert all(item["assigned_to_user_id"] == str(ops_mansi.user_id) for item in sa_mansi_data["items"])
+        assert peso_app.application_number not in [item["application_number"] for item in sa_mansi_data["items"]]
+        assert sa_mansi_data["total_count"] == len(sa_mansi_data["items"])
+
+        # Step 6: Director checks "All Operations Tasks" -> Sees all company tasks
+        dir_headers = auth_header(director_user)
+        dir_res = client.get("/api/operations/tasks", headers=dir_headers)
+        assert dir_res.status_code == 200
+        dir_data = dir_res.json()
+        assert dir_data["total_count"] == 4
+        assert peso_app.application_number in [item["application_number"] for item in dir_data["items"]]
+
+        # Step 7: Get full detail for PESO task and verify assignment history audit trail
+        detail_res = client.get(f"/api/operations/tasks/{peso_app.application_id}", headers=sa_headers)
+        assert detail_res.status_code == 200
+        detail_data = detail_res.json()
+        assert detail_data["assigned_to_name"] == "Deepak Kumar"
+        assert len(detail_data["assignment_history"]) == 2
+        # Latest assignment (index 0)
+        assert detail_data["assignment_history"][0]["new_assignee_name"] == "Deepak Kumar"
+        assert detail_data["assignment_history"][0]["previous_assignee_name"] == "Mansi Sharma"
+        # Initial assignment (index 1)
+        assert detail_data["assignment_history"][1]["new_assignee_name"] == "Mansi Sharma"
+        assert detail_data["assignment_history"][1]["previous_assignee_name"] is None
+

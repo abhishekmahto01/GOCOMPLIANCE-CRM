@@ -865,12 +865,12 @@ def test_operations_manager_assigns_order_to_ops_member(
 def test_unauthorized_user_cannot_assign_sales_order(
     client: TestClient, db_session: Session, sales_fixture: dict
 ):
-    """Verify non-operations managers cannot assign or reassign sales orders."""
+    """Verify order creator can assign to operations employee, while unrelated salespeople cannot."""
     f = sales_fixture
     rep1_headers = auth_headers(f["rep1"])
-    mansi_headers = auth_headers(f["mansi"])
+    rep2_headers = auth_headers(f["rep2"])
 
-    # Create order
+    # Create order by rep1
     create_resp = client.post(
         "/api/sales/orders",
         json={
@@ -884,13 +884,212 @@ def test_unauthorized_user_cannot_assign_sales_order(
         },
         headers=rep1_headers,
     )
+    assert create_resp.status_code == 201
     order_id = create_resp.json()["order_id"]
 
-    # Rep1 (regular sales rep, not ops manager) tries to assign -> 403
-    assign_payload = {
-        "assigned_to_user_id": str(f["mansi"].user_id),
-        "priority": "MEDIUM",
-    }
-    rep1_assign_resp = client.post(f"/api/sales/orders/{order_id}/assign", json=assign_payload, headers=rep1_headers)
-    assert rep1_assign_resp.status_code == 403
+    # Rep2 (unrelated sales rep who did not create the order) tries to assign -> 403
+    unauth_assign_resp = client.post(
+        f"/api/sales/orders/{order_id}/assign",
+        json={"assigned_to_user_id": str(f["mansi"].user_id), "priority": "HIGH"},
+        headers=rep2_headers,
+    )
+    assert unauth_assign_resp.status_code == 403
+
+    # Creator rep1 assigns to operations employee Mansi -> 200 OK
+    rep1_assign_resp = client.post(
+        f"/api/sales/orders/{order_id}/assign",
+        json={"assigned_to_user_id": str(f["mansi"].user_id), "priority": "HIGH"},
+        headers=rep1_headers,
+    )
+    assert rep1_assign_resp.status_code == 200
+    assert rep1_assign_resp.json()["assigned_to_user_id"] == str(f["mansi"].user_id)
+    assert rep1_assign_resp.json()["assigned_to_name"] == "Mansi Sharma"
+
+
+def test_lead_sources_justdial_and_indiamart(
+    client: TestClient, db_session: Session, sales_fixture: dict
+):
+    """Verify JUSTDIAL and INDIAMART lead sources in form options, order creation, register, and filters."""
+    f = sales_fixture
+    rep1_headers = auth_headers(f["rep1"])
+
+    # 1. Check form options includes JUSTDIAL and INDIAMART
+    opts_resp = client.get("/api/sales/form-options", headers=rep1_headers)
+    assert opts_resp.status_code == 200
+    sources = opts_resp.json()["lead_sources"]
+    assert "JUSTDIAL" in sources
+    assert "INDIAMART" in sources
+
+    # 2. Create order with JUSTDIAL
+    jd_resp = client.post(
+        "/api/sales/orders",
+        json={
+            "client_name": "Justdial Client Ltd",
+            "contact_no": "9123456780",
+            "service_id": str(f["srv1"].service_id),
+            "lead_source": "JUSTDIAL",
+            "order_date": date.today().isoformat(),
+            "order_value": "35000.00",
+            "amount_received": "15000.00",
+            "govt_fees": "4000.00",
+            "incidental_cost": "1000.00",
+            "auto_confirm": True,
+        },
+        headers=rep1_headers,
+    )
+    assert jd_resp.status_code == 201
+    jd_order = jd_resp.json()
+    assert jd_order["lead_source"] == "JUSTDIAL"
+    assert Decimal(str(jd_order["profit_amount"])) == Decimal("30000.00")
+    assert Decimal(str(jd_order["balance_amount"])) == Decimal("20000.00")
+
+    # 3. Create order with INDIAMART
+    im_resp = client.post(
+        "/api/sales/orders",
+        json={
+            "client_name": "IndiaMART Supplier Pvt Ltd",
+            "contact_no": "9123456781",
+            "service_id": str(f["srv2"].service_id),
+            "lead_source": "INDIAMART",
+            "order_date": date.today().isoformat(),
+            "order_value": "18000.00",
+            "amount_received": "18000.00",
+            "govt_fees": "2000.00",
+            "incidental_cost": "500.00",
+            "auto_confirm": True,
+        },
+        headers=rep1_headers,
+    )
+    assert im_resp.status_code == 201
+    im_order = im_resp.json()
+    assert im_order["lead_source"] == "INDIAMART"
+    assert Decimal(str(im_order["profit_amount"])) == Decimal("15500.00")
+    assert Decimal(str(im_order["balance_amount"])) == Decimal("0.00")
+
+    # 4. Filter register by JUSTDIAL
+    jd_filter_resp = client.get("/api/sales/register?lead_source=JUSTDIAL", headers=rep1_headers)
+    assert jd_filter_resp.status_code == 200
+    jd_items = jd_filter_resp.json()["items"]
+    assert any(item["order_id"] == jd_order["order_id"] for item in jd_items)
+    assert all(item["lead_source"] == "JUSTDIAL" for item in jd_items)
+
+    # 5. Filter register by INDIAMART
+    im_filter_resp = client.get("/api/sales/register?lead_source=INDIAMART", headers=rep1_headers)
+    assert im_filter_resp.status_code == 200
+    im_items = im_filter_resp.json()["items"]
+    assert any(item["order_id"] == im_order["order_id"] for item in im_items)
+    assert all(item["lead_source"] == "INDIAMART" for item in im_items)
+
+
+def test_custom_service_pricing_and_calculated_financials(
+    client: TestClient, db_session: Session, sales_fixture: dict
+):
+    """Verify salesperson can quote different prices for the same service and verify pending/profit calculations."""
+    f = sales_fixture
+    rep1_headers = auth_headers(f["rep1"])
+    srv_id = str(f["srv1"].service_id)
+
+    # Client A: Quoted 50,000 (Govt fees 5,000, Incidental 1,500, Advance 20,000)
+    order_a_resp = client.post(
+        "/api/sales/orders",
+        json={
+            "client_name": "Premium Client A",
+            "contact_no": "9811111111",
+            "service_id": srv_id,
+            "order_date": date.today().isoformat(),
+            "order_value": "50000.00",
+            "amount_received": "20000.00",
+            "govt_fees": "5000.00",
+            "incidental_cost": "1500.00",
+            "auto_confirm": True,
+        },
+        headers=rep1_headers,
+    )
+    assert order_a_resp.status_code == 201
+    order_a = order_a_resp.json()
+    assert Decimal(str(order_a["order_value"])) == Decimal("50000.00")
+    assert Decimal(str(order_a["amount_received"])) == Decimal("20000.00")
+    assert Decimal(str(order_a["balance_amount"])) == Decimal("30000.00")  # 50000 - 20000
+    assert Decimal(str(order_a["profit_amount"])) == Decimal("43500.00")  # 50000 - 5000 - 1500
+
+    # Client B: Quoted 25,000 (Govt fees 3,000, Incidental 500, Advance 10,000) for same service
+    order_b_resp = client.post(
+        "/api/sales/orders",
+        json={
+            "client_name": "Discounted Client B",
+            "contact_no": "9822222222",
+            "service_id": srv_id,
+            "order_date": date.today().isoformat(),
+            "order_value": "25000.00",
+            "amount_received": "10000.00",
+            "govt_fees": "3000.00",
+            "incidental_cost": "500.00",
+            "auto_confirm": True,
+        },
+        headers=rep1_headers,
+    )
+    assert order_b_resp.status_code == 201
+    order_b = order_b_resp.json()
+    assert Decimal(str(order_b["order_value"])) == Decimal("25000.00")
+    assert Decimal(str(order_b["amount_received"])) == Decimal("10000.00")
+    assert Decimal(str(order_b["balance_amount"])) == Decimal("15000.00")  # 25000 - 10000
+    assert Decimal(str(order_b["profit_amount"])) == Decimal("21500.00")  # 25000 - 3000 - 500
+
+
+def test_order_creator_can_assign_to_operations_manager_and_shows_in_ops_list(
+    client: TestClient, db_session: Session, sales_fixture: dict
+):
+    """Verify order creator assigning order to Mansi appears in Mansi's Operations tasks list."""
+    f = sales_fixture
+    rep1_headers = auth_headers(f["rep1"])
+    mansi_headers = auth_headers(f["mansi"])
+
+    # Create order
+    create_resp = client.post(
+        "/api/sales/orders",
+        json={
+            "client_name": "Apex Work Flow Corp",
+            "contact_no": "9876543210",
+            "service_id": str(f["srv1"].service_id),
+            "order_date": date.today().isoformat(),
+            "order_value": "45000.00",
+            "amount_received": "45000.00",
+            "auto_confirm": True,
+        },
+        headers=rep1_headers,
+    )
+    assert create_resp.status_code == 201
+    order_id = create_resp.json()["order_id"]
+
+    # Rep1 assigns order to Mansi
+    assign_resp = client.post(
+        f"/api/sales/orders/{order_id}/assign",
+        json={
+            "assignee_user_id": str(f["mansi"].user_id),
+            "priority": "HIGH",
+            "notes": "Urgent incorporation client from Justdial",
+        },
+        headers=rep1_headers,
+    )
+    assert assign_resp.status_code == 200
+    assigned_data = assign_resp.json()
+    assert assigned_data["assigned_to_user_id"] == str(f["mansi"].user_id)
+    assert assigned_data["assigned_to_name"] == "Mansi Sharma"
+
+    # Query Operations tasks as Mansi
+    ops_resp = client.get("/api/operations/tasks", headers=mansi_headers)
+    assert ops_resp.status_code == 200
+    ops_items = ops_resp.json()["items"]
+    matched = [item for item in ops_items if item["client_name"] == "Apex Work Flow Corp"]
+    assert len(matched) == 1
+    assert matched[0]["assigned_to_user_id"] == str(f["mansi"].user_id)
+    assert matched[0]["priority"] == "HIGH"
+
+    # Query My Tasks as Mansi
+    my_tasks_resp = client.get("/api/operations/tasks/my-tasks", headers=mansi_headers)
+    assert my_tasks_resp.status_code == 200
+    my_items = my_tasks_resp.json()["items"]
+    matched_my = [item for item in my_items if item["client_name"] == "Apex Work Flow Corp"]
+    assert len(matched_my) == 1
+
 

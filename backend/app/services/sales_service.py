@@ -390,7 +390,7 @@ def create_sales_order(
     session.flush()
 
     if data.auto_confirm:
-        confirm_sales_order(session, order.order_id, current_user)
+        confirm_sales_order(session, order.order_id, current_user, assignee_user_id=data.assignee_user_id)
 
     return order
 
@@ -399,6 +399,7 @@ def confirm_sales_order(
     session: Session,
     order_id: uuid.UUID,
     current_user: User,
+    assignee_user_id: Optional[uuid.UUID] = None,
 ) -> SalesOrderConfirmResponse:
     """Confirm a sales order and execute idempotent transactional handoff to Operations."""
     order = session.get(SalesOrder, order_id)
@@ -429,34 +430,46 @@ def confirm_sales_order(
     order.confirmation_status = "CONFIRMED"
     order.confirmed_at = now_utc
 
-    # Look up Mansi Singhal / Operations lead in the same company for default task assignment
-    ops_lead = session.execute(
-        select(User)
-        .outerjoin(Department, User.department_id == Department.department_id)
-        .where(
-            User.company_id == order.company_id,
-            User.account_status == "ACTIVE",
-            or_(
-                User.employee_code == "CG0003",
-                User.first_name.ilike("%mansi%"),
-                Department.department_code.in_(["OP", "OPS", "OPERATIONS"]),
-                Department.department_name.ilike("%operation%"),
-            ),
-        )
-        .order_by(
-            case(
-                (User.employee_code == "CG0003", 0),
-                (User.first_name.ilike("%mansi%"), 1),
-                else_=2,
-            ),
-            User.created_at.asc(),
-        )
-    ).scalars().first()
+    # Look up assigned target: either specified assignee_user_id or default Mansi Singhal / Operations lead
+    assigned_target = None
+    if assignee_user_id:
+        target_user = session.get(User, assignee_user_id)
+        if (
+            target_user
+            and target_user.account_status == "ACTIVE"
+            and target_user.company_id == order.company_id
+            and not operation_service.is_disallowed_ops_assignee(target_user)
+        ):
+            assigned_target = target_user
 
-    default_assigned_to = ops_lead.user_id if ops_lead else None
-    default_assigned_by = current_user.user_id if ops_lead else None
-    default_assigned_at = now_utc if ops_lead else None
-    default_app_status = "ASSIGNED" if ops_lead else "UNASSIGNED"
+    if not assigned_target:
+        assigned_target = session.execute(
+            select(User)
+            .outerjoin(Department, User.department_id == Department.department_id)
+            .where(
+                User.company_id == order.company_id,
+                User.account_status == "ACTIVE",
+                or_(
+                    User.employee_code == "CG0003",
+                    User.first_name.ilike("%mansi%"),
+                    Department.department_code.in_(["OP", "OPS", "OPERATIONS"]),
+                    Department.department_name.ilike("%operation%"),
+                ),
+            )
+            .order_by(
+                case(
+                    (User.employee_code == "CG0003", 0),
+                    (User.first_name.ilike("%mansi%"), 1),
+                    else_=2,
+                ),
+                User.created_at.asc(),
+            )
+        ).scalars().first()
+
+    default_assigned_to = assigned_target.user_id if assigned_target else None
+    default_assigned_by = current_user.user_id if assigned_target else None
+    default_assigned_at = now_utc if assigned_target else None
+    default_app_status = "ASSIGNED" if assigned_target else "UNASSIGNED"
 
     app_num = generate_application_number(session, order.order_date)
 
@@ -495,13 +508,13 @@ def confirm_sales_order(
         session.add(app_doc)
         doc_count += 1
 
-    if ops_lead:
+    if assigned_target:
         history = ApplicationAssignmentHistory(
             application_id=new_app.application_id,
             assigned_by_user_id=current_user.user_id,
             previous_assignee_user_id=None,
-            new_assignee_user_id=ops_lead.user_id,
-            reason="Automatic default assignment on sales entry confirmation",
+            new_assignee_user_id=assigned_target.user_id,
+            reason="Initial task assignment on sales entry confirmation",
             assigned_at=now_utc,
         )
         session.add(history)
@@ -509,12 +522,12 @@ def confirm_sales_order(
     activity = ApplicationActivityLog(
         application_id=new_app.application_id,
         actor_user_id=current_user.user_id,
-        action_type="ASSIGNMENT_CHANGE" if ops_lead else "STATUS_CHANGE",
+        action_type="ASSIGNMENT_CHANGE" if assigned_target else "STATUS_CHANGE",
         old_value="NONE",
-        new_value=f"{ops_lead.first_name} {ops_lead.last_name} ({ops_lead.employee_code})" if ops_lead else "UNASSIGNED",
+        new_value=f"{assigned_target.first_name} {assigned_target.last_name} ({assigned_target.employee_code})" if assigned_target else "UNASSIGNED",
         comment=(
-            f"Order '{order.order_number}' confirmed and assigned by default to Operations Lead {ops_lead.first_name} {ops_lead.last_name} ({ops_lead.employee_code})."
-            if ops_lead
+            f"Order '{order.order_number}' confirmed and assigned to {assigned_target.first_name} {assigned_target.last_name} ({assigned_target.employee_code})."
+            if assigned_target
             else f"Order '{order.order_number}' confirmed and handed over from Sales."
         ),
     )
@@ -831,6 +844,8 @@ def get_sales_dashboard_data(
         ("WEBSITE", "Website"),
         ("REFERRAL", "Referral"),
         ("DIRECT", "Direct"),
+        ("JUSTDIAL", "Justdial"),
+        ("INDIAMART", "IndiaMART"),
         ("OTHERS", "Others"),
     ]
     lead_items: List[LeadSourceItem] = []
@@ -1022,6 +1037,8 @@ def get_sales_dashboard_data(
         FilterOptionItem(id="WEBSITE", label="Website"),
         FilterOptionItem(id="REFERRAL", label="Referral"),
         FilterOptionItem(id="DIRECT", label="Direct"),
+        FilterOptionItem(id="JUSTDIAL", label="Justdial"),
+        FilterOptionItem(id="INDIAMART", label="IndiaMART"),
         FilterOptionItem(id="OTHERS", label="Others"),
     ]
 
@@ -1436,7 +1453,7 @@ def get_sales_form_options(
     # 4. Eligible Operations Assignees
     ops_assignees = get_eligible_operations_assignees(session, current_user.company_id)
 
-    lead_sources = ["WEBSITE", "REFERRAL", "DIRECT", "OTHERS"]
+    lead_sources = ["WEBSITE", "REFERRAL", "DIRECT", "JUSTDIAL", "INDIAMART", "OTHERS"]
     comp = session.get(Company, current_user.company_id)
     comp_name = comp.company_name if comp else "GoCompliance CRM"
 
@@ -1506,9 +1523,11 @@ def assign_sales_order_operations(
     if not order:
         raise SalesOrderNotFoundError(f"Sales order with ID '{order_id}' not found.")
 
-    # Authorization Check: Operations manager / head / super admin / director
+    # Authorization Check: order creator / salesperson, Operations manager / head / super admin / director
     is_authorized = False
     if getattr(assigned_by, "is_super_admin", False):
+        is_authorized = True
+    elif str(assigned_by.user_id) == str(order.salesperson_user_id):
         is_authorized = True
     else:
         for mod_code in ("OPERATIONS", "OPS_APPLICATIONS", "ADMIN", "SALES"):
@@ -1529,7 +1548,7 @@ def assign_sales_order_operations(
         if getattr(assigned_by, "is_reporting_manager", False):
             is_authorized = True
         else:
-            raise SalesOrderPermissionError("Only authorized Operations managers/heads can assign or reassign work.")
+            raise SalesOrderPermissionError("Only authorized Operations managers/heads or the order salesperson can assign or reassign work.")
 
     # Ensure application exists (confirm if draft)
     if not order.application:

@@ -54,7 +54,7 @@ export const OperationsLayout: React.FC = () => {
       return [{ label: 'Operations', href: '/operations/dashboard' }, { label: 'Unassigned Orders' }];
     }
     if (pathname.startsWith('/operations/task-assignment') || pathname.startsWith('/operations/tasks') || pathname.startsWith('/operations/all-tasks')) {
-      return [{ label: 'Operations', href: '/operations/dashboard' }, { label: 'Task Assignment' }];
+      return [{ label: 'Operations', href: '/operations/dashboard' }, { label: 'All Operations Tasks' }];
     }
     if (pathname.startsWith('/operations/dashboard')) {
       return [{ label: 'Operations', href: '/operations/dashboard' }, { label: 'Operation Dashboard' }];

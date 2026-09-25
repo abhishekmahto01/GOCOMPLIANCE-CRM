@@ -53,6 +53,8 @@ export const OperationsSidebar: React.FC<OperationsSidebarProps> = ({
     location.pathname.startsWith('/operations/unassigned');
   const isTaskAssignmentActive =
     location.pathname.startsWith('/operations/task-assignment') ||
+    location.pathname.startsWith('/operations/work-assign') ||
+    location.pathname.startsWith('/operations/work-assignment') ||
     location.pathname.startsWith('/operations/tasks') ||
     location.pathname.startsWith('/operations/all-tasks');
 
@@ -164,7 +166,7 @@ export const OperationsSidebar: React.FC<OperationsSidebarProps> = ({
                 <span>Unassigned Orders</span>
               </Link>
 
-              {/* Task Assignment */}
+              {/* All Operations Tasks */}
               <Link
                 to="/operations/task-assignment"
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
@@ -174,7 +176,7 @@ export const OperationsSidebar: React.FC<OperationsSidebarProps> = ({
                 }`}
               >
                 <UserCheck className="w-3.5 h-3.5" />
-                <span>Task Assignment</span>
+                <span>All Operations Tasks</span>
               </Link>
             </div>
           )}

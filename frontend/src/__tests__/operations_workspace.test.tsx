@@ -489,4 +489,53 @@ describe('Operations Workspace & Connected Workflow', () => {
       })
     );
   });
+
+  it('renders My Assigned Tasks page with correct title, KPI summary, and records', async () => {
+    render(
+      <MemoryRouter initialEntries={['/operations/my-tasks']}>
+        <ThemeProvider>
+          <AuthProvider>
+            <Routes>
+              <Route path="/operations" element={<OperationsLayout />}>
+                <Route path="my-tasks" element={<MyTasksPage />} />
+              </Route>
+            </Routes>
+          </AuthProvider>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1, name: /my assigned tasks/i })).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('Total Assigned')).toBeInTheDocument();
+    expect(screen.getByText('KAPPER')).toBeInTheDocument();
+    expect(screen.getByText('AP-2026-0001')).toBeInTheDocument();
+  });
+
+  it('renders All Operations Tasks page with assignee filter options and summary counts', async () => {
+    render(
+      <MemoryRouter initialEntries={['/operations/task-assignment']}>
+        <ThemeProvider>
+          <AuthProvider>
+            <Routes>
+              <Route path="/operations" element={<OperationsLayout />}>
+                <Route path="task-assignment" element={<TaskAssignmentPage />} />
+              </Route>
+            </Routes>
+          </AuthProvider>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1, name: /all operations tasks & work assignment/i })).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('Total Tasks')).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /all assignees/i })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /deepak kumar/i })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /mansi sharma/i })).toBeInTheDocument();
+  });
 });
