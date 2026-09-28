@@ -10,9 +10,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 class DesignationBase(BaseModel):
     """Base schema with common Designation fields."""
 
-    company_id: uuid.UUID = Field(
-        ...,
-        description="Foreign key ID of the parent company",
+    company_id: Optional[uuid.UUID] = Field(
+        None,
+        description="Optional foreign key ID of company",
     )
     designation_code: str = Field(
         ...,

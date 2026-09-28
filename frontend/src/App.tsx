@@ -9,6 +9,8 @@ import { EmployeeFormPage } from './pages/EmployeeFormPage';
 import { EmployeeDetailPage } from './pages/EmployeeDetailPage';
 import { UserPermissionsPage } from './pages/UserPermissionsPage';
 import { CompanyMasterPage } from './pages/CompanyMasterPage';
+import { DepartmentMasterPage } from './pages/DepartmentMasterPage';
+import { DesignationMasterPage } from './pages/DesignationMasterPage';
 import { LicenseMasterPage } from './pages/LicenseMasterPage';
 import { ChangePasswordRequiredPage } from './pages/ChangePasswordRequiredPage';
 import { LoginCredentialsPage } from './pages/LoginCredentialsPage';
@@ -28,6 +30,9 @@ import { OperationsDashboardPage } from './pages/operations/OperationsDashboardP
 import { MyTasksPage } from './pages/operations/MyTasksPage';
 import { UnassignedOrdersPage } from './pages/operations/UnassignedOrdersPage';
 import { TaskAssignmentPage } from './pages/operations/TaskAssignmentPage';
+
+import { AccountsLayout } from './components/accounts/AccountsLayout';
+import { AccountsDashboardPage } from './pages/accounts/AccountsDashboardPage';
 
 export const App: React.FC = () => {
   return (
@@ -205,6 +210,26 @@ export const App: React.FC = () => {
             />
           </Route>
 
+          {/* Protected Accounts Module Routes */}
+          <Route
+            path="/accounts"
+            element={
+              <ProtectedRoute requiredModule="ACCOUNTS" requiredAction="view">
+                <AccountsLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<AccountsDashboardPage />} />
+            <Route
+              path="dashboard"
+              element={
+                <ProtectedRoute requiredModule="ACCOUNTS" requiredAction="view">
+                  <AccountsDashboardPage />
+                </ProtectedRoute>
+              }
+            />
+          </Route>
+
           {/* Protected Administration Module (Nested Layout with Collapsible Sidebar) */}
           <Route
             path="/admin"
@@ -293,6 +318,34 @@ export const App: React.FC = () => {
             <Route
               path="company-master"
               element={<Navigate to="/admin/companies" replace />}
+            />
+
+            {/* Common Master / Department Master Routes */}
+            <Route
+              path="departments"
+              element={
+                <ProtectedRoute requiredModule="ADMIN" requiredAction="view">
+                  <DepartmentMasterPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="department-master"
+              element={<Navigate to="/admin/departments" replace />}
+            />
+
+            {/* Common Master / Designation Master Routes */}
+            <Route
+              path="designations"
+              element={
+                <ProtectedRoute requiredModule="ADMIN" requiredAction="view">
+                  <DesignationMasterPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="designation-master"
+              element={<Navigate to="/admin/designations" replace />}
             />
 
             {/* Common Master / License Master Routes */}

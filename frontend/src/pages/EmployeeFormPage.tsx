@@ -122,30 +122,28 @@ export const EmployeeFormPage: React.FC = () => {
 
   const selectedCompanyId = watch('company_id');
 
-  // Load Companies Lookup on mount
+  // Load Lookups on mount
   useEffect(() => {
     getLookupCompaniesApi()
       .then(setCompanies)
       .catch((err) => console.error('Failed to load companies:', err));
+
+    getLookupDepartmentsApi()
+      .then(setDepartments)
+      .catch((err) => console.error('Failed to load departments:', err));
+
+    getLookupDesignationsApi()
+      .then(setDesignations)
+      .catch((err) => console.error('Failed to load designations:', err));
   }, []);
 
-  // When Company changes, update dependent lookups
+  // When Company changes, update company-scoped lookups (Managers)
   useEffect(() => {
     if (selectedCompanyId) {
-      getLookupDepartmentsApi(selectedCompanyId)
-        .then(setDepartments)
-        .catch((err) => console.error('Failed to load departments:', err));
-
-      getLookupDesignationsApi(selectedCompanyId)
-        .then(setDesignations)
-        .catch((err) => console.error('Failed to load designations:', err));
-
       getLookupManagersApi(selectedCompanyId, userId)
         .then(setManagers)
         .catch((err) => console.error('Failed to load managers:', err));
     } else {
-      setDepartments([]);
-      setDesignations([]);
       setManagers([]);
     }
   }, [selectedCompanyId, userId]);
@@ -331,12 +329,9 @@ export const EmployeeFormPage: React.FC = () => {
                 </label>
                 <select
                   {...register('department_id')}
-                  disabled={!selectedCompanyId}
-                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="">
-                    {selectedCompanyId ? 'Select Department' : 'Select Company First'}
-                  </option>
+                  <option value="">Select Department</option>
                   {departments.map((d) => (
                     <option key={d.department_id} value={d.department_id}>
                       {d.department_name} ({d.department_code})
@@ -355,12 +350,9 @@ export const EmployeeFormPage: React.FC = () => {
                 </label>
                 <select
                   {...register('designation_id')}
-                  disabled={!selectedCompanyId}
-                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="">
-                    {selectedCompanyId ? 'Select Designation' : 'Select Company First'}
-                  </option>
+                  <option value="">Select Designation</option>
                   {designations.map((desig) => (
                     <option key={desig.designation_id} value={desig.designation_id}>
                       {desig.designation_name} ({desig.designation_code})

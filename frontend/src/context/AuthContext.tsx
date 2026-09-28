@@ -49,6 +49,7 @@ function normalizeModuleCode(code: string): string {
   if (c === 'OPERATION' || c === 'OPERATIONS') return 'OPERATIONS';
   if (c === 'SALES' || c === 'SALE') return 'SALES';
   if (c === 'ADMIN' || c === 'ADMINISTRATION') return 'ADMIN';
+  if (c === 'ACCOUNTS' || c === 'ACCOUNT' || c === 'FINANCE') return 'ACCOUNTS';
   return c;
 }
 

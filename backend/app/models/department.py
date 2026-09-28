@@ -23,19 +23,17 @@ if TYPE_CHECKING:
 
 
 class Department(Base):
-    """Department Master table representing company-specific organizational departments."""
+    """Department Master table representing organizational departments across companies."""
 
     __tablename__ = "department_master"
     __table_args__ = (
         UniqueConstraint(
-            "company_id",
             "department_code",
-            name="uq_department_company_code",
+            name="uq_department_code",
         ),
         UniqueConstraint(
-            "company_id",
             "department_name",
-            name="uq_department_company_name",
+            name="uq_department_name",
         ),
         CheckConstraint(
             "status IN ('ACTIVE', 'INACTIVE')",
@@ -45,7 +43,7 @@ class Department(Base):
             "department_code ~ '^[A-Z_]+$'",
             name="chk_department_code_format",
         ),
-        {"comment": "Master registry for company-specific departments in Gocompliances CRM"},
+        {"comment": "Master registry for departments in Gocompliances CRM"},
     )
 
     department_id: Mapped[uuid.UUID] = mapped_column(
@@ -56,22 +54,22 @@ class Department(Base):
         comment="Unique identifier for the department (UUIDv4)",
     )
 
-    company_id: Mapped[uuid.UUID] = mapped_column(
+    company_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey(
             "company_master.company_id",
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
             name="fk_department_company_id",
         ),
-        nullable=False,
+        nullable=True,
         index=True,
-        comment="Foreign key referencing company_master.company_id (ON DELETE RESTRICT)",
+        comment="Optional foreign key referencing company_master.company_id",
     )
 
     department_code: Mapped[str] = mapped_column(
         String(30),
         nullable=False,
-        comment="Uppercase department code unique per company (e.g., ADMINISTRATION, SALES)",
+        comment="Uppercase department code unique globally (e.g., ADMINISTRATION, SALES)",
     )
 
     department_name: Mapped[str] = mapped_column(

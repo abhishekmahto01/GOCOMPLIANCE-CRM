@@ -10,9 +10,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 class DepartmentBase(BaseModel):
     """Base schema with common Department fields."""
 
-    company_id: uuid.UUID = Field(
-        ...,
-        description="Foreign key ID of the parent company",
+    company_id: Optional[uuid.UUID] = Field(
+        None,
+        description="Optional foreign key ID of company",
     )
     department_code: str = Field(
         ...,

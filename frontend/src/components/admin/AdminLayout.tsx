@@ -75,6 +75,18 @@ export const AdminLayout: React.FC = () => {
     if (pathname === '/admin/account-activation') {
       return [{ label: 'Administration', href: '/admin' }, { label: 'Account Activation' }];
     }
+    if (pathname === '/admin/companies' || pathname === '/admin/company-master') {
+      return [{ label: 'Administration', href: '/admin' }, { label: 'Company Master' }];
+    }
+    if (pathname === '/admin/departments' || pathname === '/admin/department-master') {
+      return [{ label: 'Administration', href: '/admin' }, { label: 'Department Master' }];
+    }
+    if (pathname === '/admin/designations' || pathname === '/admin/designation-master') {
+      return [{ label: 'Administration', href: '/admin' }, { label: 'Designation Master' }];
+    }
+    if (pathname === '/admin/licenses' || pathname === '/admin/license-master' || pathname === '/admin/services') {
+      return [{ label: 'Administration', href: '/admin' }, { label: 'License Master' }];
+    }
     return [{ label: 'Administration' }];
   };
 

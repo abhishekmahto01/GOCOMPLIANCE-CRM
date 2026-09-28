@@ -52,27 +52,19 @@ def lookup_companies(
     response_model=List[DepartmentLookupRead],
     status_code=status.HTTP_200_OK,
     summary="Lookup Departments",
-    description="Retrieve active departments, optionally filtered by company ID.",
+    description="Retrieve active departments globally across companies.",
     dependencies=[Depends(require_module_permission("ADMIN_EMPLOYEES", "view"))],
 )
 def lookup_departments(
-    company_id: Optional[uuid.UUID] = Query(None, description="Filter departments by parent company"),
     current_user: User = Depends(get_current_active_user),
     session: Session = Depends(get_db),
 ) -> List[DepartmentLookupRead]:
-    """Return active departments belonging to the requested company."""
-    scope_ctx = permissions.resolve_data_scope_context(session, current_user, "ADMIN_EMPLOYEES")
-    
-    stmt = select(Department).where(Department.status == "ACTIVE")
-    
-    if company_id:
-        if scope_ctx.scope in ("COMPANY", "DEPARTMENT", "TEAM", "SELF") and company_id != current_user.company_id:
-            return []
-        stmt = stmt.where(Department.company_id == company_id)
-    elif scope_ctx.scope in ("COMPANY", "DEPARTMENT", "TEAM", "SELF"):
-        stmt = stmt.where(Department.company_id == current_user.company_id)
-        
-    stmt = stmt.order_by(Department.department_name.asc())
+    """Return all active common master departments."""
+    stmt = (
+        select(Department)
+        .where(Department.status == "ACTIVE")
+        .order_by(Department.department_name.asc())
+    )
     departments = session.execute(stmt).scalars().all()
     return [DepartmentLookupRead.model_validate(d) for d in departments]
 
@@ -82,27 +74,19 @@ def lookup_departments(
     response_model=List[DesignationLookupRead],
     status_code=status.HTTP_200_OK,
     summary="Lookup Designations",
-    description="Retrieve active designations, optionally filtered by company ID.",
+    description="Retrieve active designations globally across companies.",
     dependencies=[Depends(require_module_permission("ADMIN_EMPLOYEES", "view"))],
 )
 def lookup_designations(
-    company_id: Optional[uuid.UUID] = Query(None, description="Filter designations by parent company"),
     current_user: User = Depends(get_current_active_user),
     session: Session = Depends(get_db),
 ) -> List[DesignationLookupRead]:
-    """Return active designations belonging to the requested company."""
-    scope_ctx = permissions.resolve_data_scope_context(session, current_user, "ADMIN_EMPLOYEES")
-    
-    stmt = select(Designation).where(Designation.status == "ACTIVE")
-    
-    if company_id:
-        if scope_ctx.scope in ("COMPANY", "DEPARTMENT", "TEAM", "SELF") and company_id != current_user.company_id:
-            return []
-        stmt = stmt.where(Designation.company_id == company_id)
-    elif scope_ctx.scope in ("COMPANY", "DEPARTMENT", "TEAM", "SELF"):
-        stmt = stmt.where(Designation.company_id == current_user.company_id)
-        
-    stmt = stmt.order_by(Designation.level_rank.desc(), Designation.designation_name.asc())
+    """Return all active common master designations."""
+    stmt = (
+        select(Designation)
+        .where(Designation.status == "ACTIVE")
+        .order_by(Designation.level_rank.asc(), Designation.designation_name.asc())
+    )
     designations = session.execute(stmt).scalars().all()
     return [DesignationLookupRead.model_validate(d) for d in designations]
 

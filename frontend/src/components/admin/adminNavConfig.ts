@@ -8,6 +8,8 @@ import {
   Building2,
   Layers,
   FileBadge,
+  Network,
+  Award,
 } from 'lucide-react';
 import type { ActionType } from '../../types/permission';
 
@@ -104,6 +106,22 @@ export const ADMIN_NAV_GROUPS: NavParentGroup[] = [
         title: 'Company Master',
         route: '/admin/companies',
         icon: Building2,
+        requiredModule: 'ADMIN',
+        requiredAction: 'view',
+      },
+      {
+        id: 'department_master',
+        title: 'Department Master',
+        route: '/admin/departments',
+        icon: Network,
+        requiredModule: 'ADMIN',
+        requiredAction: 'view',
+      },
+      {
+        id: 'designation_master',
+        title: 'Designation Master',
+        route: '/admin/designations',
+        icon: Award,
         requiredModule: 'ADMIN',
         requiredAction: 'view',
       },

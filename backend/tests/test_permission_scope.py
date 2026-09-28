@@ -159,8 +159,8 @@ def test_recursive_cte_hierarchy_and_cycle_safety_in_db() -> None:
         try:
             # Query existing seeded masters
             company = db.query(Company).first()
-            department = db.query(Department).filter_by(company_id=company.company_id).first()
-            designation = db.query(Designation).filter_by(company_id=company.company_id).first()
+            department = db.query(Department).first()
+            designation = db.query(Designation).first()
 
             assert company is not None
             assert department is not None

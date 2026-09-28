@@ -60,7 +60,7 @@ def test_department_model_columns() -> None:
     # Types and Nullability
     assert isinstance(columns["department_id"].type, UUID)
     assert isinstance(columns["company_id"].type, UUID)
-    assert columns["company_id"].nullable is False
+    assert columns["company_id"].nullable is True
     assert columns["department_code"].nullable is False
     assert columns["department_name"].nullable is False
     assert columns["description"].nullable is True
@@ -70,7 +70,7 @@ def test_department_model_columns() -> None:
 
 
 def test_department_model_foreign_key_and_constraints() -> None:
-    """Verify foreign key ON DELETE RESTRICT and unique/check constraints."""
+    """Verify foreign key ON DELETE SET NULL and unique/check constraints."""
     table = Department.__table__
 
     # Foreign Key
@@ -79,16 +79,16 @@ def test_department_model_foreign_key_and_constraints() -> None:
     fk = fk_list[0]
     assert fk.column.table.name == "company_master"
     assert fk.column.name == "company_id"
-    assert fk.ondelete == "RESTRICT"
+    assert fk.ondelete == "SET NULL"
 
-    # Composite Unique constraints
+    # Unique constraints
     unique_col_sets = []
     for uc in table.constraints:
         if hasattr(uc, "columns") and not getattr(uc, "primary_key", False):
             unique_col_sets.append({c.name for c in uc.columns})
 
-    assert {"company_id", "department_code"} in unique_col_sets
-    assert {"company_id", "department_name"} in unique_col_sets
+    assert {"department_code"} in unique_col_sets
+    assert {"department_name"} in unique_col_sets
 
     # Check constraints
     ck_names = {ck.name for ck in table.constraints if hasattr(ck, "sqltext")}

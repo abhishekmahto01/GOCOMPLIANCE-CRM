@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, RefreshCw, Lock, Receipt } from 'lucide-react';
+import { AlertCircle, RefreshCw, Lock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { DashboardHeader } from '../components/dashboard/DashboardHeader';
 import { ModuleCard, type ModuleData } from '../components/dashboard/ModuleCard';
 import { ChangePasswordModal } from '../components/dashboard/ChangePasswordModal';
-import { Modal } from '../components/ui/modal';
-import { Button } from '../components/ui/button';
 import { ToastContainer, type ToastMessage } from '../components/ui/toast';
 
 const MODULES_DATA: ModuleData[] = [
@@ -59,9 +57,6 @@ export const DashboardPage: React.FC = () => {
 
   // Password Modal state
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
-
-  // Accounts Info Modal state
-  const [isAccountsModalOpen, setIsAccountsModalOpen] = useState(false);
 
   // Department field from authenticated employee profile
   const userDepartment =
@@ -118,7 +113,15 @@ export const DashboardPage: React.FC = () => {
     }
 
     if (selectedModule.id === 'accounts') {
-      setIsAccountsModalOpen(true);
+      if (hasModuleAccess('ACCOUNTS')) {
+        navigate('/accounts');
+      } else {
+        addToast(
+          'error',
+          'Access Restricted',
+          'You do not have permission to access the Accounts module.'
+        );
+      }
       return;
     }
   };
@@ -257,52 +260,6 @@ export const DashboardPage: React.FC = () => {
         onClose={() => setIsPasswordModalOpen(false)}
         onSuccessToast={(title, msg) => addToast('success', title, msg)}
       />
-
-      {/* Accounts In-Planning Modal */}
-      <Modal
-        isOpen={isAccountsModalOpen}
-        onClose={() => setIsAccountsModalOpen(false)}
-        title="Accounts & Finance Module"
-        description="Module specifications and workflow configuration."
-      >
-        <div className="space-y-4 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-950/40 dark:to-blue-950/30 border border-indigo-200/80 dark:border-indigo-800/60 flex items-start gap-3.5">
-            <div className="p-2.5 rounded-xl bg-indigo-600 text-white shadow-sm shrink-0">
-              <Receipt className="w-5 h-5" />
-            </div>
-            <div className="space-y-1 text-xs">
-              <h4 className="font-bold text-indigo-950 dark:text-indigo-100 text-sm">
-                Module Under Alignment
-              </h4>
-              <p className="text-indigo-900/80 dark:text-indigo-200 leading-relaxed">
-                The Accounts and Financial Management module is currently in discussion with the Director to finalize billing models, invoice workflows, and ledgers.
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-2 text-xs text-slate-500 dark:text-slate-400">
-            <p className="font-semibold text-slate-700 dark:text-slate-300">
-              Planned Capabilities for Accounts:
-            </p>
-            <ul className="list-disc pl-4 space-y-1">
-              <li>Client billing, GST tax invoicing & payment tracking</li>
-              <li>Order payment milestones and reconciliation</li>
-              <li>Commission and payout management</li>
-              <li>Financial statement exports & compliance audits</li>
-            </ul>
-          </div>
-
-          <div className="flex items-center justify-end pt-3 border-t border-slate-200 dark:border-slate-800">
-            <Button
-              variant="primary"
-              onClick={() => setIsAccountsModalOpen(false)}
-              className="px-5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs"
-            >
-              Understood
-            </Button>
-          </div>
-        </div>
-      </Modal>
 
       {/* Interactive Toast Notifications */}
       <ToastContainer toasts={toasts} onDismiss={removeToast} />

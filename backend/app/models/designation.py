@@ -25,19 +25,17 @@ if TYPE_CHECKING:
 
 
 class Designation(Base):
-    """Designation Master table representing company-specific employee designations/job titles."""
+    """Designation Master table representing employee designations/job titles across companies."""
 
     __tablename__ = "designation_master"
     __table_args__ = (
         UniqueConstraint(
-            "company_id",
             "designation_code",
-            name="uq_designation_company_code",
+            name="uq_designation_code",
         ),
         UniqueConstraint(
-            "company_id",
             "designation_name",
-            name="uq_designation_company_name",
+            name="uq_designation_name",
         ),
         CheckConstraint(
             "level_rank > 0",
@@ -51,7 +49,7 @@ class Designation(Base):
             "designation_code ~ '^[A-Z_]+$'",
             name="chk_designation_code_format",
         ),
-        {"comment": "Master registry for company-specific employee designations in Gocompliances CRM"},
+        {"comment": "Master registry for employee designations in Gocompliances CRM"},
     )
 
     designation_id: Mapped[uuid.UUID] = mapped_column(
@@ -62,22 +60,22 @@ class Designation(Base):
         comment="Unique identifier for the designation (UUIDv4)",
     )
 
-    company_id: Mapped[uuid.UUID] = mapped_column(
+    company_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey(
             "company_master.company_id",
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
             name="fk_designation_company_id",
         ),
-        nullable=False,
+        nullable=True,
         index=True,
-        comment="Foreign key referencing company_master.company_id (ON DELETE RESTRICT)",
+        comment="Optional foreign key referencing company_master.company_id",
     )
 
     designation_code: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
-        comment="Uppercase designation code unique per company (e.g., EXECUTIVE, MANAGER)",
+        comment="Uppercase designation code unique globally (e.g., EXECUTIVE, MANAGER)",
     )
 
     designation_name: Mapped[str] = mapped_column(

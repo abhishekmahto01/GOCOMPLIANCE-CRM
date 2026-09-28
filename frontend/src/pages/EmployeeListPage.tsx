@@ -98,30 +98,28 @@ export const EmployeeListPage: React.FC = () => {
     }
   }, [debouncedSearch]);
 
-  // Load Companies Lookup on mount
+  // Load Global Lookups on mount
   useEffect(() => {
     getLookupCompaniesApi()
       .then(setCompanies)
       .catch((err) => console.error('Failed to load companies:', err));
+
+    getLookupDepartmentsApi()
+      .then(setDepartments)
+      .catch((err) => console.error('Failed to load departments:', err));
+
+    getLookupDesignationsApi()
+      .then(setDesignations)
+      .catch((err) => console.error('Failed to load designations:', err));
   }, []);
 
-  // When Company changes, update dependent lookups
+  // When Company changes, update company-scoped lookups (Managers)
   useEffect(() => {
     if (companyParam) {
-      getLookupDepartmentsApi(companyParam)
-        .then(setDepartments)
-        .catch((err) => console.error('Failed to load departments:', err));
-
-      getLookupDesignationsApi(companyParam)
-        .then(setDesignations)
-        .catch((err) => console.error('Failed to load designations:', err));
-
       getLookupManagersApi(companyParam)
         .then(setManagers)
         .catch((err) => console.error('Failed to load managers:', err));
     } else {
-      setDepartments([]);
-      setDesignations([]);
       setManagers([]);
     }
   }, [companyParam]);
