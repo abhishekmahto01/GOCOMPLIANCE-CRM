@@ -40,7 +40,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ isOpen, onClose }) =
           location.pathname === c.route ||
           location.pathname.startsWith(`${c.route}/`)
       );
-      initial[group.id] = hasActiveChild || group.id === 'employee_management';
+      initial[group.id] = hasActiveChild || group.id === 'employee_master';
     });
     return initial;
   });

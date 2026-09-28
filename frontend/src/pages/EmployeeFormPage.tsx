@@ -295,16 +295,22 @@ export const EmployeeFormPage: React.FC = () => {
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                   Company <span className="text-rose-500">*</span>
+                  {isEditMode && (
+                    <span className="text-[11px] font-normal text-slate-400 ml-2">
+                      (Fixed for existing employee)
+                    </span>
+                  )}
                 </label>
                 <select
                   {...register('company_id')}
+                  disabled={isEditMode}
                   onChange={(e) => {
                     setValue('company_id', e.target.value);
                     setValue('department_id', '');
                     setValue('designation_id', '');
                     setValue('manager_user_id', '');
                   }}
-                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <option value="">Select Company</option>
                   {companies.map((c) => (

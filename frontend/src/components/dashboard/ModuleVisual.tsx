@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type ModuleType = 'admin' | 'sales' | 'operations';
+export type ModuleType = 'admin' | 'sales' | 'operations' | 'accounts';
 
 export interface ModuleVisualProps {
   type: ModuleType;
@@ -284,8 +284,9 @@ export const ModuleVisual: React.FC<ModuleVisualProps> = ({ type, className = ''
   }
 
   // Operations Visual
-  return (
-    <div className={`relative w-full h-44 sm:h-48 md:h-52 flex items-center justify-center select-none ${className}`}>
+  if (type === 'operations') {
+    return (
+      <div className={`relative w-full h-44 sm:h-48 md:h-52 flex items-center justify-center select-none ${className}`}>
       <svg
         viewBox="0 0 320 220"
         fill="none"
@@ -405,4 +406,131 @@ export const ModuleVisual: React.FC<ModuleVisualProps> = ({ type, className = ''
       </svg>
     </div>
   );
+}
+
+  // Accounts Visual
+  if (type === 'accounts') {
+    return (
+      <div className={`relative w-full h-44 sm:h-48 md:h-52 flex items-center justify-center select-none ${className}`}>
+        <svg
+          viewBox="0 0 320 220"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          className="w-full h-full overflow-visible"
+        >
+          <defs>
+            {/* Ambient Background Glow */}
+            <filter id="accGlow" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="16" result="blur" />
+              <feComposite in="SourceGraphic" in2="blur" operator="over" />
+            </filter>
+
+            <filter id="accShadow" x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="0" dy="12" stdDeviation="14" floodColor="#6366f1" floodOpacity="0.25" />
+            </filter>
+
+            {/* Pedestal Gradients */}
+            <linearGradient id="accPedestalTop" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#FFFFFF" />
+              <stop offset="50%" stopColor="#EEF2FF" />
+              <stop offset="100%" stopColor="#C7D2FE" />
+            </linearGradient>
+
+            <linearGradient id="accPedestalSide" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#C7D2FE" />
+              <stop offset="100%" stopColor="#A5B4FC" />
+            </linearGradient>
+
+            {/* Vault / Ledger Gradients */}
+            <linearGradient id="vaultGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#818CF8" />
+              <stop offset="50%" stopColor="#6366F1" />
+              <stop offset="100%" stopColor="#4F46E5" />
+            </linearGradient>
+
+            <linearGradient id="coinGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#FDE047" />
+              <stop offset="50%" stopColor="#FACC15" />
+              <stop offset="100%" stopColor="#EAB308" />
+            </linearGradient>
+          </defs>
+
+          {/* 1. Ambient Radial Aura */}
+          <ellipse cx="160" cy="140" rx="90" ry="30" fill="#A5B4FC" opacity="0.4" filter="url(#accGlow)" />
+
+          {/* 2. Orbital Glow Rings */}
+          <ellipse cx="160" cy="120" rx="120" ry="42" stroke="#818CF8" strokeWidth="1.2" strokeDasharray="6 8" opacity="0.5" />
+          <circle cx="270" cy="120" r="3" fill="#6366F1" opacity="0.8" />
+          <circle cx="50" cy="120" r="2.5" fill="#818CF8" opacity="0.8" />
+
+          {/* 3. 3D Cylindrical Pedestal */}
+          <g filter="url(#accShadow)">
+            {/* Lower Shadow Base */}
+            <ellipse cx="160" cy="165" rx="80" ry="24" fill="#000000" opacity="0.08" />
+
+            {/* Cylinder Body */}
+            <path
+              d="M 80 148 L 80 162 C 80 175, 240 175, 240 162 L 240 148 Z"
+              fill="url(#accPedestalSide)"
+            />
+
+            {/* Top Ellipse Platform */}
+            <ellipse cx="160" cy="148" rx="80" ry="22" fill="url(#accPedestalTop)" stroke="#E0E7FF" strokeWidth="1.5" />
+          </g>
+
+          {/* 4. Central 3D Floating Vault / Ledger */}
+          <g transform="translate(160, 95)" filter="url(#accShadow)">
+            {/* 3D Vault Outer Frame */}
+            <rect x="-38" y="-38" width="76" height="76" rx="20" fill="url(#vaultGrad)" stroke="#C7D2FE" strokeWidth="1.5" />
+            
+            {/* Inner Vault Door */}
+            <circle cx="0" cy="0" r="24" fill="#4338CA" stroke="#A5B4FC" strokeWidth="2" />
+            
+            {/* Vault Dial / Wheel Spokes */}
+            <circle cx="0" cy="0" r="14" fill="#312E81" />
+            <circle cx="0" cy="0" r="6" fill="#818CF8" />
+            <line x1="-12" y1="0" x2="12" y2="0" stroke="#C7D2FE" strokeWidth="2" strokeLinecap="round" />
+            <line x1="0" y1="-12" x2="0" y2="12" stroke="#C7D2FE" strokeWidth="2" strokeLinecap="round" />
+            <line x1="-8" y1="-8" x2="8" y2="8" stroke="#C7D2FE" strokeWidth="2" strokeLinecap="round" />
+            <line x1="-8" y1="8" x2="8" y2="-8" stroke="#C7D2FE" strokeWidth="2" strokeLinecap="round" />
+
+            {/* Top Specular Rim Reflection */}
+            <path
+              d="M -24 -26 C -8 -34, 8 -34, 24 -26"
+              stroke="#FFFFFF"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              opacity="0.75"
+            />
+
+            {/* Floating Gold Coin Accent */}
+            <g transform="translate(24, -28)">
+              <circle cx="0" cy="0" r="10" fill="url(#coinGrad)" stroke="#CA8A04" strokeWidth="1" />
+              <text x="0" y="4" fontSize="11" fontWeight="bold" fill="#78350F" textAnchor="middle">₹</text>
+            </g>
+          </g>
+
+          {/* 5. Left Floating Badge (Invoice / Receipt) */}
+          <g transform="translate(48, 92)" filter="url(#accShadow)">
+            <rect x="0" y="0" width="36" height="36" rx="10" fill="#FFFFFF" fillOpacity="0.9" stroke="#C7D2FE" strokeWidth="1.5" />
+            <rect x="10" y="8" width="16" height="20" rx="2" fill="#6366F1" />
+            <line x1="13" y1="13" x2="23" y2="13" stroke="#FFFFFF" strokeWidth="1.5" strokeLinecap="round" />
+            <line x1="13" y1="17" x2="23" y2="17" stroke="#FFFFFF" strokeWidth="1.5" strokeLinecap="round" />
+            <line x1="13" y1="21" x2="19" y2="21" stroke="#FFFFFF" strokeWidth="1.5" strokeLinecap="round" />
+          </g>
+
+          {/* 6. Right Floating Badge (Growth Ledger) */}
+          <g transform="translate(236, 92)" filter="url(#accShadow)">
+            <rect x="0" y="0" width="36" height="36" rx="10" fill="#FFFFFF" fillOpacity="0.9" stroke="#C7D2FE" strokeWidth="1.5" />
+            <rect x="9" y="9" width="18" height="18" rx="5" fill="#4F46E5" />
+            {/* Small currency note silhouette */}
+            <rect x="12" y="14" width="12" height="8" rx="1.5" fill="#818CF8" />
+            <circle cx="18" cy="18" r="2" fill="#FFFFFF" />
+          </g>
+        </svg>
+      </div>
+    );
+  }
+
+  return null;
 };

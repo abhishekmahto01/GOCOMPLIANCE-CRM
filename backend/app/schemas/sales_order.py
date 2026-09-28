@@ -265,7 +265,7 @@ class SalesOrderAssignRequest(BaseModel):
 
     assignee_user_id: uuid.UUID = Field(..., description="Eligible Operations employee ID to assign the work to")
     priority: Optional[str] = Field("MEDIUM", description="Task priority (LOW, MEDIUM, HIGH, URGENT)")
-    target_due_date: Optional[date] = Field(None, description="Optional target completion date")
+    target_due_date: date = Field(..., description="Target completion due date for operation team (mandatory)")
     notes: Optional[str] = Field(None, max_length=1000, description="Assignment / handover notes from Ops Manager")
 
     @model_validator(mode="before")

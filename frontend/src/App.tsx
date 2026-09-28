@@ -8,6 +8,8 @@ import { EmployeeListPage } from './pages/EmployeeListPage';
 import { EmployeeFormPage } from './pages/EmployeeFormPage';
 import { EmployeeDetailPage } from './pages/EmployeeDetailPage';
 import { UserPermissionsPage } from './pages/UserPermissionsPage';
+import { CompanyMasterPage } from './pages/CompanyMasterPage';
+import { LicenseMasterPage } from './pages/LicenseMasterPage';
 import { ChangePasswordRequiredPage } from './pages/ChangePasswordRequiredPage';
 import { LoginCredentialsPage } from './pages/LoginCredentialsPage';
 import { UnauthorizedPage } from './pages/UnauthorizedPage';
@@ -277,6 +279,38 @@ export const App: React.FC = () => {
             <Route
               path="login-credentials"
               element={<Navigate to="/admin/account-activation" replace />}
+            />
+
+            {/* Common Master / Company Master Routes */}
+            <Route
+              path="companies"
+              element={
+                <ProtectedRoute requiredModule="ADMIN" requiredAction="view">
+                  <CompanyMasterPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="company-master"
+              element={<Navigate to="/admin/companies" replace />}
+            />
+
+            {/* Common Master / License Master Routes */}
+            <Route
+              path="licenses"
+              element={
+                <ProtectedRoute requiredModule="ADMIN" requiredAction="view">
+                  <LicenseMasterPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="license-master"
+              element={<Navigate to="/admin/licenses" replace />}
+            />
+            <Route
+              path="services"
+              element={<Navigate to="/admin/licenses" replace />}
             />
           </Route>
 

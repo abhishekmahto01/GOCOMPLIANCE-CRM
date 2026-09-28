@@ -323,6 +323,61 @@ def initialize_trial_login(
     )
 
 
+def reset_employee_password(
+    session: Session,
+    user_id: uuid.UUID,
+    current_user: User,
+    scope_context: DataScopeContext,
+) -> TrialLoginInitializeResponse:
+    """Reset employee login password to default 12345 and mandate change on next login.
+
+    Requirements:
+    1. Uses default trial password (12345).
+    2. Target employee must exist and be within the caller's data scope.
+    3. Target employee must be in ACTIVE status.
+    4. Sets must_change_password = True.
+    5. Increments token_version to invalidate any active JWT sessions.
+    6. Updates credentials_initialized_at timestamp.
+    7. Commits transaction and returns safe response.
+    """
+    trial_password = settings.get_effective_trial_password() or "12345"
+
+    target_user = get_employee_by_id(session, user_id)
+    if not target_user:
+        raise ValueError(f"Employee with ID '{user_id}' not found")
+
+    if not scope_context.is_user_permitted(
+        target_user.user_id, target_user.company_id, target_user.department_id
+    ):
+        raise PermissionError("Access denied. Employee is outside your authorized data scope.")
+
+    if target_user.account_status != "ACTIVE":
+        raise ValueError(
+            f"Cannot reset password for employee with '{target_user.account_status}' status. Employee must be ACTIVE."
+        )
+
+    now = datetime.now(timezone.utc)
+    target_user.password_hash = hash_password(trial_password)
+    target_user.must_change_password = True
+    target_user.credentials_initialized_at = now
+    target_user.token_version += 1
+
+    session.flush()
+    session.commit()
+    session.refresh(target_user)
+
+    return TrialLoginInitializeResponse(
+        user_id=target_user.user_id,
+        employee_code=target_user.employee_code,
+        official_email=target_user.official_email,
+        credentials_initialized=True,
+        must_change_password=True,
+        login_status="Password Change Required",
+        credentials_initialized_at=target_user.credentials_initialized_at,
+        message=f"Password for employee '{target_user.employee_code}' has been reset to default ({trial_password}). The employee must change password upon next login.",
+    )
+
+
 
 def list_employees(
     session: Session,

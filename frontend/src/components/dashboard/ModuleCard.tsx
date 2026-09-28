@@ -6,7 +6,7 @@ export interface ModuleData {
   id: ModuleType;
   title: string;
   description: string;
-  accentColor: 'blue' | 'emerald' | 'orange';
+  accentColor: 'blue' | 'emerald' | 'orange' | 'indigo';
 }
 
 export interface ModuleCardProps {
@@ -39,6 +39,13 @@ export const ModuleCard: React.FC<ModuleCardProps> = ({ module, onClick }) => {
       accentTrack: 'bg-orange-100 dark:bg-orange-950/60',
       cardHoverBorder: 'hover:border-orange-300/80 dark:hover:border-orange-500/50',
       cardShadowHover: 'hover:shadow-orange-500/10',
+    },
+    indigo: {
+      btnBg: 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 group-hover:bg-indigo-600 group-hover:text-white dark:group-hover:bg-indigo-500',
+      accentActive: 'bg-indigo-500 dark:bg-indigo-400',
+      accentTrack: 'bg-indigo-100 dark:bg-indigo-950/60',
+      cardHoverBorder: 'hover:border-indigo-300/80 dark:hover:border-indigo-500/50',
+      cardShadowHover: 'hover:shadow-indigo-500/10',
     },
   }[accentColor];
 

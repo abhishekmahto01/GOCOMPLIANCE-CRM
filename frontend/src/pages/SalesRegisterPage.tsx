@@ -342,6 +342,10 @@ export const SalesRegisterPage: React.FC = () => {
       setAssignError('Please select an eligible Operations employee');
       return;
     }
+    if (!assignmentDueDate) {
+      setAssignError('Target Due Date is mandatory. Please specify a due date for operations.');
+      return;
+    }
 
     setIsAssigning(true);
     setAssignError(null);
@@ -349,7 +353,7 @@ export const SalesRegisterPage: React.FC = () => {
       const updatedItem = await assignSalesOrderApi(assigningOrder.order_id, {
         assignee_user_id: selectedAssigneeId,
         priority: assignmentPriority,
-        target_due_date: assignmentDueDate || undefined,
+        target_due_date: assignmentDueDate,
         notes: assignmentNotes || undefined,
       });
 
@@ -1245,13 +1249,14 @@ export const SalesRegisterPage: React.FC = () => {
 
               <div>
                 <label htmlFor="assign_due_date" className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Target Due Date
+                  Target Due Date <span className="text-rose-500">*</span>
                 </label>
                 <input
                   id="assign_due_date"
                   type="date"
                   value={assignmentDueDate}
                   onChange={(e) => setAssignmentDueDate(e.target.value)}
+                  required
                   className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
                 />
               </div>

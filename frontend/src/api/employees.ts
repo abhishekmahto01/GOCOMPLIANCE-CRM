@@ -63,3 +63,12 @@ export async function initializeTrialLoginApi(
   return response.data;
 }
 
+export async function resetEmployeePasswordApi(
+  userId: string
+): Promise<TrialLoginInitializeResponse> {
+  const response = await apiClient.post<TrialLoginInitializeResponse>(
+    `/admin/employees/${userId}/reset-password`
+  );
+  return response.data;
+}
+

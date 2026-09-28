@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getEmployeesApi, initializeTrialLoginApi } from '../api/employees';
+import { getEmployeesApi, initializeTrialLoginApi, resetEmployeePasswordApi } from '../api/employees';
 import { getLookupCompaniesApi, getLookupDepartmentsApi } from '../api/lookup';
 import { extractErrorMessage } from '../api/client';
 import type { Employee, EmployeeFilterParams, PaginatedEmployees } from '../types/employee';
@@ -25,6 +25,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Sparkles,
+  RotateCcw,
 } from 'lucide-react';
 
 export const LoginCredentialsPage: React.FC = () => {
@@ -58,6 +59,10 @@ export const LoginCredentialsPage: React.FC = () => {
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isInitializing, setIsInitializing] = useState<boolean>(false);
+
+  // Reset Password Modal State
+  const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false);
+  const [isResetting, setIsResetting] = useState<boolean>(false);
 
   const addToast = (type: 'success' | 'error' | 'info', title: string, message: string) => {
     const id = Math.random().toString(36).substring(2, 9);
@@ -160,6 +165,34 @@ export const LoginCredentialsPage: React.FC = () => {
       addToast('error', 'Initialization Failed', msg);
     } finally {
       setIsInitializing(false);
+    }
+  };
+
+  // Handle Reset Password Click
+  const handleOpenResetModal = (emp: Employee) => {
+    setSelectedEmployee(emp);
+    setIsResetModalOpen(true);
+  };
+
+  const handleConfirmReset = async () => {
+    if (!selectedEmployee) return;
+
+    setIsResetting(true);
+    try {
+      const res = await resetEmployeePasswordApi(selectedEmployee.user_id);
+      addToast(
+        'success',
+        'Password Reset Successful',
+        `Password for ${res.employee_code} (${res.official_email}) has been reset to default 12345. Mandatory password change is active.`
+      );
+      setIsResetModalOpen(false);
+      setSelectedEmployee(null);
+      await fetchEmployees();
+    } catch (err: unknown) {
+      const msg = extractErrorMessage(err);
+      addToast('error', 'Password Reset Failed', msg);
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -460,8 +493,18 @@ export const LoginCredentialsPage: React.FC = () => {
                             <UserCheck className="w-3.5 h-3.5 mr-1" />
                             Initialize Trial Login
                           </Button>
-                        ) : isInitialized ? (
-                          <span className="text-xs text-slate-400 italic">Initialized</span>
+                        ) : isInitialized && !isInactive ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenResetModal(emp)}
+                            disabled={!canApprove}
+                            title={!canApprove ? 'Requires Approve permission' : 'Reset password to default (12345)'}
+                            className="text-xs h-8 text-amber-700 hover:text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700/70 hover:bg-amber-50 dark:hover:bg-amber-950/40"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5 mr-1" />
+                            Reset Password
+                          </Button>
                         ) : (
                           <span className="text-xs text-slate-400 italic">Inactive Employee</span>
                         )}
@@ -504,7 +547,7 @@ export const LoginCredentialsPage: React.FC = () => {
         )}
       </div>
 
-      {/* Confirmation Modal */}
+      {/* Confirmation Modal - Initialize */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => {
@@ -561,6 +604,70 @@ export const LoginCredentialsPage: React.FC = () => {
                 isLoading={isInitializing}
               >
                 Confirm & Initialize
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Confirmation Modal - Reset Password */}
+      <Modal
+        isOpen={isResetModalOpen}
+        onClose={() => {
+          if (!isResetting) {
+            setIsResetModalOpen(false);
+            setSelectedEmployee(null);
+          }
+        }}
+        title="Reset Employee Password"
+        description="Reset login password to default 12345."
+      >
+        {selectedEmployee && (
+          <div className="space-y-4 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
+            {/* Employee Card */}
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 space-y-1.5">
+              <div className="font-semibold text-slate-900 dark:text-white text-sm">
+                {selectedEmployee.first_name} {selectedEmployee.last_name} ({selectedEmployee.employee_code})
+              </div>
+              <div className="text-xs text-slate-500 font-mono">
+                Official Email: {selectedEmployee.official_email}
+              </div>
+              <div className="text-xs text-slate-500">
+                Department: {selectedEmployee.department_name} • Designation: {selectedEmployee.designation_name}
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 text-xs leading-relaxed space-y-1.5">
+              <p className="font-semibold flex items-center gap-1.5 text-amber-950 dark:text-amber-100">
+                <KeyRound className="w-4 h-4 text-amber-600" />
+                Default Password Reset Policy
+              </p>
+              <p>
+                The login password for <strong>{selectedEmployee.first_name} {selectedEmployee.last_name}</strong> will be reset to default <strong className="font-mono text-amber-950 dark:text-white bg-amber-100 dark:bg-amber-900 px-1.5 py-0.5 rounded">12345</strong>.
+              </p>
+              <p>
+                Any active sessions will be terminated. On their next login with <span className="font-mono font-bold">12345</span>, the employee will be prompted to set a new password.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsResetModalOpen(false);
+                  setSelectedEmployee(null);
+                }}
+                disabled={isResetting}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleConfirmReset}
+                isLoading={isResetting}
+                className="bg-amber-600 hover:bg-amber-700 text-white"
+              >
+                Reset to 12345
               </Button>
             </div>
           </div>

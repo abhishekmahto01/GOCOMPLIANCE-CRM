@@ -227,3 +227,34 @@ def initialize_trial_login_endpoint(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=err_msg)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=err_msg)
 
+
+@router.post(
+    "/{user_id}/reset-password",
+    response_model=TrialLoginInitializeResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Reset Employee Password",
+    description="Reset employee password to default '12345' and enforce mandatory password change on next login.",
+    dependencies=[Depends(require_module_permission("ADMIN_EMPLOYEES", "approve"))],
+)
+def reset_employee_password_endpoint(
+    user_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_user),
+    session: Session = Depends(get_db),
+) -> TrialLoginInitializeResponse:
+    """Reset employee password to default '12345'."""
+    scope_ctx = permissions.resolve_data_scope_context(session, current_user, "ADMIN_EMPLOYEES")
+    try:
+        return user_service.reset_employee_password(
+            session=session,
+            user_id=user_id,
+            current_user=current_user,
+            scope_context=scope_ctx,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except ValueError as exc:
+        err_msg = str(exc)
+        if "not found" in err_msg.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=err_msg)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=err_msg)
+

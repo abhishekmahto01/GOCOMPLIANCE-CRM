@@ -176,10 +176,11 @@ describe('Admin Module Layout & Collapsible Sidebar Routing', () => {
     expect(within(sidebar).getByRole('link', { name: /Dashboard/i })).toBeInTheDocument();
 
     // Parent Groups
-    expect(within(sidebar).getByRole('button', { name: /Employee Management/i })).toBeInTheDocument();
+    expect(within(sidebar).getByRole('button', { name: /Employee Master/i })).toBeInTheDocument();
     expect(within(sidebar).getByRole('button', { name: /User Control/i })).toBeInTheDocument();
+    expect(within(sidebar).getByRole('button', { name: /Common Master/i })).toBeInTheDocument();
 
-    // Child Links for Employee Management (auto-expanded)
+    // Child Links for Employee Master (auto-expanded)
     expect(within(sidebar).getByRole('link', { name: /Employee List/i })).toBeInTheDocument();
     expect(within(sidebar).getByRole('link', { name: /Add Employee/i })).toBeInTheDocument();
 
@@ -199,7 +200,7 @@ describe('Admin Module Layout & Collapsible Sidebar Routing', () => {
     renderAdminApp('/admin/employees');
 
     const user = userEvent.setup();
-    const toggleButton = await screen.findByRole('button', { name: /Employee Management/i });
+    const toggleButton = await screen.findByRole('button', { name: /Employee Master/i });
     expect(toggleButton).toHaveAttribute('aria-expanded', 'true');
 
     // Click to collapse
@@ -307,8 +308,8 @@ describe('Admin Module Layout & Collapsible Sidebar Routing', () => {
     await waitFor(() => {
       // User Control is visible
       expect(screen.getByRole('button', { name: /User Control/i })).toBeInTheDocument();
-      // Employee Management is COMPLETELY hidden
-      expect(screen.queryByRole('button', { name: /Employee Management/i })).not.toBeInTheDocument();
+      // Employee Master is COMPLETELY hidden
+      expect(screen.queryByRole('button', { name: /Employee Master/i })).not.toBeInTheDocument();
     });
   });
 

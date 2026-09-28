@@ -479,6 +479,12 @@ describe('Sales Entry & Sales Register Module Tests', () => {
       target: { value: 'b0000000-0000-0000-0000-000000000003' },
     });
 
+    // Fill mandatory Target Due Date
+    const dueDateInput = screen.getByLabelText(/Target Due Date/i);
+    fireEvent.change(dueDateInput, {
+      target: { value: '2026-10-05' },
+    });
+
     // Add handover notes
     const notesInput = screen.getByPlaceholderText(/Assigned to Mansi/i);
     await user.type(notesInput, 'Please expedite processing');
@@ -492,6 +498,7 @@ describe('Sales Entry & Sales Register Module Tests', () => {
         'ord-002',
         expect.objectContaining({
           assignee_user_id: 'b0000000-0000-0000-0000-000000000003',
+          target_due_date: '2026-10-05',
           notes: 'Please expedite processing',
         })
       );

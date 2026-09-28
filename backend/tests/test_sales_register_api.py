@@ -890,7 +890,11 @@ def test_unauthorized_user_cannot_assign_sales_order(
     # Rep2 (unrelated sales rep who did not create the order) tries to assign -> 403
     unauth_assign_resp = client.post(
         f"/api/sales/orders/{order_id}/assign",
-        json={"assigned_to_user_id": str(f["mansi"].user_id), "priority": "HIGH"},
+        json={
+            "assigned_to_user_id": str(f["mansi"].user_id),
+            "target_due_date": (date.today() + timedelta(days=5)).isoformat(),
+            "priority": "HIGH",
+        },
         headers=rep2_headers,
     )
     assert unauth_assign_resp.status_code == 403
@@ -898,7 +902,11 @@ def test_unauthorized_user_cannot_assign_sales_order(
     # Creator rep1 assigns to operations employee Mansi -> 200 OK
     rep1_assign_resp = client.post(
         f"/api/sales/orders/{order_id}/assign",
-        json={"assigned_to_user_id": str(f["mansi"].user_id), "priority": "HIGH"},
+        json={
+            "assigned_to_user_id": str(f["mansi"].user_id),
+            "target_due_date": (date.today() + timedelta(days=5)).isoformat(),
+            "priority": "HIGH",
+        },
         headers=rep1_headers,
     )
     assert rep1_assign_resp.status_code == 200
@@ -1067,6 +1075,7 @@ def test_order_creator_can_assign_to_operations_manager_and_shows_in_ops_list(
         json={
             "assignee_user_id": str(f["mansi"].user_id),
             "priority": "HIGH",
+            "target_due_date": (date.today() + timedelta(days=5)).isoformat(),
             "notes": "Urgent incorporation client from Justdial",
         },
         headers=rep1_headers,

@@ -5,6 +5,9 @@ import {
   UserPlus,
   ShieldCheck,
   UserCheck,
+  Building2,
+  Layers,
+  FileBadge,
 } from 'lucide-react';
 import type { ActionType } from '../../types/permission';
 
@@ -46,8 +49,8 @@ export const TOP_NAV_ITEMS: DirectNavItem[] = [
 
 export const ADMIN_NAV_GROUPS: NavParentGroup[] = [
   {
-    id: 'employee_management',
-    title: 'Employee Management',
+    id: 'employee_master',
+    title: 'Employee Master',
     icon: Users,
     children: [
       {
@@ -87,6 +90,29 @@ export const ADMIN_NAV_GROUPS: NavParentGroup[] = [
         route: '/admin/account-activation',
         icon: UserCheck,
         requiredModule: 'ADMIN_EMPLOYEES',
+        requiredAction: 'view',
+      },
+    ],
+  },
+  {
+    id: 'common_master',
+    title: 'Common Master',
+    icon: Layers,
+    children: [
+      {
+        id: 'company_master',
+        title: 'Company Master',
+        route: '/admin/companies',
+        icon: Building2,
+        requiredModule: 'ADMIN',
+        requiredAction: 'view',
+      },
+      {
+        id: 'license_master',
+        title: 'License Master',
+        route: '/admin/licenses',
+        icon: FileBadge,
+        requiredModule: 'ADMIN',
         requiredAction: 'view',
       },
     ],

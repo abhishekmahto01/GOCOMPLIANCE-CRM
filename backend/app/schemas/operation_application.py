@@ -163,7 +163,7 @@ class TaskAssignRequest(BaseModel):
 
     assignee_user_id: uuid.UUID
     priority: Optional[str] = Field(default="MEDIUM")
-    target_due_date: Optional[date] = None
+    target_due_date: date = Field(..., description="Target completion due date for operation team (mandatory)")
     notes: Optional[str] = Field(None, max_length=1000)
 
     @field_validator("priority", mode="before")

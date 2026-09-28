@@ -10,9 +10,10 @@ import {
   SlidersHorizontal,
   RefreshCw,
   AlertCircle,
+  KeyRound,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { getEmployeesApi, updateEmployeeStatusApi } from '../api/employees';
+import { getEmployeesApi, updateEmployeeStatusApi, resetEmployeePasswordApi } from '../api/employees';
 import {
   getLookupCompaniesApi,
   getLookupDepartmentsApi,
@@ -75,6 +76,10 @@ export const EmployeeListPage: React.FC = () => {
   const [targetStatus, setTargetStatus] = useState<AccountStatus>('ACTIVE');
   const [statusModalOpen, setStatusModalOpen] = useState<boolean>(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState<boolean>(false);
+
+  // Reset Password Dialog State
+  const [resetModalOpen, setResetModalOpen] = useState<boolean>(false);
+  const [isResettingPassword, setIsResettingPassword] = useState<boolean>(false);
 
   // Dropdown Lookups
   const [companies, setCompanies] = useState<CompanyLookup[]>([]);
@@ -209,6 +214,32 @@ export const EmployeeListPage: React.FC = () => {
       addToast('error', 'Update Failed', extractErrorMessage(err));
     } finally {
       setIsUpdatingStatus(false);
+    }
+  };
+
+  // Open Reset Password Dialog
+  const handleOpenResetModal = (emp: Employee) => {
+    setSelectedEmployee(emp);
+    setResetModalOpen(true);
+  };
+
+  // Confirm Reset Password
+  const handleConfirmResetPassword = async () => {
+    if (!selectedEmployee) return;
+    setIsResettingPassword(true);
+    try {
+      const res = await resetEmployeePasswordApi(selectedEmployee.user_id);
+      addToast(
+        'success',
+        'Password Reset Successful',
+        `Password for ${res.employee_code} (${res.official_email}) has been reset to default 12345. Mandatory password change is active.`
+      );
+      setResetModalOpen(false);
+      fetchEmployees();
+    } catch (err) {
+      addToast('error', 'Password Reset Failed', extractErrorMessage(err));
+    } finally {
+      setIsResettingPassword(false);
     }
   };
 
@@ -521,6 +552,18 @@ export const EmployeeListPage: React.FC = () => {
                             </Link>
                           )}
 
+                          {/* Reset Password */}
+                          {canApprove && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenResetModal(emp)}
+                              className="p-1.5 rounded-lg text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50 transition"
+                              title="Reset Password to 12345"
+                            >
+                              <KeyRound className="w-4 h-4" />
+                            </button>
+                          )}
+
                           {/* Status Management */}
                           {canApprove && (
                             <button
@@ -596,6 +639,42 @@ export const EmployeeListPage: React.FC = () => {
           <p className="text-xs text-slate-500 dark:text-slate-400">
             Note: Changing account status to INACTIVE or SUSPENDED prevents login and revokes active token sessions.
           </p>
+        </div>
+      </ConfirmationModal>
+
+      {/* Reset Password Modal */}
+      <ConfirmationModal
+        isOpen={resetModalOpen}
+        onClose={() => setResetModalOpen(false)}
+        onConfirm={handleConfirmResetPassword}
+        title="Reset Employee Password"
+        confirmText="Reset to 12345"
+        isLoading={isResettingPassword}
+      >
+        <div className="space-y-4 text-left text-xs sm:text-sm">
+          {selectedEmployee && (
+            <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 space-y-1">
+              <div>
+                <strong>Employee:</strong> {selectedEmployee.first_name}{' '}
+                {selectedEmployee.last_name} ({selectedEmployee.employee_code})
+              </div>
+              <div>
+                <strong>Official Email:</strong> {selectedEmployee.official_email}
+              </div>
+            </div>
+          )}
+
+          <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 text-xs leading-relaxed space-y-1">
+            <p className="font-semibold text-amber-950 dark:text-amber-100">
+              Default Password Reset Policy
+            </p>
+            <p>
+              The employee password will be reset to default <strong className="font-mono bg-amber-100 dark:bg-amber-900 px-1 py-0.5 rounded text-amber-950 dark:text-white">12345</strong>.
+            </p>
+            <p>
+              The employee must change their password on next login before accessing any CRM module.
+            </p>
+          </div>
         </div>
       </ConfirmationModal>
 

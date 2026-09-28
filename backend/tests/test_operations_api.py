@@ -440,6 +440,7 @@ class TestOperationsAPI:
             json={
                 "assignee_user_id": str(deepak_id),
                 "priority": "HIGH",
+                "target_due_date": (date.today() + timedelta(days=7)).isoformat(),
                 "notes": "Assigned to Deepak for quick execution",
             },
             headers=headers,

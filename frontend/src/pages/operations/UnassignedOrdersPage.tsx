@@ -90,12 +90,18 @@ export const UnassignedOrdersPage: React.FC = () => {
   const handleAssignSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!assigningTask || !selectedAssigneeId) return;
+    if (!assignDueDate) {
+      if (context?.addToast) {
+        context.addToast('error', 'Due Date Required', 'Target Due Date is mandatory. Please select a due date.');
+      }
+      return;
+    }
     try {
       setIsSubmittingAssign(true);
       await assignOperationTaskApi(assigningTask.application_id, {
         assignee_user_id: selectedAssigneeId,
         priority: assignPriority,
-        target_due_date: assignDueDate || undefined,
+        target_due_date: assignDueDate,
         notes: assignNotes.trim() || undefined,
       });
       if (context?.addToast) {
@@ -328,11 +334,14 @@ export const UnassignedOrdersPage: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Target Due Date</label>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Target Due Date <span className="text-rose-500">*</span>
+                  </label>
                   <input
                     type="date"
                     value={assignDueDate}
                     onChange={(e) => setAssignDueDate(e.target.value)}
+                    required
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 outline-hidden"
                   />
                 </div>
