@@ -35,11 +35,11 @@ class Settings(BaseSettings):
     DB_POOL_TIMEOUT: int = 30
     DB_CONNECT_TIMEOUT: int = 5
 
-    # JWT Authentication & Security settings
+    # JWT Authentication & Security settings (Session configured for 14-day access, 30-day refresh)
     JWT_SECRET_KEY: str = ""
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 20160  # 14 days (14 * 24 * 60)
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30       # 30 days
     MAX_FAILED_LOGIN_ATTEMPTS: int = 5
     LOGIN_LOCK_MINUTES: int = 15
 

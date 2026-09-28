@@ -18,9 +18,9 @@ export function getRefreshToken(): string | null {
 }
 
 /**
- * Persist tokens in localStorage when rememberMe is true; otherwise use sessionStorage.
+ * Persist tokens in localStorage by default (or when rememberMe is true); otherwise use sessionStorage.
  */
-export function setAuthTokens(accessToken: string, refreshToken: string, rememberMe: boolean = false): void {
+export function setAuthTokens(accessToken: string, refreshToken: string, rememberMe: boolean = true): void {
   if (rememberMe) {
     localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
     localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);

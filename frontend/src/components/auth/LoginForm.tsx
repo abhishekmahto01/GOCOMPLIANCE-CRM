@@ -27,7 +27,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
 }) => {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<{ identifier?: string; password?: string }>({});
 
