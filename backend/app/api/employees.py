@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_active_user, require_module_permission
+from app.api.deps import get_current_active_user, require_module_permission, require_super_admin
 from app.database.session import get_db
 from app.models.user import User
 from app.schemas.user import (
@@ -257,4 +257,28 @@ def reset_employee_password_endpoint(
         if "not found" in err_msg.lower():
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=err_msg)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=err_msg)
+
+
+@router.delete(
+    "/{user_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Delete Employee",
+    description="Permanently delete an employee record. Strictly restricted to Super Admin.",
+    dependencies=[Depends(require_super_admin)],
+)
+def delete_employee_endpoint(
+    user_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_user),
+    session: Session = Depends(get_db),
+) -> dict:
+    """Delete employee record with safety checks. Only Super Admin can perform this action."""
+    try:
+        user_service.delete_employee(session, user_id, current_user)
+        return {"message": "Employee deleted successfully"}
+    except ValueError as exc:
+        err_msg = str(exc)
+        if "not found" in err_msg.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=err_msg)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=err_msg)
+
 

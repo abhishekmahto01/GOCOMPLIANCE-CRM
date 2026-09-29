@@ -141,6 +141,43 @@ def test_cross_company_validation_department_mismatch() -> None:
     assert "does not belong to the selected company" in str(exc_info.value)
 
 
+def test_cross_company_validation_common_master_department_and_designation_allowed() -> None:
+    """Verify common master department and designation (company_id=None) are valid for any company."""
+    mock_session = MagicMock(spec=Session)
+
+    comp_id = uuid.uuid4()
+    dept_id = uuid.uuid4()
+    desig_id = uuid.uuid4()
+
+    # Department and Designation are Common Masters (company_id=None)
+    dept = Department(
+        department_id=dept_id,
+        company_id=None,
+        department_code="ACCOUNTS",
+        department_name="Accounts",
+        status="ACTIVE",
+    )
+    desig = Designation(
+        designation_id=desig_id,
+        company_id=None,
+        designation_code="EXECUTIVE",
+        designation_name="Executive",
+        level_rank=1,
+        status="ACTIVE",
+    )
+
+    mock_session.execute.return_value.scalar_one_or_none.side_effect = [dept, desig]
+
+    # Should not raise any ValueError
+    validate_user_cross_company_integrity(
+        session=mock_session,
+        company_id=comp_id,
+        department_id=dept_id,
+        designation_id=desig_id,
+    )
+
+
+
 def test_cross_company_validation_designation_mismatch() -> None:
     """Verify designation belonging to a different company is rejected."""
     mock_session = MagicMock(spec=Session)
@@ -342,3 +379,28 @@ def test_create_user_service_success_and_rollback_on_failure() -> None:
     assert "already registered" in str(exc_info.value)
     assert mock_session.rollback.call_count == 1
     assert mock_session.commit.call_count == 0
+
+
+def test_generate_employee_code_fills_gaps_on_deletion() -> None:
+    """Verify that when an employee code like CG0006 is deleted, the next code generated is CG0006."""
+    mock_session = MagicMock(spec=Session)
+
+    comp = Company(
+        company_id=uuid.uuid4(),
+        company_code="GOCOMPLIANCES",
+        company_name="Gocompliances",
+        employee_code_prefix="CG",
+        next_employee_number=8,
+        status="ACTIVE",
+    )
+
+    # Existing employees: CG0001, CG0002, CG0003, CG0004, CG0005 (CG0006 was deleted)
+    existing_codes = ["CG0001", "CG0002", "CG0003", "CG0004", "CG0005"]
+
+    mock_session.execute.return_value.scalar_one_or_none.return_value = comp
+    mock_session.execute.return_value.scalars.return_value.all.return_value = existing_codes
+
+    code = generate_employee_code(mock_session, comp.company_id)
+    assert code == "CG0006"
+    assert comp.next_employee_number == 7
+

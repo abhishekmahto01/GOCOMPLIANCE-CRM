@@ -160,4 +160,62 @@ describe('Employee Management Canonical Module Tests', () => {
       expect(screen.getAllByText('CG0002').length).toBeGreaterThanOrEqual(1);
     });
   });
+
+  it('renders delete button for super admin and calls deleteEmployeeApi on confirmation', async () => {
+    const deleteSpy = vi.spyOn(employeesApi, 'deleteEmployeeApi').mockResolvedValue({ message: 'Employee deleted' });
+
+    render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/admin/employees']}>
+          <Routes>
+            <Route path="/admin/employees" element={<EmployeeListPage />} />
+          </Routes>
+        </MemoryRouter>
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTitle('Delete Employee')).toBeInTheDocument();
+    });
+
+    screen.getByTitle('Delete Employee').click();
+
+    await waitFor(() => {
+      expect(screen.getByText(/Warning: This action cannot be undone/i)).toBeInTheDocument();
+    });
+
+    const confirmBtn = screen.getByRole('button', { name: 'Delete Permanently' });
+    confirmBtn.click();
+
+    await waitFor(() => {
+      expect(deleteSpy).toHaveBeenCalledWith('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+    });
+  });
+
+  it('does not show delete button for non-super admin users', async () => {
+    const nonSuperAdminUser: CurrentUser = {
+      ...mockUser,
+      employee_code: 'CG0005',
+      designation_name: 'Sales Executive',
+      official_email: 'regular@gocompliances.in',
+    };
+    vi.spyOn(authApi, 'getCurrentUserApi').mockResolvedValue(nonSuperAdminUser);
+
+    render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/admin/employees']}>
+          <Routes>
+            <Route path="/admin/employees" element={<EmployeeListPage />} />
+          </Routes>
+        </MemoryRouter>
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Employee Directory' })).toBeInTheDocument();
+    });
+
+    expect(screen.queryByTitle('Delete Employee')).not.toBeInTheDocument();
+  });
 });
+

@@ -7,14 +7,14 @@ export interface CompanyLookup {
 
 export interface DepartmentLookup {
   department_id: string;
-  company_id: string;
+  company_id?: string | null;
   department_code: string;
   department_name: string;
 }
 
 export interface DesignationLookup {
   designation_id: string;
-  company_id: string;
+  company_id?: string | null;
   designation_code: string;
   designation_name: string;
   level_rank: number;

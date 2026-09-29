@@ -72,3 +72,9 @@ export async function resetEmployeePasswordApi(
   return response.data;
 }
 
+export async function deleteEmployeeApi(userId: string): Promise<{ message: string }> {
+  const response = await apiClient.delete<{ message: string }>(`/admin/employees/${userId}`);
+  return response.data;
+}
+
+

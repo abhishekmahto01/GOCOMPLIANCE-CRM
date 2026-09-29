@@ -165,6 +165,41 @@ def test_lookup_departments_success(
     app.dependency_overrides.clear()
 
 
+def test_lookup_departments_common_master_with_null_company_id(
+    client: TestClient,
+    active_user: User,
+    test_department_id: uuid.UUID,
+    mock_db_session: MagicMock,
+) -> None:
+    """Verify departments lookup successfully serializes global common master departments (company_id=None)."""
+    app.dependency_overrides[get_current_active_user] = lambda: active_user
+    app.dependency_overrides[get_db] = lambda: mock_db_session
+
+    mock_dept_accounts = Department(
+        department_id=test_department_id,
+        company_id=None,
+        department_code="ACCOUNTS",
+        department_name="Accounts",
+        status="ACTIVE",
+    )
+
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = [mock_dept_accounts]
+    mock_db_session.execute.return_value = mock_result
+
+    with patch("app.services.permissions.has_permission", return_value=True):
+        res = client.get("/api/admin/lookup/departments")
+        assert res.status_code == status.HTTP_200_OK
+        data = res.json()
+        assert len(data) == 1
+        assert data[0]["department_code"] == "ACCOUNTS"
+        assert data[0]["department_name"] == "Accounts"
+        assert data[0]["company_id"] is None
+
+    app.dependency_overrides.clear()
+
+
+
 def test_lookup_designations_success(
     client: TestClient,
     active_user: User,

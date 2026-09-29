@@ -303,10 +303,8 @@ export const EmployeeFormPage: React.FC = () => {
                   {...register('company_id')}
                   disabled={isEditMode}
                   onChange={(e) => {
-                    setValue('company_id', e.target.value);
-                    setValue('department_id', '');
-                    setValue('designation_id', '');
-                    setValue('manager_user_id', '');
+                    setValue('company_id', e.target.value, { shouldValidate: true });
+                    setValue('manager_user_id', '', { shouldValidate: true });
                   }}
                   className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
                 >

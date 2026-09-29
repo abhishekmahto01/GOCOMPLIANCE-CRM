@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   Edit2,
   Building2,
@@ -11,9 +11,15 @@ import {
   ShieldAlert,
   AlertCircle,
   RotateCcw,
+  Trash2,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { getEmployeeByIdApi, updateEmployeeStatusApi, resetEmployeePasswordApi } from '../api/employees';
+import {
+  getEmployeeByIdApi,
+  updateEmployeeStatusApi,
+  resetEmployeePasswordApi,
+  deleteEmployeeApi,
+} from '../api/employees';
 import type { Employee, AccountStatus } from '../types/employee';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { ConfirmationModal } from '../components/common/ConfirmationModal';
@@ -23,7 +29,8 @@ import { extractErrorMessage } from '../api/client';
 
 export const EmployeeDetailPage: React.FC = () => {
   const { userId } = useParams<{ userId: string }>();
-  const { hasPermission } = useAuth();
+  const navigate = useNavigate();
+  const { hasPermission, isSuperAdmin, user: currentUser } = useAuth();
 
   // Toast state
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -57,6 +64,10 @@ export const EmployeeDetailPage: React.FC = () => {
   // Reset Password Dialog state
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [isResettingPassword, setIsResettingPassword] = useState(false);
+
+  // Delete Dialog state (Super Admin only)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Fetch employee details
   const fetchEmployee = async () => {
@@ -127,6 +138,28 @@ export const EmployeeDetailPage: React.FC = () => {
       addToast('error', 'Password Reset Failed', extractErrorMessage(err));
     } finally {
       setIsResettingPassword(false);
+    }
+  };
+
+  // Handle Delete Employee (Super Admin Only)
+  const handleConfirmDelete = async () => {
+    if (!employee) return;
+    setIsDeleting(true);
+    try {
+      await deleteEmployeeApi(employee.user_id);
+      addToast(
+        'success',
+        'Employee Deleted',
+        `Employee ${employee.employee_code} (${employee.first_name} ${employee.last_name}) has been permanently deleted.`
+      );
+      setDeleteModalOpen(false);
+      setTimeout(() => {
+        navigate('/admin/employees');
+      }, 1000);
+    } catch (err) {
+      addToast('error', 'Deletion Failed', extractErrorMessage(err));
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -278,6 +311,20 @@ export const EmployeeDetailPage: React.FC = () => {
                 </Button>
               </Link>
             )}
+
+            {isSuperAdmin &&
+              employee.employee_code !== 'CG0001' &&
+              employee.user_id !== currentUser?.user_id && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setDeleteModalOpen(true)}
+                  className="text-xs font-semibold text-rose-600 hover:text-rose-700 dark:text-rose-400 border-rose-300 dark:border-rose-800/80 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete Employee</span>
+                </Button>
+              )}
           </div>
         </div>
 
@@ -480,6 +527,40 @@ export const EmployeeDetailPage: React.FC = () => {
             </p>
             <p>
               The employee must change their password on next login before accessing any CRM module.
+            </p>
+          </div>
+        </div>
+      </ConfirmationModal>
+
+      {/* Delete Employee Modal (Super Admin Only) */}
+      <ConfirmationModal
+        isOpen={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={handleConfirmDelete}
+        title="Delete Employee"
+        confirmText="Delete Permanently"
+        variant="danger"
+        isLoading={isDeleting}
+      >
+        <div className="space-y-4 text-left text-xs sm:text-sm">
+          <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 space-y-1">
+            <div>
+              <strong>Employee:</strong> {employee.first_name} {employee.last_name} ({employee.employee_code})
+            </div>
+            <div>
+              <strong>Company:</strong> {employee.company_name || '—'} • <strong>Designation:</strong> {employee.designation_name || '—'}
+            </div>
+            <div>
+              <strong>Official Email:</strong> {employee.official_email}
+            </div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 text-rose-900 dark:text-rose-200 text-xs leading-relaxed space-y-1">
+            <p className="font-semibold text-rose-950 dark:text-rose-100">
+              Warning: This action cannot be undone!
+            </p>
+            <p>
+              Are you sure you want to permanently delete this employee account? Direct reports will be unlinked and all system permissions revoked.
             </p>
           </div>
         </div>

@@ -574,14 +574,89 @@ def test_update_employee_duplicate_email_409(
 
 
 # ==============================================================================
-# Security & Absence of Delete Route
+# Employee Deletion Tests (DELETE /api/admin/employees/{user_id}) - Super Admin Only
 # ==============================================================================
 
-def test_no_hard_delete_route(client: TestClient, active_admin_user: User) -> None:
-    """Verify DELETE /api/admin/employees/{id} does not exist (405 Method Not Allowed)."""
+def test_delete_employee_success_super_admin(
+    client: TestClient,
+    active_admin_user: User,
+    mock_db_session: MagicMock,
+) -> None:
+    """Verify Super Admin can successfully delete an employee."""
     app.dependency_overrides[get_current_active_user] = lambda: active_admin_user
+    app.dependency_overrides[get_db] = lambda: mock_db_session
 
-    response = client.delete(f"/api/admin/employees/{uuid.uuid4()}")
-    assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+    target_id = uuid.uuid4()
+
+    with patch("app.services.permissions.is_super_admin_user", return_value=True), \
+         patch("app.services.user_service.delete_employee", return_value=None):
+        response = client.delete(f"/api/admin/employees/{target_id}")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["message"] == "Employee deleted successfully"
 
     app.dependency_overrides.clear()
+
+
+def test_delete_employee_forbidden_for_non_super_admin(
+    client: TestClient,
+    active_admin_user: User,
+    mock_db_session: MagicMock,
+) -> None:
+    """Verify non-super-admin caller receives 403 Forbidden when attempting delete."""
+    app.dependency_overrides[get_current_active_user] = lambda: active_admin_user
+    app.dependency_overrides[get_db] = lambda: mock_db_session
+
+    target_id = uuid.uuid4()
+
+    with patch("app.services.permissions.is_super_admin_user", return_value=False):
+        response = client.delete(f"/api/admin/employees/{target_id}")
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert "Only Super Admin has permission" in response.json()["detail"]
+
+    app.dependency_overrides.clear()
+
+
+def test_delete_employee_not_found_404(
+    client: TestClient,
+    active_admin_user: User,
+    mock_db_session: MagicMock,
+) -> None:
+    """Verify deleting non-existent employee returns 404."""
+    app.dependency_overrides[get_current_active_user] = lambda: active_admin_user
+    app.dependency_overrides[get_db] = lambda: mock_db_session
+
+    target_id = uuid.uuid4()
+
+    with patch("app.services.permissions.is_super_admin_user", return_value=True), \
+         patch("app.services.user_service.delete_employee", side_effect=ValueError(f"Employee with ID '{target_id}' not found")):
+        response = client.delete(f"/api/admin/employees/{target_id}")
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    app.dependency_overrides.clear()
+
+
+def test_delete_employee_safety_checks_400(
+    client: TestClient,
+    active_admin_user: User,
+    mock_db_session: MagicMock,
+) -> None:
+    """Verify safety checks return 400 Bad Request."""
+    app.dependency_overrides[get_current_active_user] = lambda: active_admin_user
+    app.dependency_overrides[get_db] = lambda: mock_db_session
+
+    # Self deletion attempt
+    with patch("app.services.permissions.is_super_admin_user", return_value=True), \
+         patch("app.services.user_service.delete_employee", side_effect=ValueError("Super Admin cannot delete their own account")):
+        response = client.delete(f"/api/admin/employees/{active_admin_user.user_id}")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "cannot delete their own account" in response.json()["detail"]
+
+    # Active sales/ops tasks conflict
+    with patch("app.services.permissions.is_super_admin_user", return_value=True), \
+         patch("app.services.user_service.delete_employee", side_effect=ValueError("Cannot delete employee 'CG0005' because 2 sales order(s) are associated with them.")):
+        response = client.delete(f"/api/admin/employees/{uuid.uuid4()}")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "sales order(s) are associated" in response.json()["detail"]
+
+    app.dependency_overrides.clear()
+

@@ -4,14 +4,17 @@ import math
 import uuid
 from typing import List, Optional, Tuple
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.config import settings
 from app.core.security import hash_password
+from app.models.client import ClientMaster
 from app.models.company import Company
 from app.models.department import Department
 from app.models.designation import Designation
+from app.models.operation_application import OperationApplication
+from app.models.sales_order import SalesOrder
 from app.models.user import User
 from app.schemas.user import (
     ALLOWED_ACCOUNT_STATUSES,
@@ -20,7 +23,7 @@ from app.schemas.user import (
     UserCreate,
     UserUpdate,
 )
-from app.services.employee_code import generate_employee_code
+from app.services.employee_code import extract_code_number, generate_employee_code
 from app.services.permissions import DataScopeContext, get_team_user_ids
 
 
@@ -68,7 +71,7 @@ def validate_user_cross_company_integrity(
 
     if not dept:
         raise ValueError(f"Department with ID '{department_id}' not found")
-    if dept.company_id != company_id:
+    if dept.company_id is not None and dept.company_id != company_id:
         raise ValueError(
             f"Department '{dept.department_name}' ({dept.department_code}) does not belong to the selected company"
         )
@@ -82,7 +85,7 @@ def validate_user_cross_company_integrity(
 
     if not desig:
         raise ValueError(f"Designation with ID '{designation_id}' not found")
-    if desig.company_id != company_id:
+    if desig.company_id is not None and desig.company_id != company_id:
         raise ValueError(
             f"Designation '{desig.designation_name}' ({desig.designation_code}) does not belong to the selected company"
         )
@@ -618,3 +621,99 @@ def update_employee_status(
     except Exception:
         session.rollback()
         raise
+
+
+def delete_employee(
+    session: Session,
+    target_user_id: uuid.UUID,
+    current_user: User,
+) -> None:
+    """Permanently delete an employee record (Super Admin only).
+
+    Enforces rules:
+    1. Employee must exist.
+    2. Super Admin cannot delete their own account.
+    3. Root / Primary Super Admin ('CG0001') cannot be deleted.
+    4. Employees with active sales orders or operations tasks cannot be deleted.
+    5. Cleanly unlinks direct reports and client creations.
+    6. Cascade deletes user permissions, refresh tokens, and audit records.
+    """
+    target_user = get_employee_by_id(session, target_user_id)
+    if not target_user:
+        raise ValueError(f"Employee with ID '{target_user_id}' not found")
+
+    if target_user.user_id == current_user.user_id:
+        raise ValueError("Super Admin cannot delete their own account")
+
+    if target_user.employee_code == "CG0001" or target_user.official_email in (
+        "admin@gocompliances.com",
+        "superadmin@gocompliances.com",
+        "research.rnd.gc@gmail.com",
+    ):
+        raise ValueError("Primary Super Admin account cannot be deleted")
+
+    # Check for sales orders closed by this salesperson
+    sales_orders_count = session.execute(
+        select(func.count(SalesOrder.order_id)).where(
+            SalesOrder.salesperson_user_id == target_user.user_id
+        )
+    ).scalar_one()
+    if sales_orders_count > 0:
+        raise ValueError(
+            f"Cannot delete employee '{target_user.employee_code}' because {sales_orders_count} "
+            f"sales order(s) are associated with them. Please reassign or cancel sales orders first, or deactivate the employee."
+        )
+
+    # Check for operations applications assigned to this employee
+    ops_apps_count = session.execute(
+        select(func.count(OperationApplication.application_id)).where(
+            OperationApplication.assigned_to_user_id == target_user.user_id
+        )
+    ).scalar_one()
+    if ops_apps_count > 0:
+        raise ValueError(
+            f"Cannot delete employee '{target_user.employee_code}' because {ops_apps_count} "
+            f"operation application task(s) are assigned to them. Please reassign tasks first, or deactivate the employee."
+        )
+
+    # Update any direct reports who have this user as manager
+    session.execute(
+        update(User)
+        .where(User.manager_user_id == target_user.user_id)
+        .values(manager_user_id=None)
+    )
+
+    # Nullify ClientMaster created_by_user_id if any
+    session.execute(
+        update(ClientMaster)
+        .where(ClientMaster.created_by_user_id == target_user.user_id)
+        .values(created_by_user_id=None)
+    )
+
+    company_id = target_user.company_id
+
+    # Delete employee
+    session.delete(target_user)
+    session.flush()
+
+    # Synchronize company next_employee_number with remaining active employees
+    if company_id:
+        company = session.get(Company, company_id)
+        if company:
+            prefix = company.employee_code_prefix.upper()
+            remaining_codes = session.execute(
+                select(User.employee_code).where(User.company_id == company_id)
+            ).scalars().all()
+
+            used_nums = []
+            for c in remaining_codes:
+                num = extract_code_number(c, prefix)
+                if num is not None:
+                    used_nums.append(num)
+
+            max_remaining = max(used_nums) if used_nums else 0
+            company.next_employee_number = max(max_remaining + 1, 1)
+
+    session.commit()
+
+

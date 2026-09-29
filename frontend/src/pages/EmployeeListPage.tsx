@@ -11,9 +11,15 @@ import {
   RefreshCw,
   AlertCircle,
   KeyRound,
+  Trash2,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { getEmployeesApi, updateEmployeeStatusApi, resetEmployeePasswordApi } from '../api/employees';
+import {
+  getEmployeesApi,
+  updateEmployeeStatusApi,
+  resetEmployeePasswordApi,
+  deleteEmployeeApi,
+} from '../api/employees';
 import {
   getLookupCompaniesApi,
   getLookupDepartmentsApi,
@@ -35,7 +41,7 @@ import { useDebounce } from '../hooks/useDebounce';
 import { extractErrorMessage } from '../api/client';
 
 export const EmployeeListPage: React.FC = () => {
-  const { hasPermission } = useAuth();
+  const { hasPermission, isSuperAdmin, user: currentUser } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Toast notifications
@@ -80,6 +86,11 @@ export const EmployeeListPage: React.FC = () => {
   // Reset Password Dialog State
   const [resetModalOpen, setResetModalOpen] = useState<boolean>(false);
   const [isResettingPassword, setIsResettingPassword] = useState<boolean>(false);
+
+  // Delete Employee Dialog State (Super Admin only)
+  const [empToDelete, setEmpToDelete] = useState<Employee | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState<boolean>(false);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
   // Dropdown Lookups
   const [companies, setCompanies] = useState<CompanyLookup[]>([]);
@@ -238,6 +249,33 @@ export const EmployeeListPage: React.FC = () => {
       addToast('error', 'Password Reset Failed', extractErrorMessage(err));
     } finally {
       setIsResettingPassword(false);
+    }
+  };
+
+  // Open Delete Employee Dialog
+  const handleOpenDeleteModal = (emp: Employee) => {
+    setEmpToDelete(emp);
+    setDeleteModalOpen(true);
+  };
+
+  // Confirm Delete Employee
+  const handleConfirmDelete = async () => {
+    if (!empToDelete) return;
+    setIsDeleting(true);
+    try {
+      await deleteEmployeeApi(empToDelete.user_id);
+      addToast(
+        'success',
+        'Employee Deleted',
+        `Employee ${empToDelete.employee_code} (${empToDelete.first_name} ${empToDelete.last_name}) has been permanently deleted.`
+      );
+      setDeleteModalOpen(false);
+      setEmpToDelete(null);
+      fetchEmployees();
+    } catch (err) {
+      addToast('error', 'Deletion Failed', extractErrorMessage(err));
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -573,6 +611,20 @@ export const EmployeeListPage: React.FC = () => {
                               Status
                             </button>
                           )}
+
+                          {/* Delete Employee (Super Admin Only) */}
+                          {isSuperAdmin &&
+                            emp.employee_code !== 'CG0001' &&
+                            emp.user_id !== currentUser?.user_id && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenDeleteModal(emp)}
+                                className="p-1.5 rounded-lg text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition"
+                                title="Delete Employee"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
                         </div>
                       </td>
                     </tr>
@@ -671,6 +723,45 @@ export const EmployeeListPage: React.FC = () => {
             </p>
             <p>
               The employee must change their password on next login before accessing any CRM module.
+            </p>
+          </div>
+        </div>
+      </ConfirmationModal>
+
+      {/* Delete Employee Modal (Super Admin Only) */}
+      <ConfirmationModal
+        isOpen={deleteModalOpen}
+        onClose={() => {
+          setDeleteModalOpen(false);
+          setEmpToDelete(null);
+        }}
+        onConfirm={handleConfirmDelete}
+        title="Delete Employee"
+        confirmText="Delete Permanently"
+        variant="danger"
+        isLoading={isDeleting}
+      >
+        <div className="space-y-4 text-left text-xs sm:text-sm">
+          {empToDelete && (
+            <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 space-y-1">
+              <div>
+                <strong>Employee:</strong> {empToDelete.first_name} {empToDelete.last_name} ({empToDelete.employee_code})
+              </div>
+              <div>
+                <strong>Company:</strong> {empToDelete.company_name || '—'} • <strong>Designation:</strong> {empToDelete.designation_name || '—'}
+              </div>
+              <div>
+                <strong>Official Email:</strong> {empToDelete.official_email}
+              </div>
+            </div>
+          )}
+
+          <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 text-rose-900 dark:text-rose-200 text-xs leading-relaxed space-y-1">
+            <p className="font-semibold text-rose-950 dark:text-rose-100">
+              Warning: This action cannot be undone!
+            </p>
+            <p>
+              Are you sure you want to permanently delete this employee account? Direct reports will be unlinked and all system permissions revoked.
             </p>
           </div>
         </div>
