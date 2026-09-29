@@ -301,3 +301,136 @@ def test_seed_companies_idempotency() -> None:
     assert inserted2 == 0
     assert skipped2 == 3
     assert len(storage) == 3
+
+
+def test_company_delete_endpoint_permissions(client, db_session):
+    """Verify that deleting a company succeeds for Super Admin and fails 403 for non-Super Admin."""
+    from datetime import date
+    from fastapi import status
+    from app.core.security import create_access_token
+    from app.models.department import Department
+    from app.models.designation import Designation
+    from app.models.module import Module
+    from app.models.user import User
+    from app.models.user_module_permission import UserModulePermission
+
+    # 1. Create a dummy company to delete
+    dummy_company = Company(
+        company_code=f"DUMMY_{uuid.uuid4().hex[:4].upper()}",
+        company_name="Dummy Travel Corp",
+        employee_code_prefix="DTC",
+        status="ACTIVE",
+    )
+    db_session.add(dummy_company)
+    db_session.flush()
+
+    # 2. Setup Super Admin
+    sa_dept = Department(
+        company_id=dummy_company.company_id,
+        department_code="ADMIN_CORP_DEPT",
+        department_name="Admin Dept Corp",
+        status="ACTIVE",
+    )
+    db_session.add(sa_dept)
+    db_session.flush()
+
+    sa_desig = Designation(
+        company_id=dummy_company.company_id,
+        designation_code="SUPER_ADMIN",
+        designation_name="Super Administrator",
+        level_rank=1,
+        status="ACTIVE",
+    )
+    db_session.add(sa_desig)
+    db_session.flush()
+
+    sa_user = User(
+        employee_code="CG0001",
+        company_id=dummy_company.company_id,
+        department_id=sa_dept.department_id,
+        designation_id=sa_desig.designation_id,
+        first_name="Super",
+        last_name="Admin",
+        official_email="superadmin@gc.com",
+        mobile_number="+919999900001",
+        date_of_joining=date(2023, 1, 1),
+        employment_type="FULL_TIME",
+        account_status="ACTIVE",
+        must_change_password=False,
+    )
+    db_session.add(sa_user)
+
+    # 3. Setup Regular Admin
+    reg_desig = Designation(
+        company_id=dummy_company.company_id,
+        designation_code="CORP_MANAGER",
+        designation_name="Corporate Manager",
+        level_rank=2,
+        status="ACTIVE",
+    )
+    db_session.add(reg_desig)
+    db_session.flush()
+
+    reg_user = User(
+        employee_code=f"REG_{uuid.uuid4().hex[:4].upper()}",
+        company_id=dummy_company.company_id,
+        department_id=sa_dept.department_id,
+        designation_id=reg_desig.designation_id,
+        first_name="Regular",
+        last_name="User",
+        official_email=f"reg_{uuid.uuid4().hex[:4]}@gc.com",
+        mobile_number="+919999900002",
+        date_of_joining=date(2023, 1, 1),
+        employment_type="FULL_TIME",
+        account_status="ACTIVE",
+        must_change_password=False,
+    )
+    db_session.add(reg_user)
+    db_session.flush()
+
+    admin_mod = db_session.query(Module).filter(Module.module_code == "ADMIN").first()
+    if not admin_mod:
+        admin_mod = Module(module_code="ADMIN", module_name="Administration", route="/admin", status="ACTIVE")
+        db_session.add(admin_mod)
+        db_session.flush()
+
+    # Regular user has can_delete: True for ADMIN module, but is not Super Admin
+    reg_perm = UserModulePermission(
+        user_id=reg_user.user_id,
+        module_id=admin_mod.module_id,
+        can_view=True,
+        can_create=True,
+        can_edit=True,
+        can_delete=True,
+        data_scope="ALL",
+    )
+    db_session.add(reg_perm)
+
+    # Isolated target company to delete
+    target_to_del = Company(
+        company_code=f"DEL_{uuid.uuid4().hex[:4].upper()}",
+        company_name="Company To Delete",
+        employee_code_prefix="DEL",
+        status="ACTIVE",
+    )
+    db_session.add(target_to_del)
+    db_session.commit()
+
+    sa_token = create_access_token(user_id=sa_user.user_id, token_version=sa_user.token_version)
+    reg_token = create_access_token(user_id=reg_user.user_id, token_version=reg_user.token_version)
+
+    # Non-superadmin should be 403 Forbidden
+    res_reg = client.delete(
+        f"/api/admin/companies/{target_to_del.company_id}",
+        headers={"Authorization": f"Bearer {reg_token}"},
+    )
+    assert res_reg.status_code == status.HTTP_403_FORBIDDEN
+
+    # Superadmin should succeed 200 OK
+    res_sa = client.delete(
+        f"/api/admin/companies/{target_to_del.company_id}",
+        headers={"Authorization": f"Bearer {sa_token}"},
+    )
+    assert res_sa.status_code == status.HTTP_200_OK
+    assert res_sa.json()["company_id"] == str(target_to_del.company_id)
+

@@ -31,10 +31,10 @@ import { ConfirmationModal } from '../components/common/ConfirmationModal';
 import { ToastContainer, type ToastMessage } from '../components/ui/toast';
 
 export const DepartmentMasterPage: React.FC = () => {
-  const { hasPermission } = useAuth();
+  const { hasPermission, isSuperAdmin } = useAuth();
   const canCreate = hasPermission('ADMIN', 'create');
   const canEdit = hasPermission('ADMIN', 'edit');
-  const canDelete = hasPermission('ADMIN', 'delete');
+  const canDelete = isSuperAdmin;
 
   // State
   const [departments, setDepartments] = useState<Department[]>([]);

@@ -5,7 +5,11 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_active_user, require_module_permission
+from app.api.deps import (
+    get_current_active_user,
+    require_module_permission,
+    require_super_admin,
+)
 from app.database.session import get_db
 from app.models.user import User
 from app.schemas.company import CompanyCreate, CompanyRead, CompanyUpdate
@@ -114,15 +118,15 @@ def update_company_endpoint(
     "/{company_id}",
     status_code=status.HTTP_200_OK,
     summary="Delete Company",
-    description="Delete a company master record if no dependencies (users, departments, orders) exist.",
-    dependencies=[Depends(require_module_permission("ADMIN", "delete"))],
+    description="Delete a company master record if no dependencies (users, departments, orders) exist. Restricted to Super Admin.",
+    dependencies=[Depends(require_super_admin)],
 )
 def delete_company_endpoint(
     company_id: uuid.UUID,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_super_admin),
     session: Session = Depends(get_db),
 ) -> dict:
-    """Delete a company master record."""
+    """Delete a company master record (Super Admin only)."""
     target_company = company_service.get_company_by_id(session, company_id)
     if not target_company:
         raise HTTPException(

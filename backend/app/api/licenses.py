@@ -5,7 +5,11 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_active_user, require_module_permission
+from app.api.deps import (
+    get_current_active_user,
+    require_module_permission,
+    require_super_admin,
+)
 from app.database.session import get_db
 from app.models.user import User
 from app.schemas.service import ServiceCreate, ServiceDetailRead, ServiceRead, ServiceUpdate
@@ -116,15 +120,15 @@ def update_license_endpoint(
     "/{license_id}",
     status_code=status.HTTP_200_OK,
     summary="Delete License/Service",
-    description="Delete a license master record if no dependencies (sales orders, operations applications) exist.",
-    dependencies=[Depends(require_module_permission("ADMIN", "delete"))],
+    description="Delete a license master record if no dependencies (sales orders, operations applications) exist. Restricted to Super Admin.",
+    dependencies=[Depends(require_super_admin)],
 )
 def delete_license_endpoint(
     license_id: uuid.UUID,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_super_admin),
     session: Session = Depends(get_db),
 ) -> dict:
-    """Delete a license master record."""
+    """Delete a license master record (Super Admin only)."""
     target_service = service_service.get_service_by_id(session, license_id)
     if not target_service:
         raise HTTPException(

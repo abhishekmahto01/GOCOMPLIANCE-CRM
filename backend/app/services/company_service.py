@@ -175,7 +175,7 @@ def delete_company(session: Session, target_company: Company) -> None:
     from app.models.department import Department
     from app.models.designation import Designation
     from app.models.sales_order import SalesOrder
-    from app.models.client import Client
+    from app.models.client import ClientMaster
     from app.models.operation_application import OperationApplication
 
     # 1. Check for assigned employees / users
@@ -216,7 +216,7 @@ def delete_company(session: Session, target_company: Company) -> None:
 
     # 5. Check for clients
     client_count = session.execute(
-        select(func.count(Client.client_id)).where(Client.company_id == target_company.company_id)
+        select(func.count(ClientMaster.client_id)).where(ClientMaster.company_id == target_company.company_id)
     ).scalar() or 0
     if client_count > 0:
         raise ValueError(

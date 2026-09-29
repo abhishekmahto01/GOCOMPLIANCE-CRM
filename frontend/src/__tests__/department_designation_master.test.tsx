@@ -171,7 +171,7 @@ describe('Department & Designation Master Component Tests', () => {
     });
   });
 
-  it('3. Designation Master renders table with designations and level rank', async () => {
+  it('3. Designation Master renders table with designations and role types', async () => {
     vi.spyOn(desigApi, 'getDesignationsApi').mockResolvedValue(mockDesignations);
 
     render(
@@ -191,8 +191,6 @@ describe('Department & Designation Master Component Tests', () => {
     expect(screen.getByText('EXECUTIVE')).toBeInTheDocument();
     expect(screen.getByText('Operations Manager')).toBeInTheDocument();
     expect(screen.getByText('MANAGER')).toBeInTheDocument();
-    expect(screen.getByText('Level 1')).toBeInTheDocument();
-    expect(screen.getByText('Level 5')).toBeInTheDocument();
     expect(screen.getByText('Managerial')).toBeInTheDocument();
   });
 

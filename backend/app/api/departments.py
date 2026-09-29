@@ -5,7 +5,11 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_active_user, require_module_permission
+from app.api.deps import (
+    get_current_active_user,
+    require_module_permission,
+    require_super_admin,
+)
 from app.database.session import get_db
 from app.models.user import User
 from app.schemas.department import DepartmentCreate, DepartmentRead, DepartmentUpdate
@@ -115,15 +119,15 @@ def update_department_endpoint(
     "/{department_id}",
     status_code=status.HTTP_200_OK,
     summary="Delete Department",
-    description="Delete a department if no employees are assigned.",
-    dependencies=[Depends(require_module_permission("ADMIN", "delete"))],
+    description="Delete a department if no employees are assigned. Restricted to Super Admin.",
+    dependencies=[Depends(require_super_admin)],
 )
 def delete_department_endpoint(
     department_id: uuid.UUID,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_super_admin),
     session: Session = Depends(get_db),
 ) -> dict:
-    """Delete an existing department master record."""
+    """Delete an existing department master record (Super Admin only)."""
     target_dept = department_service.get_department_by_id(session, department_id)
     if not target_dept:
         raise HTTPException(

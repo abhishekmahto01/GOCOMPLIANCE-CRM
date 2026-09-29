@@ -40,10 +40,10 @@ const CATEGORIES = [
 ];
 
 export const LicenseMasterPage: React.FC = () => {
-  const { hasPermission } = useAuth();
+  const { hasPermission, isSuperAdmin } = useAuth();
   const canCreate = hasPermission('ADMIN', 'create');
   const canEdit = hasPermission('ADMIN', 'edit');
-  const canDelete = hasPermission('ADMIN', 'delete');
+  const canDelete = isSuperAdmin;
 
   // State
   const [licenses, setLicenses] = useState<License[]>([]);

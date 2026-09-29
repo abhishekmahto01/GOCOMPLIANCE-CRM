@@ -162,3 +162,26 @@ def require_module_permission(
 
     return _permission_dependency
 
+
+def require_super_admin(
+    current_user: User = Depends(require_fully_activated_user),
+    session: Session = Depends(get_db),
+) -> User:
+    """Ensure the authenticated user is a Super Admin.
+
+    Master delete operations and critical global configurations are strictly restricted
+    to Super Admin users.
+
+    Raises:
+        HTTPException: 403 Forbidden if user is not a Super Admin.
+    """
+    from app.services import permissions
+
+    if not permissions.is_super_admin_user(session, current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied. Only Super Admin has permission to delete master records.",
+        )
+    return current_user
+
+

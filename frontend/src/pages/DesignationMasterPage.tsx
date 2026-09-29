@@ -9,7 +9,6 @@ import {
   Save,
   Trash2,
   ShieldCheck,
-  TrendingUp,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -32,10 +31,10 @@ import { ConfirmationModal } from '../components/common/ConfirmationModal';
 import { ToastContainer, type ToastMessage } from '../components/ui/toast';
 
 export const DesignationMasterPage: React.FC = () => {
-  const { hasPermission } = useAuth();
+  const { hasPermission, isSuperAdmin } = useAuth();
   const canCreate = hasPermission('ADMIN', 'create');
   const canEdit = hasPermission('ADMIN', 'edit');
-  const canDelete = hasPermission('ADMIN', 'delete');
+  const canDelete = isSuperAdmin;
 
   // State
   const [designations, setDesignations] = useState<Designation[]>([]);
@@ -140,10 +139,6 @@ export const DesignationMasterPage: React.FC = () => {
       errors.designation_name = 'Designation title is required';
     }
 
-    if (!addForm.level_rank || addForm.level_rank <= 0) {
-      errors.level_rank = 'Rank must be greater than 0';
-    }
-
     if (Object.keys(errors).length > 0) {
       setAddFormErrors(errors);
       return;
@@ -156,7 +151,7 @@ export const DesignationMasterPage: React.FC = () => {
       const newDesig = await createDesignationApi({
         designation_code: addForm.designation_code.trim().toUpperCase(),
         designation_name: addForm.designation_name.trim(),
-        level_rank: Number(addForm.level_rank),
+        level_rank: addForm.level_rank || 1,
         is_managerial: !!addForm.is_managerial,
         description: addForm.description?.trim() || null,
         status: addForm.status || 'ACTIVE',
@@ -200,9 +195,6 @@ export const DesignationMasterPage: React.FC = () => {
     const errors: Record<string, string> = {};
     if (!editForm.designation_name?.trim()) {
       errors.designation_name = 'Designation title cannot be empty';
-    }
-    if (editForm.level_rank !== undefined && editForm.level_rank <= 0) {
-      errors.level_rank = 'Rank must be greater than 0';
     }
 
     if (Object.keys(errors).length > 0) {
@@ -380,7 +372,6 @@ export const DesignationMasterPage: React.FC = () => {
               <thead>
                 <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/75 dark:bg-slate-800/40 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                   <th className="py-3.5 px-4 sm:px-6">Designation Title & Code</th>
-                  <th className="py-3.5 px-4 text-center">Seniority Level</th>
                   <th className="py-3.5 px-4">Role Type</th>
                   <th className="py-3.5 px-4">Status</th>
                   <th className="py-3.5 px-4 text-right">Actions</th>
@@ -407,14 +398,6 @@ export const DesignationMasterPage: React.FC = () => {
                           </span>
                         </div>
                       </div>
-                    </td>
-
-                    {/* Seniority Level */}
-                    <td className="py-3.5 px-4 text-center">
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs">
-                        <TrendingUp className="w-3 h-3 text-indigo-500" />
-                        Level {desig.level_rank}
-                      </span>
                     </td>
 
                     {/* Role Type / Managerial */}
@@ -529,45 +512,23 @@ export const DesignationMasterPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Level Rank & Managerial Flag */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                Seniority Level Rank <span className="text-rose-500">*</span>
-              </label>
-              <Input
-                type="number"
-                min={1}
-                max={20}
-                placeholder="1 (Entry) to 10 (Director)"
-                value={addForm.level_rank}
-                onChange={(e) =>
-                  setAddForm({ ...addForm, level_rank: Number(e.target.value) })
-                }
-                className="text-xs sm:text-sm rounded-xl"
-              />
-              {addFormErrors.level_rank && (
-                <p className="text-[11px] text-rose-500">{addFormErrors.level_rank}</p>
-              )}
-            </div>
-
-            <div className="pt-5 flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="add_is_managerial"
-                checked={addForm.is_managerial}
-                onChange={(e) =>
-                  setAddForm({ ...addForm, is_managerial: e.target.checked })
-                }
-                className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-              />
-              <label
-                htmlFor="add_is_managerial"
-                className="text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer"
-              >
-                Is Managerial Position
-              </label>
-            </div>
+          {/* Managerial Flag */}
+          <div className="pt-2 flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="add_is_managerial"
+              checked={addForm.is_managerial}
+              onChange={(e) =>
+                setAddForm({ ...addForm, is_managerial: e.target.checked })
+              }
+              className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+            />
+            <label
+              htmlFor="add_is_managerial"
+              className="text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer"
+            >
+              Is Managerial Position
+            </label>
           </div>
 
           {/* Description */}
@@ -662,45 +623,23 @@ export const DesignationMasterPage: React.FC = () => {
             )}
           </div>
 
-          {/* Level Rank & Managerial Flag */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                Seniority Level Rank <span className="text-rose-500">*</span>
-              </label>
-              <Input
-                type="number"
-                min={1}
-                max={20}
-                placeholder="1 (Entry) to 10 (Director)"
-                value={editForm.level_rank || 1}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, level_rank: Number(e.target.value) })
-                }
-                className="text-xs sm:text-sm rounded-xl"
-              />
-              {editFormErrors.level_rank && (
-                <p className="text-[11px] text-rose-500">{editFormErrors.level_rank}</p>
-              )}
-            </div>
-
-            <div className="pt-5 flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="edit_is_managerial"
-                checked={editForm.is_managerial || false}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, is_managerial: e.target.checked })
-                }
-                className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-              />
-              <label
-                htmlFor="edit_is_managerial"
-                className="text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer"
-              >
-                Is Managerial Position
-              </label>
-            </div>
+          {/* Managerial Flag */}
+          <div className="pt-2 flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="edit_is_managerial"
+              checked={editForm.is_managerial || false}
+              onChange={(e) =>
+                setEditForm({ ...editForm, is_managerial: e.target.checked })
+              }
+              className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+            />
+            <label
+              htmlFor="edit_is_managerial"
+              className="text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer"
+            >
+              Is Managerial Position
+            </label>
           </div>
 
           {/* Description */}
