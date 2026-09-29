@@ -17,6 +17,7 @@ from app.core.security import (
     create_refresh_token,
     hash_password,
     hash_refresh_token,
+    verify_password,
 )
 from app.main import app
 from app.models.refresh_token import RefreshToken
@@ -337,6 +338,100 @@ def test_change_user_password_rejects_same_password() -> None:
         )
     assert exc_info.value.status_code == 400
     assert "cannot be identical" in exc_info.value.detail
+
+
+def test_change_password_api_endpoint_success() -> None:
+    """Verify POST /api/auth/change-password endpoint updates password and revokes sessions."""
+    from app.api.deps import get_current_active_user, get_db
+
+    old_pw = "ValidCurrentPass123!@"
+    new_pw = "BrandNewValidPass456#$"
+    user = User(
+        user_id=uuid.uuid4(),
+        employee_code="CG0001",
+        official_email="admin@gocompliances.in",
+        password_hash=hash_password(old_pw),
+        account_status="ACTIVE",
+        must_change_password=False,
+        token_version=1,
+    )
+
+    mock_session = MagicMock()
+    app.dependency_overrides[get_current_active_user] = lambda: user
+    app.dependency_overrides[get_db] = lambda: mock_session
+
+    try:
+        res = client.post(
+            "/api/auth/change-password",
+            json={
+                "current_password": old_pw,
+                "new_password": new_pw,
+            },
+        )
+        assert res.status_code == 200
+        assert "Password changed successfully" in res.json()["message"]
+        assert user.token_version == 2
+        assert verify_password(new_pw, user.password_hash)
+        assert not verify_password(old_pw, user.password_hash)
+        assert mock_session.commit.call_count >= 1
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_change_password_api_endpoint_validation_errors() -> None:
+    """Verify POST /api/auth/change-password endpoint rejects wrong current password and weak passwords."""
+    from app.api.deps import get_current_active_user, get_db
+
+    old_pw = "ValidCurrentPass123!@"
+    user = User(
+        user_id=uuid.uuid4(),
+        employee_code="CG0001",
+        official_email="admin@gocompliances.in",
+        password_hash=hash_password(old_pw),
+        account_status="ACTIVE",
+        must_change_password=False,
+        token_version=1,
+    )
+
+    mock_session = MagicMock()
+    app.dependency_overrides[get_current_active_user] = lambda: user
+    app.dependency_overrides[get_db] = lambda: mock_session
+
+    try:
+        # 1. Wrong current password
+        res = client.post(
+            "/api/auth/change-password",
+            json={
+                "current_password": "WrongPassword123!@",
+                "new_password": "BrandNewValidPass456#$",
+            },
+        )
+        assert res.status_code == 400
+        assert "Current password is incorrect" in res.json()["detail"]
+
+        # 2. Too short / weak new password
+        res2 = client.post(
+            "/api/auth/change-password",
+            json={
+                "current_password": old_pw,
+                "new_password": "short",
+            },
+        )
+        assert res2.status_code == 422  # pydantic validation min_length=10
+
+        # 3. Same password
+        res3 = client.post(
+            "/api/auth/change-password",
+            json={
+                "current_password": old_pw,
+                "new_password": old_pw,
+            },
+        )
+        assert res3.status_code == 400
+        assert "cannot be identical" in res3.json()["detail"]
+    finally:
+        app.dependency_overrides.clear()
+
 
 
 def test_auth_api_routes_registered() -> None:
