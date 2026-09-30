@@ -12,6 +12,7 @@ import {
   Eye,
   AlertCircle,
   Users,
+  MapPin,
 } from 'lucide-react';
 import type { OperationsDashboardResponse } from '../../types/operations';
 import { getOperationsDashboardApi } from '../../api/operations';
@@ -284,6 +285,7 @@ export const OperationsDashboardPage: React.FC = () => {
                       <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 uppercase text-[10px]">
                         <th className="py-2.5 px-3">App #</th>
                         <th className="py-2.5 px-3">Client</th>
+                        <th className="py-2.5 px-3">Location</th>
                         <th className="py-2.5 px-3">Service</th>
                         <th className="py-2.5 px-3">Assignee</th>
                         <th className="py-2.5 px-3">Due Date</th>
@@ -298,6 +300,16 @@ export const OperationsDashboardPage: React.FC = () => {
                             {task.application_number}
                           </td>
                           <td className="py-2.5 px-3 text-slate-800 dark:text-slate-200">{task.client_name}</td>
+                          <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                            {task.location ? (
+                              <span className="inline-flex items-center gap-1 font-medium text-slate-800 dark:text-slate-200">
+                                <MapPin className="w-3.5 h-3.5 text-blue-500 shrink-0 inline" />
+                                <span>{task.location}</span>
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </td>
                           <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">{task.service_name}</td>
                           <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300">
                             {task.assigned_to_name || <span className="text-amber-500">Unassigned</span>}
@@ -407,6 +419,7 @@ export const OperationsDashboardPage: React.FC = () => {
                     <th className="py-3 px-3">Application #</th>
                     <th className="py-3 px-3">Order #</th>
                     <th className="py-3 px-3">Client</th>
+                    <th className="py-3 px-3">Location</th>
                     <th className="py-3 px-3">Service</th>
                     <th className="py-3 px-3">Assigned To</th>
                     <th className="py-3 px-3">Converted By</th>
@@ -423,6 +436,16 @@ export const OperationsDashboardPage: React.FC = () => {
                       </td>
                       <td className="py-3 px-3 font-mono text-slate-500">{app.sales_order_number || '—'}</td>
                       <td className="py-3 px-3 font-semibold text-slate-900 dark:text-white">{app.client_name}</td>
+                      <td className="py-3 px-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                        {app.location ? (
+                          <span className="inline-flex items-center gap-1 font-medium text-slate-800 dark:text-slate-200">
+                            <MapPin className="w-3.5 h-3.5 text-blue-500 shrink-0 inline" />
+                            <span>{app.location}</span>
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
                       <td className="py-3 px-3 text-slate-600 dark:text-slate-400">{app.service_name}</td>
                       <td className="py-3 px-3 text-slate-700 dark:text-slate-300">
                         {app.assigned_to_name ? (

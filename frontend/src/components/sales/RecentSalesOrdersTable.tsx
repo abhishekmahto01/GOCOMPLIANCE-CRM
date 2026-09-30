@@ -117,6 +117,7 @@ export const RecentSalesOrdersTable: React.FC<RecentSalesOrdersTableProps> = ({
               <th scope="col" className="py-3 px-3">ORDER ID</th>
               <th scope="col" className="py-3 px-3">DATE</th>
               <th scope="col" className="py-3 px-3">CLIENT</th>
+              <th scope="col" className="py-3 px-3">LOCATION</th>
               <th scope="col" className="py-3 px-3">SERVICE</th>
               <th scope="col" className="py-3 px-3">SALESPERSON</th>
               <th scope="col" className="py-3 px-3 text-right">ORDER VALUE</th>
@@ -141,12 +142,16 @@ export const RecentSalesOrdersTable: React.FC<RecentSalesOrdersTableProps> = ({
                     {order.formatted_date}
                   </td>
                   <td className="py-3 px-3 font-medium text-slate-800 dark:text-slate-200">
-                    <div>{order.client_name}</div>
-                    {order.location && (
-                      <div className="text-[11px] text-slate-400 dark:text-slate-500 font-normal flex items-center gap-1 mt-0.5">
-                        <MapPin className="w-3 h-3 text-blue-500 shrink-0 inline" />
+                    {order.client_name}
+                  </td>
+                  <td className="py-3 px-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                    {order.location ? (
+                      <span className="inline-flex items-center gap-1 font-medium text-slate-800 dark:text-slate-200">
+                        <MapPin className="w-3.5 h-3.5 text-blue-500 shrink-0 inline" />
                         <span>{order.location}</span>
-                      </div>
+                      </span>
+                    ) : (
+                      <span className="text-slate-400">—</span>
                     )}
                   </td>
                   <td className="py-3 px-3 text-slate-600 dark:text-slate-300">
@@ -184,7 +189,7 @@ export const RecentSalesOrdersTable: React.FC<RecentSalesOrdersTableProps> = ({
               ))
             ) : (
               <tr>
-                <td colSpan={11} className="py-8 text-center text-slate-400 dark:text-slate-500 text-xs">
+                <td colSpan={12} className="py-8 text-center text-slate-400 dark:text-slate-500 text-xs">
                   No sales orders found in this period
                 </td>
               </tr>

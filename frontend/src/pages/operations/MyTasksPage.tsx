@@ -8,6 +8,7 @@ import {
   AlertCircle,
   ChevronLeft,
   ChevronRight,
+  MapPin,
 } from 'lucide-react';
 import type { OperationsTaskListResponse } from '../../types/operations';
 import { getMyOperationsTasksApi } from '../../api/operations';
@@ -258,6 +259,7 @@ export const MyTasksPage: React.FC = () => {
                   <th className="py-3.5 px-4">Application #</th>
                   <th className="py-3.5 px-4">Order #</th>
                   <th className="py-3.5 px-4">Client Name</th>
+                  <th className="py-3.5 px-4">Location</th>
                   <th className="py-3.5 px-4">Service</th>
                   <th className="py-3.5 px-4">Converted By</th>
                   <th className="py-3.5 px-4">Assigned Date</th>
@@ -283,6 +285,16 @@ export const MyTasksPage: React.FC = () => {
                       {task.client_name}
                       {task.client_phone && (
                         <div className="text-[11px] font-normal text-slate-400">{task.client_phone}</div>
+                      )}
+                    </td>
+                    <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                      {task.location ? (
+                        <span className="inline-flex items-center gap-1 font-medium text-slate-800 dark:text-slate-200">
+                          <MapPin className="w-3.5 h-3.5 text-blue-500 shrink-0 inline" />
+                          <span>{task.location}</span>
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">—</span>
                       )}
                     </td>
                     <td className="py-3.5 px-4 font-semibold text-slate-700 dark:text-slate-300">

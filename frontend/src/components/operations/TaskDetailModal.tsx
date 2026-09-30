@@ -18,6 +18,7 @@ import {
   MessageSquarePlus,
   Send,
   AlertTriangle,
+  MapPin,
 } from 'lucide-react';
 import type {
   AssigneeOption,
@@ -327,15 +328,29 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                 {taskDetail && getStatusBadge(taskDetail.application_status)}
                 {taskDetail && getPriorityBadge(taskDetail.priority)}
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Sales Order:{' '}
-                <span className="font-semibold text-slate-700 dark:text-slate-300">
-                  {taskDetail?.sales_order_number || '—'}
-                </span>{' '}
-                • Client:{' '}
-                <span className="font-semibold text-slate-700 dark:text-slate-300">
-                  {taskDetail?.client_name || '—'}
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex flex-wrap items-center gap-1.5">
+                <span>
+                  Sales Order:{' '}
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">
+                    {taskDetail?.sales_order_number || '—'}
+                  </span>
                 </span>
+                <span>•</span>
+                <span>
+                  Client:{' '}
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">
+                    {taskDetail?.client_name || '—'}
+                  </span>
+                </span>
+                {taskDetail?.location && (
+                  <>
+                    <span>•</span>
+                    <span className="inline-flex items-center gap-1 font-semibold text-slate-700 dark:text-slate-300">
+                      <MapPin className="w-3 h-3 text-blue-500 shrink-0 inline" />
+                      <span>{taskDetail.location}</span>
+                    </span>
+                  </>
+                )}
               </p>
             </div>
           </div>
@@ -472,6 +487,19 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                           <span className="font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1">
                             <Mail className="w-3 h-3 text-slate-400" />
                             {taskDetail.client_email || '—'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Location / Branch:</span>
+                          <span className="font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                            {taskDetail.location ? (
+                              <>
+                                <MapPin className="w-3.5 h-3.5 text-blue-500 shrink-0 inline" />
+                                <span className="font-semibold text-slate-900 dark:text-white">{taskDetail.location}</span>
+                              </>
+                            ) : (
+                              '—'
+                            )}
                           </span>
                         </div>
                         <div className="flex justify-between pt-1 border-t border-slate-200/60 dark:border-slate-700/60">

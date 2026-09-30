@@ -178,6 +178,7 @@ const mockDashboardData: SalesDashboardResponse = {
       order_date: '2025-03-28',
       formatted_date: '28 Mar 2025',
       client_name: 'Sharma Enterprises',
+      location: 'Connaught Place, Delhi',
       service_name: 'Private Limited',
       salesperson_name: 'Karishma Upadhyay',
       order_value: 60000,
@@ -263,6 +264,8 @@ describe('Sales Dashboard Frontend Integration', () => {
     expect(screen.getByRole('heading', { name: /recent sales orders/i })).toBeInTheDocument();
     expect(screen.getByText('SO-2025-0048')).toBeInTheDocument();
     expect(screen.getByText('Sharma Enterprises')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: /location/i })).toBeInTheDocument();
+    expect(screen.getByText('Connaught Place, Delhi')).toBeInTheDocument();
   });
 
   it('allows filter adjustments and triggers API refetch', async () => {

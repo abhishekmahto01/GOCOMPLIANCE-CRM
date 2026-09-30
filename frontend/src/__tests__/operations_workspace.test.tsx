@@ -129,6 +129,7 @@ const mockDashboardData: OperationsDashboardResponse = {
       client_id: 'cli-kapper-0001',
       client_name: 'KAPPER',
       client_phone: '+919876543210',
+      location: 'Ambala',
       service_id: 'srv-clinical-0001',
       service_name: 'Clinical Establishment',
       service_code: 'MED-CE',
@@ -159,6 +160,7 @@ const mockDashboardData: OperationsDashboardResponse = {
       client_id: 'cli-kapper-0001',
       client_name: 'KAPPER',
       client_phone: '+919876543210',
+      location: 'Ambala',
       service_id: 'srv-clinical-0001',
       service_name: 'Clinical Establishment',
       service_code: 'MED-CE',
@@ -195,6 +197,7 @@ const mockTaskListResponse: OperationsTaskListResponse = {
       client_id: 'cli-kapper-0001',
       client_name: 'KAPPER',
       client_phone: '+919876543210',
+      location: 'Ambala',
       service_id: 'srv-clinical-0001',
       service_name: 'Clinical Establishment',
       service_code: 'MED-CE',
@@ -251,6 +254,7 @@ const mockKapperTask: OperationApplicationDetail = {
   client_name: 'KAPPER',
   client_phone: '+919876543210',
   client_email: 'contact@kapper.test',
+  location: 'Ambala',
   service_id: 'srv-clinical-0001',
   service_name: 'Clinical Establishment',
   service_code: 'MED-CE',
@@ -421,6 +425,8 @@ describe('Operations Workspace & Connected Workflow', () => {
     expect(screen.getByText('AP-2026-0001')).toBeInTheDocument();
     expect(screen.getByText('SO-2026-0001')).toBeInTheDocument();
     expect(screen.getByText('HIGH')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: /location/i })).toBeInTheDocument();
+    expect(screen.getByText('Ambala')).toBeInTheDocument();
   });
 
   it('opens Task Detail Modal and updates document verification and status', async () => {
@@ -455,6 +461,8 @@ describe('Operations Workspace & Connected Workflow', () => {
     // Verify modal content
     await waitFor(() => {
       expect(screen.getByText('Client & Service Information')).toBeInTheDocument();
+      expect(screen.getByText('Location / Branch:')).toBeInTheDocument();
+      expect(screen.getAllByText('Ambala').length).toBeGreaterThanOrEqual(1);
     });
 
     // Verify status action button exists
