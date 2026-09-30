@@ -722,6 +722,7 @@ def test_sales_register_csv_export(client: TestClient, db_session: Session, sale
         "S.No",
         "Date",
         "Client Name",
+        "Location",
         "Contact No",
         "Source",
         "Work",
@@ -1987,6 +1988,76 @@ def test_deleted_sales_order_excluded_from_register_and_csv(
     cancelled_items = cancelled_resp.json()["items"]
     cancelled_ids = [item["order_id"] for item in cancelled_items]
     assert order2["order_id"] in cancelled_ids
+
+
+def test_sales_order_location_crud_and_search(
+    client: TestClient, db_session: Session, sales_fixture: dict
+):
+    """Verify sales orders with branch/location can be created, updated, searched, and distinguished in register."""
+    f = sales_fixture
+    rep1_headers = auth_headers(f["rep1"])
+
+    # Create Order 1 with Location "Bandra West, Mumbai"
+    r1 = client.post(
+        "/api/sales/orders",
+        json={
+            "client_name": "Kapper Retail Pvt Ltd",
+            "contact_no": "+919876543210",
+            "location": "Bandra West, Mumbai",
+            "service_id": str(f["srv1"].service_id),
+            "lead_source": "WEBSITE",
+            "order_date": "2026-09-30",
+            "order_value": 25000.0,
+            "amount_received": 10000.0,
+            "govt_fees": 2000.0,
+            "incidental_cost": 500.0,
+            "auto_confirm": True,
+        },
+        headers=rep1_headers,
+    )
+    assert r1.status_code == 201
+    order1 = r1.json()
+    assert order1["location"] == "Bandra West, Mumbai"
+
+    # Create Order 2 with Location "Connaught Place, Delhi" for same client brand
+    r2 = client.post(
+        "/api/sales/orders",
+        json={
+            "client_name": "Kapper Retail Pvt Ltd",
+            "contact_no": "+919876543210",
+            "location": "Connaught Place, Delhi",
+            "service_id": str(f["srv1"].service_id),
+            "lead_source": "REFERRAL",
+            "order_date": "2026-09-30",
+            "order_value": 25000.0,
+            "amount_received": 25000.0,
+            "govt_fees": 2000.0,
+            "incidental_cost": 500.0,
+            "auto_confirm": True,
+        },
+        headers=rep1_headers,
+    )
+    assert r2.status_code == 201
+    order2 = r2.json()
+    assert order2["location"] == "Connaught Place, Delhi"
+
+    # Update Order 1 location to "Bandra Kurla Complex, Mumbai"
+    up_resp = client.put(
+        f"/api/sales/orders/{order1['order_id']}",
+        json={"location": "Bandra Kurla Complex, Mumbai"},
+        headers=rep1_headers,
+    )
+    assert up_resp.status_code == 200
+    assert up_resp.json()["location"] == "Bandra Kurla Complex, Mumbai"
+
+    # Search register by location "Kurla"
+    search_resp = client.get("/api/sales/register?search=Kurla", headers=rep1_headers)
+    assert search_resp.status_code == 200
+    items = search_resp.json()["items"]
+    assert len(items) >= 1
+    assert any(i["order_id"] == order1["order_id"] for i in items)
+    assert all(i["order_id"] != order2["order_id"] for i in items)
+
 
 
 

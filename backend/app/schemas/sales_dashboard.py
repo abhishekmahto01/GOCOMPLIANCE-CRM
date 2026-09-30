@@ -101,6 +101,7 @@ class RecentOrderItem(BaseModel):
     order_date: date
     formatted_date: str
     client_name: str
+    location: Optional[str] = None
     service_name: str
     salesperson_name: str
     order_value: float

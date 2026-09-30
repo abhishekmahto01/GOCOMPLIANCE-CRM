@@ -14,6 +14,7 @@ class SalesOrderBase(BaseModel):
     client_id: Optional[uuid.UUID] = None
     client_name: Optional[str] = Field(None, max_length=200, description="Client name for direct entry or matching")
     contact_no: Optional[str] = Field(None, max_length=20, description="Client contact / phone number")
+    location: Optional[str] = Field(None, max_length=200, description="Branch / Location / City of shop or service")
     service_id: uuid.UUID = Field(..., description="Service / Work identifier")
     salesperson_user_id: Optional[uuid.UUID] = Field(None, description="Salesperson who converted the order")
     lead_source: str = Field(default="DIRECT", description="WEBSITE, REFERRAL, DIRECT, JUSTDIAL, INDIAMART, OTHERS")
@@ -66,6 +67,7 @@ class SalesOrderUpdate(BaseModel):
 
     client_name: Optional[str] = Field(None, max_length=200, description="Client Name")
     contact_no: Optional[str] = Field(None, max_length=20, description="Client Contact Number")
+    location: Optional[str] = Field(None, max_length=200, description="Branch / Location / City of shop or service")
     salesperson_user_id: Optional[uuid.UUID] = Field(None, description="Sales employee who converted the order (must belong to Sales department)")
     order_value: Optional[Decimal] = Field(None, ge=0, description="Total order amount (Total Amount) in INR")
     amount_received: Optional[Decimal] = Field(None, ge=0, description="Advance / Received amount in INR")
@@ -117,6 +119,7 @@ class SalesOrderRead(BaseModel):
     service_id: uuid.UUID
     salesperson_user_id: uuid.UUID
     lead_source: str
+    location: Optional[str] = None
     order_date: date
     order_value: Decimal
     amount_received: Decimal
@@ -138,7 +141,7 @@ class SalesOrderRead(BaseModel):
 
 
 class SalesOrderDetailRead(SalesOrderRead):
-    """Enriched Sales Order read schema exposing all 20 columns in the director-specified sequence."""
+    """Enriched Sales Order read schema exposing all columns in the director-specified sequence."""
 
     # 1. S.No
     s_no: Optional[int] = None
@@ -146,32 +149,33 @@ class SalesOrderDetailRead(SalesOrderRead):
     formatted_date: Optional[str] = None
     # 3. Client Name
     client_name: Optional[str] = None
-    # 4. Contact No
+    # 4. Location (inherited as location)
+    # 5. Contact No
     contact_no: Optional[str] = None
-    # 5. Source (inherited as lead_source)
-    # 6. Work
+    # 6. Source (inherited as lead_source)
+    # 7. Work
     service_name: Optional[str] = None
     service_code: Optional[str] = None
-    # 7. Converted By
+    # 8. Converted By
     salesperson_name: Optional[str] = None
     salesperson_code: Optional[str] = None
-    # 8. Assigned To
+    # 9. Assigned To
     assigned_to_user_id: Optional[uuid.UUID] = None
     assigned_to_name: Optional[str] = None
     assigned_to_code: Optional[str] = None
-    # 9. Work Status
+    # 10. Work Status
     work_status: Optional[str] = None
-    # 10. Total Amount (inherited as order_value)
-    # 11. Advance Amount (inherited as amount_received)
-    # 12. Pending Amount (inherited as balance_amount)
-    # 13. Payment Status (inherited as payment_status)
-    # 14. Proforma Invoice No. (inherited as proforma_invoice_no)
-    # 15. Tax Invoice No. (inherited as tax_invoice_no)
-    # 16. Reimbursement Note (inherited as reimbursement_note)
-    # 17. Govt Fees (inherited as govt_fees)
-    # 18. Incidental Cost (inherited as incidental_cost)
-    # 19. Profits (inherited as profit_amount)
-    # 20. Remarks (inherited as notes)
+    # 11. Total Amount (inherited as order_value)
+    # 12. Advance Amount (inherited as amount_received)
+    # 13. Pending Amount (inherited as balance_amount)
+    # 14. Payment Status (inherited as payment_status)
+    # 15. Proforma Invoice No. (inherited as proforma_invoice_no)
+    # 16. Tax Invoice No. (inherited as tax_invoice_no)
+    # 17. Reimbursement Note (inherited as reimbursement_note)
+    # 18. Govt Fees (inherited as govt_fees)
+    # 19. Incidental Cost (inherited as incidental_cost)
+    # 20. Profits (inherited as profit_amount)
+    # 21. Remarks (inherited as notes)
     remarks: Optional[str] = None
 
     # Operations link

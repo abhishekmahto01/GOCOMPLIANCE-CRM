@@ -19,6 +19,7 @@ import {
   AlertTriangle,
   Info,
   Sparkles,
+  MapPin,
 } from 'lucide-react';
 import { getSalesFormOptionsApi, createSalesEntryApi } from '../api/sales';
 import { extractErrorMessage } from '../api/client';
@@ -43,6 +44,7 @@ const salesEntrySchema = z
       .string()
       .trim()
       .regex(/^(\+91[\s-]?)?[6-9]\d{9}$/, 'Please enter a valid 10-digit Indian phone number'),
+    location: z.string().trim().max(200).optional().nullable(),
     lead_source: z.string().min(1, 'Please select a lead source'),
     service_id: z.string().uuid('Please select a valid service/work'),
     salesperson_user_id: z.string().uuid('Please select the sales employee (Converted By)'),
@@ -102,6 +104,7 @@ export const SalesEntryPage: React.FC = () => {
       client_name: '',
       client_id: '',
       contact_no: '',
+      location: '',
       lead_source: 'WEBSITE',
       service_id: '',
       salesperson_user_id: '',
@@ -191,6 +194,7 @@ export const SalesEntryPage: React.FC = () => {
         client_id: values.client_id || undefined,
         client_name: values.client_name,
         contact_no: values.contact_no,
+        location: values.location?.trim() || undefined,
         service_id: values.service_id,
         salesperson_user_id: values.salesperson_user_id,
         lead_source: values.lead_source,
@@ -494,6 +498,27 @@ export const SalesEntryPage: React.FC = () => {
               {errors.contact_no && (
                 <p className="mt-1 text-xs text-rose-500">{errors.contact_no.message}</p>
               )}
+            </div>
+
+            {/* Column 4: Location / Branch */}
+            <div>
+              <label htmlFor="location" className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
+                <span>Location / Branch</span>
+                <span className="text-[11px] font-normal text-slate-400">Optional</span>
+              </label>
+              <div className="relative">
+                <input
+                  id="location"
+                  type="text"
+                  placeholder="e.g. Bandra Mumbai, Connaught Place"
+                  {...register('location')}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition pr-8"
+                />
+                <MapPin className="w-4 h-4 text-slate-400 absolute right-3 top-3 pointer-events-none" />
+              </div>
+              <p className="mt-1 text-[11px] text-slate-400">
+                Helps distinguish multiple shop acts or branch registrations for the same brand.
+              </p>
             </div>
 
             {/* Column 5: Source */}

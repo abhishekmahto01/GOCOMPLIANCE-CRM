@@ -18,6 +18,7 @@ import {
   Edit,
   Save,
   Trash2,
+  MapPin,
 } from 'lucide-react';
 import {
   getSalesRegisterApi,
@@ -166,6 +167,7 @@ export const SalesRegisterPage: React.FC = () => {
   const [editingOrder, setEditingOrder] = useState<SalesRegisterItem | null>(null);
   const [editClientName, setEditClientName] = useState<string>('');
   const [editContactNo, setEditContactNo] = useState<string>('');
+  const [editLocation, setEditLocation] = useState<string>('');
   const [editSalespersonId, setEditSalespersonId] = useState<string>('');
   const [editLeadSource, setEditLeadSource] = useState<string>('WEBSITE');
   const [editOrderDate, setEditOrderDate] = useState<string>('');
@@ -386,6 +388,7 @@ export const SalesRegisterPage: React.FC = () => {
     setEditingOrder(item);
     setEditClientName(item.client_name || '');
     setEditContactNo(item.contact_no || '');
+    setEditLocation(item.location || '');
     setEditSalespersonId(item.salesperson_user_id || '');
     setEditLeadSource(item.lead_source || 'DIRECT');
     setEditOrderDate(item.order_date || new Date().toISOString().slice(0, 10));
@@ -429,6 +432,7 @@ export const SalesRegisterPage: React.FC = () => {
       const updatedItem = await updateSalesOrderApi(editingOrder.order_id, {
         client_name: editClientName.trim() || undefined,
         contact_no: editContactNo.trim() || undefined,
+        location: editLocation.trim() || undefined,
         salesperson_user_id: editSalespersonId && editSalespersonId !== editingOrder.salesperson_user_id ? editSalespersonId : undefined,
         lead_source: editLeadSource,
         order_date: editOrderDate,
@@ -521,7 +525,7 @@ export const SalesRegisterPage: React.FC = () => {
             Sales Register
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Official 20-column ledger showing conversion dates, fee breakdowns, profit balances, and operations statuses.
+            Official ledger showing conversion dates, client locations, fee breakdowns, profit balances, and operations statuses.
           </p>
         </div>
 
@@ -767,29 +771,30 @@ export const SalesRegisterPage: React.FC = () => {
             <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
               <thead>
                 <tr className="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-800 font-semibold text-slate-600 dark:text-slate-300 select-none">
-                  {/* Exact Sequence of 20 Columns */}
+                  {/* Sequence of Sales Register Columns */}
                   <th className="py-3 px-3.5 text-center w-12 sticky left-0 bg-slate-50 dark:bg-slate-800 z-10">1. S.No</th>
                   <th className="py-3 px-3.5">2. Date</th>
                   <th className="py-3 px-4 min-w-[180px]">3. Client Name</th>
-                  <th className="py-3 px-3.5">4. Contact No</th>
-                  <th className="py-3 px-3.5">5. Source</th>
-                  <th className="py-3 px-4 min-w-[160px]">6. Work</th>
-                  <th className="py-3 px-3.5">7. Converted By</th>
-                  <th className="py-3 px-3.5">8. Assigned To</th>
-                  <th className="py-3 px-3.5">9. Work Status</th>
-                  <th className="py-3 px-3.5 text-right font-bold text-slate-900 dark:text-white">10. Total Amount</th>
-                  <th className="py-3 px-3.5 text-right font-bold text-emerald-700 dark:text-emerald-400">11. Advance Amount</th>
-                  <th className="py-3 px-3.5 text-right font-bold text-amber-700 dark:text-amber-400">12. Pending Amount</th>
-                  <th className="py-3 px-3.5 text-center">13. Payment Status</th>
-                  <th className="py-3 px-3.5">14. Proforma Inv. No.</th>
-                  <th className="py-3 px-3.5">15. Tax Inv. No.</th>
-                  <th className="py-3 px-3.5">16. Reimbursement Note</th>
-                  <th className="py-3 px-3.5 text-right">17. Govt Fees</th>
-                  <th className="py-3 px-3.5 text-right">18. Incidental Cost</th>
-                  <th className="py-3 px-3.5 text-right font-bold text-emerald-800 dark:text-emerald-300">19. Profits</th>
-                  <th className="py-3 px-4 min-w-[150px]">20. Remarks</th>
+                  <th className="py-3 px-3.5 min-w-[130px]">4. Location</th>
+                  <th className="py-3 px-3.5">5. Contact No</th>
+                  <th className="py-3 px-3.5">6. Source</th>
+                  <th className="py-3 px-4 min-w-[160px]">7. Work</th>
+                  <th className="py-3 px-3.5">8. Converted By</th>
+                  <th className="py-3 px-3.5">9. Assigned To</th>
+                  <th className="py-3 px-3.5">10. Work Status</th>
+                  <th className="py-3 px-3.5 text-right font-bold text-slate-900 dark:text-white">11. Total Amount</th>
+                  <th className="py-3 px-3.5 text-right font-bold text-emerald-700 dark:text-emerald-400">12. Advance Amount</th>
+                  <th className="py-3 px-3.5 text-right font-bold text-amber-700 dark:text-amber-400">13. Pending Amount</th>
+                  <th className="py-3 px-3.5 text-center">14. Payment Status</th>
+                  <th className="py-3 px-3.5">15. Proforma Inv. No.</th>
+                  <th className="py-3 px-3.5">16. Tax Inv. No.</th>
+                  <th className="py-3 px-3.5">17. Reimbursement Note</th>
+                  <th className="py-3 px-3.5 text-right">18. Govt Fees</th>
+                  <th className="py-3 px-3.5 text-right">19. Incidental Cost</th>
+                  <th className="py-3 px-3.5 text-right font-bold text-emerald-800 dark:text-emerald-300">20. Profits</th>
+                  <th className="py-3 px-4 min-w-[150px]">21. Remarks</th>
                   <th className="py-3 px-3.5 text-center sticky right-0 bg-slate-50 dark:bg-slate-800 z-10 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.06)] border-l border-slate-200 dark:border-slate-800 min-w-[90px]">
-                    21. Actions
+                    22. Actions
                   </th>
                 </tr>
               </thead>
@@ -824,24 +829,36 @@ export const SalesRegisterPage: React.FC = () => {
                         )}
                       </td>
 
-                      {/* 4. Contact No */}
+                      {/* 4. Location */}
+                      <td className="py-3 px-3.5 text-slate-600 dark:text-slate-300">
+                        {row.location ? (
+                          <span className="inline-flex items-center gap-1.5 font-medium text-slate-800 dark:text-slate-200">
+                            <MapPin className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                            <span>{row.location}</span>
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
+
+                      {/* 5. Contact No */}
                       <td className="py-3 px-3.5 text-slate-600 dark:text-slate-400 font-mono">
                         {row.contact_no || '—'}
                       </td>
 
-                      {/* 5. Source */}
+                      {/* 6. Source */}
                       <td className="py-3 px-3.5">
                         <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
                           {row.lead_source}
                         </span>
                       </td>
 
-                      {/* 6. Work */}
+                      {/* 7. Work */}
                       <td className="py-3 px-4 text-slate-800 dark:text-slate-200 font-medium">
                         {row.service_name}
                       </td>
 
-                      {/* 7. Converted By (Sales Employee Responsible) */}
+                      {/* 8. Converted By (Sales Employee Responsible) */}
                       <td className="py-3 px-3.5 text-slate-700 dark:text-slate-300">
                         <div className="font-medium">{row.salesperson_name}</div>
                         {row.salesperson_code && (
@@ -849,7 +866,7 @@ export const SalesRegisterPage: React.FC = () => {
                         )}
                       </td>
 
-                      {/* 8. Assigned To (Operations Team Member) */}
+                      {/* 9. Assigned To (Operations Team Member) */}
                       <td className="py-3 px-3.5 text-slate-600 dark:text-slate-400">
                         {!isUnassigned && row.assigned_to_name ? (
                           <div>
@@ -876,67 +893,67 @@ export const SalesRegisterPage: React.FC = () => {
                         )}
                       </td>
 
-                      {/* 9. Work Status */}
+                      {/* 10. Work Status */}
                       <td className="py-3 px-3.5">
                         {renderWorkStatusBadge(row.work_status || row.operation_status || 'UNASSIGNED')}
                       </td>
 
-                      {/* 10. Total Amount */}
+                      {/* 11. Total Amount */}
                       <td className="py-3 px-3.5 text-right font-bold text-slate-900 dark:text-white">
                         {formatInr(row.order_value)}
                       </td>
 
-                      {/* 11. Advance Amount */}
+                      {/* 12. Advance Amount */}
                       <td className="py-3 px-3.5 text-right font-semibold text-emerald-700 dark:text-emerald-400">
                         {formatInr(row.amount_received)}
                       </td>
 
-                      {/* 12. Pending Amount */}
+                      {/* 13. Pending Amount */}
                       <td className="py-3 px-3.5 text-right font-semibold text-amber-700 dark:text-amber-400">
                         {formatInr(row.balance_amount)}
                       </td>
 
-                      {/* 13. Payment Status */}
+                      {/* 14. Payment Status */}
                       <td className="py-3 px-3.5 text-center">
                         {renderPaymentBadge(row.payment_status)}
                       </td>
 
-                      {/* 14. Proforma Invoice No. (shows — when not populated) */}
+                      {/* 15. Proforma Invoice No. (shows — when not populated) */}
                       <td className="py-3 px-3.5 text-slate-600 dark:text-slate-400 font-mono">
                         {row.proforma_invoice_no || '—'}
                       </td>
 
-                      {/* 15. Tax Invoice No. (shows — when not populated) */}
+                      {/* 16. Tax Invoice No. (shows — when not populated) */}
                       <td className="py-3 px-3.5 text-slate-600 dark:text-slate-400 font-mono">
                         {row.tax_invoice_no || '—'}
                       </td>
 
-                      {/* 16. Reimbursement Note (shows — when not populated) */}
+                      {/* 17. Reimbursement Note (shows — when not populated) */}
                       <td className="py-3 px-3.5 text-slate-600 dark:text-slate-400 max-w-xs truncate" title={row.reimbursement_note || ''}>
                         {row.reimbursement_note || '—'}
                       </td>
 
-                      {/* 17. Govt Fees */}
+                      {/* 18. Govt Fees */}
                       <td className="py-3 px-3.5 text-right text-slate-600 dark:text-slate-400">
                         {formatInr(row.govt_fees)}
                       </td>
 
-                      {/* 18. Incidental Cost */}
+                      {/* 19. Incidental Cost */}
                       <td className="py-3 px-3.5 text-right text-slate-600 dark:text-slate-400">
                         {formatInr(row.incidental_cost)}
                       </td>
 
-                      {/* 19. Profits */}
+                      {/* 20. Profits */}
                       <td className="py-3 px-3.5 text-right font-bold text-emerald-700 dark:text-emerald-400">
                         {formatInr(row.profit_amount)}
                       </td>
 
-                      {/* 20. Remarks (shows — when not populated) */}
+                      {/* 21. Remarks (shows — when not populated) */}
                       <td className="py-3 px-4 text-slate-500 dark:text-slate-400 max-w-xs truncate" title={row.notes || row.remarks || ''}>
                         {row.notes || row.remarks || '—'}
                       </td>
 
-                      {/* 21. Actions Column with Sticky Edit & Delete Buttons */}
+                      {/* 22. Actions Column with Sticky Edit & Delete Buttons */}
                       <td className="py-2 px-3 text-center sticky right-0 bg-white dark:bg-slate-900 group-hover:bg-blue-50/40 dark:group-hover:bg-slate-900 z-10 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.06)] border-l border-slate-200 dark:border-slate-800">
                         <div className="flex items-center gap-1.5 justify-center">
                           <Button
@@ -1044,8 +1061,25 @@ export const SalesRegisterPage: React.FC = () => {
               </div>
             </div>
 
-            {/* 20 Attributes Breakdown Grid */}
+            {/* Attributes Breakdown Grid */}
             <div className="grid grid-cols-2 gap-4 text-xs">
+              <div>
+                <span className="font-semibold text-slate-500 dark:text-slate-400">Location / Branch:</span>
+                <p className="font-medium text-slate-900 dark:text-white mt-0.5 flex items-center gap-1.5">
+                  {selectedOrder.location ? (
+                    <>
+                      <MapPin className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                      <span>{selectedOrder.location}</span>
+                    </>
+                  ) : (
+                    '—'
+                  )}
+                </p>
+              </div>
+              <div>
+                <span className="font-semibold text-slate-500 dark:text-slate-400">Contact No:</span>
+                <p className="font-mono text-slate-900 dark:text-white mt-0.5">{selectedOrder.contact_no || '—'}</p>
+              </div>
               <div>
                 <span className="font-semibold text-slate-500 dark:text-slate-400">Work / Service:</span>
                 <p className="font-medium text-slate-900 dark:text-white mt-0.5">{selectedOrder.service_name}</p>
@@ -1359,6 +1393,20 @@ export const SalesRegisterPage: React.FC = () => {
                   onChange={(e) => setEditContactNo(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
                   placeholder="10-digit Phone Number"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="edit_location" className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Location / Branch
+                </label>
+                <input
+                  id="edit_location"
+                  type="text"
+                  value={editLocation}
+                  onChange={(e) => setEditLocation(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                  placeholder="e.g. Bandra Mumbai, Connaught Place"
                 />
               </div>
 

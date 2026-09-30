@@ -136,6 +136,7 @@ const mockRegisterData: SalesRegisterResponse = {
       order_date: '2026-09-23',
       formatted_date: '23 Sep 2026',
       client_name: 'Acme Agro Foods Pvt Ltd',
+      location: 'Bandra West, Mumbai',
       contact_no: '9876543210',
       lead_source: 'Website',
       service_name: 'FSSAI Registration - New License',
@@ -173,6 +174,7 @@ const mockRegisterData: SalesRegisterResponse = {
       order_date: '2026-09-23',
       formatted_date: '23 Sep 2026',
       client_name: 'Beta Biotech Pvt Ltd',
+      location: 'Connaught Place, Delhi',
       contact_no: '9811122233',
       lead_source: 'Direct',
       service_name: 'GST Registration',
@@ -405,30 +407,33 @@ describe('Sales Entry & Sales Register Module Tests', () => {
     expect(screen.getByText('Total Orders')).toBeInTheDocument();
     expect(screen.getAllByText('₹65,000').length).toBeGreaterThanOrEqual(1);
 
-    // Check 20 Columns in Table Header
+    // Check Columns in Table Header
     expect(screen.getByText('1. S.No')).toBeInTheDocument();
     expect(screen.getByText('2. Date')).toBeInTheDocument();
     expect(screen.getByText('3. Client Name')).toBeInTheDocument();
-    expect(screen.getByText('4. Contact No')).toBeInTheDocument();
-    expect(screen.getByText('5. Source')).toBeInTheDocument();
-    expect(screen.getByText('6. Work')).toBeInTheDocument();
-    expect(screen.getByText('7. Converted By')).toBeInTheDocument();
-    expect(screen.getByText('8. Assigned To')).toBeInTheDocument();
-    expect(screen.getByText('9. Work Status')).toBeInTheDocument();
-    expect(screen.getByText('10. Total Amount')).toBeInTheDocument();
-    expect(screen.getByText('11. Advance Amount')).toBeInTheDocument();
-    expect(screen.getByText('12. Pending Amount')).toBeInTheDocument();
-    expect(screen.getByText('13. Payment Status')).toBeInTheDocument();
-    expect(screen.getByText('14. Proforma Inv. No.')).toBeInTheDocument();
-    expect(screen.getByText('15. Tax Inv. No.')).toBeInTheDocument();
-    expect(screen.getByText('16. Reimbursement Note')).toBeInTheDocument();
-    expect(screen.getByText('17. Govt Fees')).toBeInTheDocument();
-    expect(screen.getByText('18. Incidental Cost')).toBeInTheDocument();
-    expect(screen.getByText('19. Profits')).toBeInTheDocument();
-    expect(screen.getByText('20. Remarks')).toBeInTheDocument();
+    expect(screen.getByText('4. Location')).toBeInTheDocument();
+    expect(screen.getByText('5. Contact No')).toBeInTheDocument();
+    expect(screen.getByText('6. Source')).toBeInTheDocument();
+    expect(screen.getByText('7. Work')).toBeInTheDocument();
+    expect(screen.getByText('8. Converted By')).toBeInTheDocument();
+    expect(screen.getByText('9. Assigned To')).toBeInTheDocument();
+    expect(screen.getByText('10. Work Status')).toBeInTheDocument();
+    expect(screen.getByText('11. Total Amount')).toBeInTheDocument();
+    expect(screen.getByText('12. Advance Amount')).toBeInTheDocument();
+    expect(screen.getByText('13. Pending Amount')).toBeInTheDocument();
+    expect(screen.getByText('14. Payment Status')).toBeInTheDocument();
+    expect(screen.getByText('15. Proforma Inv. No.')).toBeInTheDocument();
+    expect(screen.getByText('16. Tax Inv. No.')).toBeInTheDocument();
+    expect(screen.getByText('17. Reimbursement Note')).toBeInTheDocument();
+    expect(screen.getByText('18. Govt Fees')).toBeInTheDocument();
+    expect(screen.getByText('19. Incidental Cost')).toBeInTheDocument();
+    expect(screen.getByText('20. Profits')).toBeInTheDocument();
+    expect(screen.getByText('21. Remarks')).toBeInTheDocument();
+    expect(screen.getByText('22. Actions')).toBeInTheDocument();
 
     // Check Row 1 Data
     expect(screen.getByText('Acme Agro Foods Pvt Ltd')).toBeInTheDocument();
+    expect(screen.getByText('Bandra West, Mumbai')).toBeInTheDocument();
     expect(screen.getByText('9876543210')).toBeInTheDocument();
     expect(screen.getAllByText('Karishma Upadhyay').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Vikram Mehta')).toBeInTheDocument();
@@ -436,6 +441,7 @@ describe('Sales Entry & Sales Register Module Tests', () => {
 
     // Check Row 2 Data (Unassigned)
     expect(screen.getByText('Beta Biotech Pvt Ltd')).toBeInTheDocument();
+    expect(screen.getByText('Connaught Place, Delhi')).toBeInTheDocument();
     expect(screen.getAllByText('Rajesh Sharma').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Unassigned').length).toBeGreaterThanOrEqual(1);
   });
@@ -646,7 +652,7 @@ describe('Sales Entry & Sales Register Module Tests', () => {
     });
 
     // Check Actions header is present
-    expect(screen.getByText(/21\. Actions/i)).toBeInTheDocument();
+    expect(screen.getByText(/22\. Actions/i)).toBeInTheDocument();
 
     // Find and click the Edit button for the first row
     const editButtons = screen.getAllByRole('button', { name: /Edit/i });

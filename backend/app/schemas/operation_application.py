@@ -116,6 +116,7 @@ class OperationApplicationRead(BaseModel):
     client_name: Optional[str] = None
     client_phone: Optional[str] = None
     client_email: Optional[str] = None
+    location: Optional[str] = None
     service_id: uuid.UUID
     service_name: Optional[str] = None
     service_code: Optional[str] = None

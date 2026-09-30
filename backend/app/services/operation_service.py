@@ -183,6 +183,8 @@ def _to_application_read(app: OperationApplication) -> OperationApplicationRead:
         if sorted_remarks:
             latest_remark = _to_remark_read(sorted_remarks[-1])
 
+    order_location = app.sales_order.location if app.sales_order else None
+
     return OperationApplicationRead(
         application_id=app.application_id,
         application_number=app.application_number,
@@ -193,6 +195,7 @@ def _to_application_read(app: OperationApplication) -> OperationApplicationRead:
         client_name=client_name,
         client_phone=client_phone,
         client_email=client_email,
+        location=order_location,
         service_id=app.service_id,
         service_name=service_name,
         service_code=service_code,

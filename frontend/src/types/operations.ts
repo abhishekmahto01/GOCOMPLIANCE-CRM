@@ -65,6 +65,7 @@ export interface OperationApplication {
   client_name?: string | null;
   client_phone?: string | null;
   client_email?: string | null;
+  location?: string | null;
   service_id: string;
   service_name?: string | null;
   service_code?: string | null;

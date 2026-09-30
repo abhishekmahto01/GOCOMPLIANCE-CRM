@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText, Eye, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
+import { FileText, Eye, CheckCircle2, Clock, AlertCircle, MapPin } from 'lucide-react';
 import type { RecentOrderItem } from '../../types/sales';
 
 export interface RecentSalesOrdersTableProps {
@@ -141,7 +141,13 @@ export const RecentSalesOrdersTable: React.FC<RecentSalesOrdersTableProps> = ({
                     {order.formatted_date}
                   </td>
                   <td className="py-3 px-3 font-medium text-slate-800 dark:text-slate-200">
-                    {order.client_name}
+                    <div>{order.client_name}</div>
+                    {order.location && (
+                      <div className="text-[11px] text-slate-400 dark:text-slate-500 font-normal flex items-center gap-1 mt-0.5">
+                        <MapPin className="w-3 h-3 text-blue-500 shrink-0 inline" />
+                        <span>{order.location}</span>
+                      </div>
+                    )}
                   </td>
                   <td className="py-3 px-3 text-slate-600 dark:text-slate-300">
                     {order.service_name}

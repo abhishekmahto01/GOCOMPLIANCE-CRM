@@ -433,6 +433,7 @@ def create_sales_order(
         service_id=data.service_id,
         salesperson_user_id=salesperson_id,
         lead_source=data.lead_source,
+        location=data.location.strip() if data.location else None,
         order_date=data.order_date,
         order_value=val,
         amount_received=rcvd,
@@ -499,6 +500,7 @@ def update_sales_order(
         "tax_invoice_no": order.tax_invoice_no,
         "reimbursement_note": order.reimbursement_note,
         "notes": order.notes,
+        "location": order.location,
         "client_name": order.client.client_name if order.client else "",
         "contact_no": order.client.contact_phone if order.client else "",
     }
@@ -560,6 +562,8 @@ def update_sales_order(
 
     if data.lead_source is not None:
         order.lead_source = data.lead_source
+    if data.location is not None:
+        order.location = data.location.strip() if data.location and data.location.strip() else None
     if data.order_date is not None:
         order.order_date = data.order_date
     if data.proforma_invoice_no is not None:
@@ -605,6 +609,8 @@ def update_sales_order(
         changes.append(f"Reimbursement Note: {old_values['reimbursement_note'] or 'None'} -> {order.reimbursement_note or 'None'}")
     if old_values["notes"] != order.notes:
         changes.append(f"Remarks: {old_values['notes'] or 'None'} -> {order.notes or 'None'}")
+    if old_values["location"] != order.location:
+        changes.append(f"Location: {old_values['location'] or 'None'} -> {order.location or 'None'}")
     if old_values["client_name"] != (order.client.client_name if order.client else ""):
         changes.append(f"Client Name: {old_values['client_name']} -> {order.client.client_name if order.client else ''}")
     if old_values["contact_no"] != (order.client.contact_phone if order.client else ""):
@@ -668,6 +674,7 @@ def update_sales_order(
         service_id=order.service_id,
         salesperson_user_id=order.salesperson_user_id,
         lead_source=order.lead_source,
+        location=order.location,
         order_date=order.order_date,
         formatted_date=order.order_date.strftime("%d %b %Y"),
         order_value=order.order_value,
@@ -799,6 +806,7 @@ def delete_sales_order(
         service_id=order.service_id,
         salesperson_user_id=order.salesperson_user_id,
         lead_source=order.lead_source,
+        location=order.location,
         order_date=order.order_date,
         formatted_date=order.order_date.strftime("%d %b %Y"),
         order_value=order.order_value,
@@ -1372,6 +1380,7 @@ def get_sales_dashboard_data(
                 order_date=o.order_date,
                 formatted_date=o.order_date.strftime("%d %b %Y"),
                 client_name=c_name,
+                location=o.location,
                 service_name=s_name,
                 salesperson_name=sp_name,
                 order_value=o.order_value,
@@ -1643,6 +1652,7 @@ def get_sales_register_data(
             or_(
                 ClientMaster.client_name.ilike(term),
                 ClientMaster.contact_phone.ilike(term),
+                SalesOrder.location.ilike(term),
                 SalesOrder.order_number.ilike(term),
                 SalesOrder.proforma_invoice_no.ilike(term),
                 SalesOrder.tax_invoice_no.ilike(term),
@@ -1728,6 +1738,7 @@ def get_sales_register_data(
                 service_id=o.service_id,
                 salesperson_user_id=o.salesperson_user_id,
                 lead_source=o.lead_source,
+                location=o.location,
                 order_date=o.order_date,
                 formatted_date=o.order_date.strftime("%d %b %Y"),
                 order_value=o.order_value,
@@ -2029,6 +2040,7 @@ def assign_sales_order_operations(
         service_id=order.service_id,
         salesperson_user_id=order.salesperson_user_id,
         lead_source=order.lead_source,
+        location=order.location,
         order_date=order.order_date,
         formatted_date=order.order_date.strftime("%d %b %Y"),
         order_value=order.order_value,
@@ -2098,6 +2110,7 @@ def export_sales_register_csv(
         "S.No",
         "Date",
         "Client Name",
+        "Location",
         "Contact No",
         "Source",
         "Work",
@@ -2122,6 +2135,7 @@ def export_sales_register_csv(
             row.s_no,
             row.formatted_date or row.order_date.strftime("%d/%m/%Y"),
             row.client_name or "",
+            row.location or "",
             row.contact_no or "",
             row.lead_source or "",
             row.service_name or "",

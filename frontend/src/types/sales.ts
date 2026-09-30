@@ -76,6 +76,7 @@ export interface RecentOrderItem {
   order_date: string;
   formatted_date: string;
   client_name: string;
+  location?: string | null;
   service_name: string;
   salesperson_name: string;
   order_value: number;
@@ -140,11 +141,13 @@ export interface SalesRegisterItem {
   formatted_date?: string;
   // 3. Client Name
   client_name: string;
-  // 4. Contact No
+  // 4. Location
+  location?: string | null;
+  // 5. Contact No
   contact_no?: string;
-  // 5. Source
+  // 6. Source
   lead_source: string;
-  // 6. Work
+  // 7. Work
   service_name: string;
   service_code?: string;
   // 7. Converted By
@@ -286,6 +289,7 @@ export interface SalesEntryFormData {
   client_id?: string;
   client_name?: string;
   contact_no?: string;
+  location?: string;
   service_id: string;
   salesperson_user_id?: string;
   lead_source: string;
@@ -316,5 +320,6 @@ export interface SalesOrderUpdateRequest {
   notes?: string;
   client_name?: string;
   contact_no?: string;
+  location?: string;
 }
 

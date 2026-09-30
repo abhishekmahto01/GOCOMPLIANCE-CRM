@@ -138,6 +138,13 @@ class SalesOrder(Base):
         comment="Lead acquisition channel: WEBSITE, REFERRAL, DIRECT, OTHERS",
     )
 
+    location: Mapped[Optional[str]] = mapped_column(
+        String(200),
+        nullable=True,
+        index=True,
+        comment="Branch / City / Work location for multi-location clients (e.g. Bandra, Mumbai, Delhi)",
+    )
+
     order_date: Mapped[date] = mapped_column(
         Date,
         nullable=False,
