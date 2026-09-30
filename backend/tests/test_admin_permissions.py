@@ -205,7 +205,7 @@ def test_get_user_permissions_bundle(
     bundle = get_user_permissions_bundle(mock_db, standard_employee.user_id)
     assert bundle.employee_code == standard_employee.employee_code
     assert bundle.first_name == "Aadarsh"
-    assert len(bundle.permissions) == 14  # 6 Sales + 8 Operation
+    assert len(bundle.permissions) == 20  # 6 Sales + 8 Operation + 6 Accounts
 
 
 def test_save_user_permissions_bundle(

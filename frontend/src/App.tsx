@@ -33,6 +33,12 @@ import { TaskAssignmentPage } from './pages/operations/TaskAssignmentPage';
 
 import { AccountsLayout } from './components/accounts/AccountsLayout';
 import { AccountsDashboardPage } from './pages/accounts/AccountsDashboardPage';
+import { PaymentRegisterPage } from './pages/accounts/PaymentRegisterPage';
+import { OutstandingFollowupsPage } from './pages/accounts/OutstandingFollowupsPage';
+import { InvoicesReceiptsPage } from './pages/accounts/InvoicesReceiptsPage';
+import { ExpensesReimbursementsPage } from './pages/accounts/ExpensesReimbursementsPage';
+import { FinancialReportsPage } from './pages/accounts/FinancialReportsPage';
+
 
 export const App: React.FC = () => {
   return (
@@ -228,7 +234,80 @@ export const App: React.FC = () => {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="payments"
+              element={
+                <ProtectedRoute requiredModule="ACCOUNTS" requiredAction="view">
+                  <PaymentRegisterPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="payment-register"
+              element={
+                <ProtectedRoute requiredModule="ACCOUNTS" requiredAction="view">
+                  <PaymentRegisterPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="outstanding"
+              element={
+                <ProtectedRoute requiredModule="ACCOUNTS" requiredAction="view">
+                  <OutstandingFollowupsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="follow-ups"
+              element={
+                <ProtectedRoute requiredModule="ACCOUNTS" requiredAction="view">
+                  <OutstandingFollowupsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="invoices"
+              element={
+                <ProtectedRoute requiredModule="ACCOUNTS" requiredAction="view">
+                  <InvoicesReceiptsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="receipts"
+              element={
+                <ProtectedRoute requiredModule="ACCOUNTS" requiredAction="view">
+                  <InvoicesReceiptsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="expenses"
+              element={
+                <ProtectedRoute requiredModule="ACCOUNTS" requiredAction="view">
+                  <ExpensesReimbursementsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="reimbursements"
+              element={
+                <ProtectedRoute requiredModule="ACCOUNTS" requiredAction="view">
+                  <ExpensesReimbursementsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="reports"
+              element={
+                <ProtectedRoute requiredModule="ACCOUNTS" requiredAction="view">
+                  <FinancialReportsPage />
+                </ProtectedRoute>
+              }
+            />
           </Route>
+
 
           {/* Protected Administration Module (Nested Layout with Collapsible Sidebar) */}
           <Route

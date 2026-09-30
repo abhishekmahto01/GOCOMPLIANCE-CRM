@@ -1,4 +1,8 @@
 """Database and domain models package."""
+from app.models.accounts_audit_log import AccountsAuditLog
+from app.models.accounts_expense import AccountsExpense
+from app.models.accounts_follow_up import AccountsFollowUp
+from app.models.accounts_invoice import AccountsInvoice
 from app.models.client import ClientMaster
 from app.models.company import Company
 from app.models.department import Department
@@ -11,6 +15,7 @@ from app.models.operation_application import (
     OperationApplication,
     OperationRemark,
 )
+from app.models.payment_transaction import PaymentTransaction
 from app.models.permission_audit import PermissionAuditLog
 from app.models.refresh_token import RefreshToken
 from app.models.sales_order import SalesOrder
@@ -19,6 +24,10 @@ from app.models.user import User
 from app.models.user_module_permission import UserModulePermission
 
 __all__ = [
+    "AccountsAuditLog",
+    "AccountsExpense",
+    "AccountsFollowUp",
+    "AccountsInvoice",
     "ApplicationActivityLog",
     "ApplicationAssignmentHistory",
     "ApplicationDocument",
@@ -29,6 +38,7 @@ __all__ = [
     "Module",
     "OperationApplication",
     "OperationRemark",
+    "PaymentTransaction",
     "PermissionAuditLog",
     "RefreshToken",
     "SalesOrder",

@@ -1,7 +1,7 @@
 """Sales Order model definition."""
 import uuid
 from datetime import date, datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import (
     CheckConstraint,
@@ -19,9 +19,13 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import Base
 
 if TYPE_CHECKING:
+    from app.models.accounts_expense import AccountsExpense
+    from app.models.accounts_follow_up import AccountsFollowUp
+    from app.models.accounts_invoice import AccountsInvoice
     from app.models.client import ClientMaster
     from app.models.company import Company
     from app.models.operation_application import OperationApplication
+    from app.models.payment_transaction import PaymentTransaction
     from app.models.service import ServiceMaster
     from app.models.user import User
 
@@ -285,6 +289,29 @@ class SalesOrder(Base):
         uselist=False,
         cascade="save-update, merge",
         passive_deletes=True,
+    )
+
+    payment_transactions: Mapped[List["PaymentTransaction"]] = relationship(
+        "PaymentTransaction",
+        back_populates="sales_order",
+        cascade="all, delete-orphan",
+    )
+
+    accounts_follow_ups: Mapped[List["AccountsFollowUp"]] = relationship(
+        "AccountsFollowUp",
+        back_populates="sales_order",
+        cascade="all, delete-orphan",
+    )
+
+    accounts_invoices: Mapped[List["AccountsInvoice"]] = relationship(
+        "AccountsInvoice",
+        back_populates="sales_order",
+        cascade="all, delete-orphan",
+    )
+
+    accounts_expenses: Mapped[List["AccountsExpense"]] = relationship(
+        "AccountsExpense",
+        back_populates="sales_order",
     )
 
     def __repr__(self) -> str:

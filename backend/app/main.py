@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import (
+    accounts,
     admin_permissions,
     auth,
     companies,
@@ -80,4 +81,9 @@ app.include_router(
     operations.router,
     prefix=settings.API_PREFIX,
 )
+app.include_router(
+    accounts.router,
+    prefix=settings.API_PREFIX,
+)
+
 

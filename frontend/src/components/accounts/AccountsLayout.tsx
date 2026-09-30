@@ -47,8 +47,25 @@ export const AccountsLayout: React.FC = () => {
 
   // Compute Breadcrumbs from pathname
   const getBreadcrumbs = (): BreadcrumbItem[] => {
-    return [{ label: 'Accounts', href: '/accounts' }, { label: 'Overview' }];
+    const path = location.pathname;
+    if (path.includes('/payments')) {
+      return [{ label: 'Accounts', href: '/accounts/dashboard' }, { label: 'Payment Register' }];
+    }
+    if (path.includes('/outstanding')) {
+      return [{ label: 'Accounts', href: '/accounts/dashboard' }, { label: 'Outstanding & Ageing' }];
+    }
+    if (path.includes('/invoices')) {
+      return [{ label: 'Accounts', href: '/accounts/dashboard' }, { label: 'Invoices & Receipts' }];
+    }
+    if (path.includes('/expenses')) {
+      return [{ label: 'Accounts', href: '/accounts/dashboard' }, { label: 'Expenses & Reimbursements' }];
+    }
+    if (path.includes('/reports')) {
+      return [{ label: 'Accounts', href: '/accounts/dashboard' }, { label: 'Financial Reports' }];
+    }
+    return [{ label: 'Accounts', href: '/accounts/dashboard' }, { label: 'Dashboard' }];
   };
+
 
   return (
     <div className={`min-h-screen w-full flex flex-col font-sans transition-colors duration-300 ${theme === 'dark' ? 'dark bg-slate-950 text-slate-100' : 'bg-[#f4f7fe] text-slate-800'}`}>

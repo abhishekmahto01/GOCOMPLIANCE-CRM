@@ -75,6 +75,11 @@ def test_registered_tables_in_metadata() -> None:
         "application_assignment_history",
         "application_activity_log",
         "operation_remark",
+        "payment_transaction",
+        "accounts_invoice",
+        "accounts_audit_log",
+        "accounts_expense",
+        "accounts_follow_up",
     }
 
 

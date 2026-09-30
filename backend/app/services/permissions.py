@@ -228,6 +228,82 @@ PAGE_CATALOG_CONFIG: Dict[str, Dict[str, Any]] = {
             "export": "operation.reports.export",
         },
     },
+    # Accounts Module Pages
+    "ACCOUNTS_DASHBOARD": {
+        "module_code": "ACCOUNTS",
+        "page_name": "Accounts Dashboard",
+        "route": "/accounts/dashboard",
+        "display_order": 10,
+        "supported_actions": ["read", "export"],
+        "slugs": {
+            "read": "accounts.dashboard.read",
+            "export": "accounts.dashboard.export",
+        },
+    },
+    "ACCOUNTS_PAYMENT_REGISTER": {
+        "module_code": "ACCOUNTS",
+        "page_name": "Payment Register",
+        "route": "/accounts/payments",
+        "display_order": 20,
+        "supported_actions": ["read", "write", "update", "approve", "export"],
+        "slugs": {
+            "read": "accounts.payments.read",
+            "write": "accounts.payments.create",
+            "update": "accounts.payments.update",
+            "approve": "accounts.payments.verify",
+            "export": "accounts.payments.export",
+        },
+    },
+    "ACCOUNTS_OUTSTANDING": {
+        "module_code": "ACCOUNTS",
+        "page_name": "Outstanding & Follow-ups",
+        "route": "/accounts/outstanding",
+        "display_order": 30,
+        "supported_actions": ["read", "write", "export"],
+        "slugs": {
+            "read": "accounts.outstanding.read",
+            "write": "accounts.outstanding.create",
+            "export": "accounts.outstanding.export",
+        },
+    },
+    "ACCOUNTS_INVOICES": {
+        "module_code": "ACCOUNTS",
+        "page_name": "Invoices & Receipts",
+        "route": "/accounts/invoices",
+        "display_order": 40,
+        "supported_actions": ["read", "write", "update", "export"],
+        "slugs": {
+            "read": "accounts.invoices.read",
+            "write": "accounts.invoices.create",
+            "update": "accounts.invoices.update",
+            "export": "accounts.invoices.export",
+        },
+    },
+    "ACCOUNTS_EXPENSES": {
+        "module_code": "ACCOUNTS",
+        "page_name": "Expenses & Reimbursements",
+        "route": "/accounts/expenses",
+        "display_order": 50,
+        "supported_actions": ["read", "write", "update", "approve", "export"],
+        "slugs": {
+            "read": "accounts.expenses.read",
+            "write": "accounts.expenses.create",
+            "update": "accounts.expenses.update",
+            "approve": "accounts.expenses.approve",
+            "export": "accounts.expenses.export",
+        },
+    },
+    "ACCOUNTS_REPORTS": {
+        "module_code": "ACCOUNTS",
+        "page_name": "Accounts Reports",
+        "route": "/accounts/reports",
+        "display_order": 60,
+        "supported_actions": ["read", "export"],
+        "slugs": {
+            "read": "accounts.reports.read",
+            "export": "accounts.reports.export",
+        },
+    },
 }
 
 # Reverse lookup for slugs: slug -> (page_code, action)
