@@ -179,6 +179,7 @@ export const SalesRegisterPage: React.FC = () => {
   const [editTaxInvoiceNo, setEditTaxInvoiceNo] = useState<string>('');
   const [editReimbursementNote, setEditReimbursementNote] = useState<string>('');
   const [editNotes, setEditNotes] = useState<string>('');
+  const [editGstInvoiceRequired, setEditGstInvoiceRequired] = useState<boolean>(false);
   const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -400,6 +401,7 @@ export const SalesRegisterPage: React.FC = () => {
     setEditTaxInvoiceNo(item.tax_invoice_no || '');
     setEditReimbursementNote(item.reimbursement_note || '');
     setEditNotes(item.notes || item.remarks || '');
+    setEditGstInvoiceRequired(Boolean(item.gst_invoice_required));
     setEditError(null);
     setIsEditModalOpen(true);
   };
@@ -444,6 +446,7 @@ export const SalesRegisterPage: React.FC = () => {
         tax_invoice_no: editTaxInvoiceNo.trim() || undefined,
         reimbursement_note: editReimbursementNote.trim() || undefined,
         notes: editNotes.trim() || undefined,
+        gst_invoice_required: editGstInvoiceRequired,
       });
 
       outletCtx.addToast?.(
@@ -822,6 +825,11 @@ export const SalesRegisterPage: React.FC = () => {
                       {/* 3. Client Name */}
                       <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white flex items-center gap-2">
                         <span>{row.client_name}</span>
+                        {row.gst_invoice_required && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                            GST Invoice
+                          </span>
+                        )}
                         {row.confirmation_status === 'CONFIRMED' && (
                           <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
                             Confirmed
@@ -1046,9 +1054,16 @@ export const SalesRegisterPage: React.FC = () => {
             {/* Top Summary Card */}
             <div className="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/60 flex items-center justify-between">
               <div>
-                <h3 className="font-bold text-slate-900 dark:text-white text-base">
-                  {selectedOrder.client_name}
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                    {selectedOrder.client_name}
+                  </h3>
+                  {selectedOrder.gst_invoice_required && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                      GST Invoice
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   Order Date: {selectedOrder.formatted_date || selectedOrder.order_date}
                 </p>
@@ -1467,6 +1482,30 @@ export const SalesRegisterPage: React.FC = () => {
                   onChange={(e) => setEditOrderDate(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
                 />
+              </div>
+
+              {/* GST Invoice Required Checkbox */}
+              <div className="sm:col-span-2 pt-1">
+                <div className="flex items-start gap-2.5 p-3 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 hover:bg-blue-50/80 dark:hover:bg-blue-950/30 transition">
+                  <input
+                    id="edit_gst_invoice_required"
+                    type="checkbox"
+                    checked={editGstInvoiceRequired}
+                    onChange={(e) => setEditGstInvoiceRequired(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  />
+                  <div>
+                    <label
+                      htmlFor="edit_gst_invoice_required"
+                      className="font-semibold text-slate-800 dark:text-slate-200 cursor-pointer select-none text-xs"
+                    >
+                      GST Invoice Required
+                    </label>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      Select this to send this entry to Accounts for invoice processing.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
 

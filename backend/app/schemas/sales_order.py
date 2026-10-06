@@ -28,6 +28,7 @@ class SalesOrderBase(BaseModel):
     tax_invoice_no: Optional[str] = Field(None, max_length=100, description="Tax Invoice Number")
     reimbursement_note: Optional[str] = Field(None, max_length=500, description="Reimbursement Note")
     notes: Optional[str] = Field(None, max_length=1000, description="Order remarks or notes")
+    gst_invoice_required: bool = Field(default=False, description="Send this entry to Accounts for invoice processing")
 
     @field_validator("lead_source", mode="before")
     @classmethod
@@ -80,6 +81,7 @@ class SalesOrderUpdate(BaseModel):
     tax_invoice_no: Optional[str] = Field(None, max_length=100, description="Tax Invoice Number")
     reimbursement_note: Optional[str] = Field(None, max_length=500, description="Reimbursement Note")
     notes: Optional[str] = Field(None, max_length=1000, description="Order remarks or notes")
+    gst_invoice_required: Optional[bool] = Field(None, description="Send this entry to Accounts for invoice processing")
 
     @field_validator("lead_source", mode="before")
     @classmethod
@@ -134,6 +136,7 @@ class SalesOrderRead(BaseModel):
     tax_invoice_no: Optional[str] = None
     reimbursement_note: Optional[str] = None
     notes: Optional[str] = None
+    gst_invoice_required: bool = False
     created_at: datetime
     updated_at: datetime
 

@@ -460,6 +460,14 @@ def get_order_detail(
     description="Update existing sales order financial and sales fields with permission verification and calculation updates.",
     dependencies=[Depends(require_module_permission("SALES_MY_ORDERS", "update"))],
 )
+@router.patch(
+    "/orders/{order_id}",
+    response_model=SalesOrderDetailRead,
+    status_code=status.HTTP_200_OK,
+    summary="Update Sales Order",
+    description="Update existing sales order financial and sales fields with permission verification and calculation updates.",
+    dependencies=[Depends(require_module_permission("SALES_MY_ORDERS", "update"))],
+)
 def update_order(
     order_id: uuid.UUID,
     data: SalesOrderUpdate,

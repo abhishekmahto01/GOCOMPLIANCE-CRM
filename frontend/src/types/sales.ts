@@ -182,6 +182,7 @@ export interface SalesRegisterItem {
   // 20. Remarks
   notes?: string | null;
   remarks?: string | null;
+  gst_invoice_required?: boolean;
 
   // Metadata
   order_id: string;
@@ -302,6 +303,7 @@ export interface SalesEntryFormData {
   tax_invoice_no?: string;
   reimbursement_note?: string;
   notes?: string;
+  gst_invoice_required?: boolean;
   auto_confirm?: boolean;
 }
 
@@ -321,5 +323,6 @@ export interface SalesOrderUpdateRequest {
   client_name?: string;
   contact_no?: string;
   location?: string;
+  gst_invoice_required?: boolean;
 }
 

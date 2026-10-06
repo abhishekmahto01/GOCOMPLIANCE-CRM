@@ -654,6 +654,7 @@ class AccountsEntryRead(BaseModel):
     notes: Optional[str] = None
 
     # Timestamps & status
+    gst_invoice_required: bool = True
     confirmation_status: str = "CONFIRMED"
     created_at: datetime
     updated_at: datetime

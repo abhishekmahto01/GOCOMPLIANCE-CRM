@@ -62,6 +62,7 @@ const salesEntrySchema = z
       .number({ invalid_type_error: 'Incidental cost must be a number' })
       .min(0, 'Incidental cost cannot be negative')
       .default(0),
+    gst_invoice_required: z.boolean().default(false),
   })
   .refine((data) => data.amount_received <= data.order_value, {
     message: 'Advance amount cannot exceed total amount',
@@ -112,6 +113,7 @@ export const SalesEntryPage: React.FC = () => {
       amount_received: 0,
       govt_fees: 0,
       incidental_cost: 0,
+      gst_invoice_required: false,
     },
   });
 
@@ -202,6 +204,7 @@ export const SalesEntryPage: React.FC = () => {
         amount_received: Number(values.amount_received),
         govt_fees: Number(values.govt_fees || 0),
         incidental_cost: Number(values.incidental_cost || 0),
+        gst_invoice_required: Boolean(values.gst_invoice_required),
         auto_confirm: autoConfirm,
       };
 
@@ -231,13 +234,15 @@ export const SalesEntryPage: React.FC = () => {
       client_name: '',
       client_id: '',
       contact_no: '',
-      lead_source: 'Website',
+      location: '',
+      lead_source: 'WEBSITE',
       service_id: '',
       salesperson_user_id: formOptions?.default_salesperson_id || '',
       order_value: 0,
       amount_received: 0,
       govt_fees: 0,
       incidental_cost: 0,
+      gst_invoice_required: false,
     });
     setSubmitError(null);
   };
@@ -592,6 +597,29 @@ export const SalesEntryPage: React.FC = () => {
               {errors.salesperson_user_id && (
                 <p className="mt-1 text-xs text-rose-500">{errors.salesperson_user_id.message}</p>
               )}
+            </div>
+
+            {/* GST Invoice Required */}
+            <div className="md:col-span-2 lg:col-span-3 pt-1">
+              <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 hover:bg-blue-50/80 dark:hover:bg-blue-950/30 transition">
+                <input
+                  id="gst_invoice_required"
+                  type="checkbox"
+                  {...register('gst_invoice_required')}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                />
+                <div>
+                  <label
+                    htmlFor="gst_invoice_required"
+                    className="text-xs font-semibold text-slate-800 dark:text-slate-200 cursor-pointer select-none"
+                  >
+                    GST Invoice Required
+                  </label>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    Select this to send this entry to Accounts for invoice processing.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </div>

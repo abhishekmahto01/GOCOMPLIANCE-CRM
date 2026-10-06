@@ -264,6 +264,7 @@ def accounts_fixture(db_session: Session):
         incidental_cost=Decimal("2500.00"),
         payment_status="PARTIALLY_PAID",
         confirmation_status="CONFIRMED",
+        gst_invoice_required=True,
     )
 
     # Order 2: Fully pending order with due date in future
@@ -281,6 +282,7 @@ def accounts_fixture(db_session: Session):
         incidental_cost=Decimal("5000.00"),
         payment_status="PENDING",
         confirmation_status="CONFIRMED",
+        gst_invoice_required=True,
     )
 
     db_session.add_all([order1, order2])

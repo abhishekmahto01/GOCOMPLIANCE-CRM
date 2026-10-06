@@ -202,6 +202,33 @@ def list_accounts_entries(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
 
+@router.get(
+    "/entries/{order_id}",
+    response_model=AccountsEntryRead,
+    status_code=status.HTTP_200_OK,
+    summary="Get Single Accounts Entry",
+    description="Retrieve a single Accounts Entry if marked GST Invoice Required and authorized within scope.",
+)
+def get_accounts_entry(
+    order_id: uuid.UUID,
+    current_user: User = Depends(require_fully_activated_user),
+    session: Session = Depends(get_db),
+) -> AccountsEntryRead:
+    if not check_access(session, current_user, ["ACCOUNTS_ENTRIES", "ACCOUNTS"], "view"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to Accounts Entries")
+
+    try:
+        return accounts_service.get_accounts_entry_by_id(
+            session=session,
+            user=current_user,
+            order_id=order_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except permissions.PermissionDeniedError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+
 @router.patch(
     "/entries/{order_id}",
     response_model=AccountsEntryRead,

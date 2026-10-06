@@ -4,6 +4,7 @@ from datetime import date, datetime
 from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -244,6 +245,15 @@ class SalesOrder(Base):
         String(1000),
         nullable=True,
         comment="Order notes or instructions from sales team",
+    )
+
+    gst_invoice_required: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+        index=True,
+        comment="Routing flag: True if GST invoice is required and should appear in Accounts",
     )
 
     created_at: Mapped[datetime] = mapped_column(

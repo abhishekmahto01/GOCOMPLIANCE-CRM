@@ -1717,7 +1717,10 @@ def get_accounts_dashboard_data(
 
     order_stmt = (
         select(SalesOrder)
-        .where(SalesOrder.confirmation_status != "CANCELLED")
+        .where(
+            SalesOrder.confirmation_status != "CANCELLED",
+            SalesOrder.gst_invoice_required.is_(True),
+        )
         .options(
             joinedload(SalesOrder.client),
             joinedload(SalesOrder.company),
@@ -1910,6 +1913,7 @@ def _to_accounts_entry_read(order: SalesOrder, s_no: int = 1) -> AccountsEntryRe
         formatted_profit_amount=format_inr(p_val),
         remarks=order.notes,
         notes=order.notes,
+        gst_invoice_required=getattr(order, "gst_invoice_required", True),
         confirmation_status=order.confirmation_status,
         created_at=order.created_at,
         updated_at=order.updated_at,
@@ -1946,7 +1950,10 @@ def get_accounts_entries(
             joinedload(SalesOrder.salesperson),
             joinedload(SalesOrder.application).joinedload(OperationApplication.assigned_to),
         )
-        .where(SalesOrder.confirmation_status != "CANCELLED")
+        .where(
+            SalesOrder.confirmation_status != "CANCELLED",
+            SalesOrder.gst_invoice_required.is_(True),
+        )
     )
 
     query = _apply_accounts_scope(query, user, scope_ctx)
@@ -2076,7 +2083,7 @@ def update_accounts_entry(
         .first()
     )
 
-    if not order or order.confirmation_status == "CANCELLED":
+    if not order or order.confirmation_status == "CANCELLED" or not getattr(order, "gst_invoice_required", False):
         raise ValueError(f"Sales order with ID '{order_id}' not found.")
 
     if not scope_ctx.is_user_permitted(order.salesperson_user_id, order.company_id):
@@ -2152,6 +2159,39 @@ def update_accounts_entry(
             session.add(activity)
 
         session.commit()
+
+    return _to_accounts_entry_read(order)
+
+
+def get_accounts_entry_by_id(
+    session: Session,
+    user: User,
+    order_id: uuid.UUID,
+) -> AccountsEntryRead:
+    """Retrieve single Accounts Entry ensuring company scope authorization and gst_invoice_required routing flag."""
+    try:
+        scope_ctx = permissions.resolve_data_scope_context(session, user, "ACCOUNTS_ENTRIES")
+    except permissions.PermissionDeniedError:
+        scope_ctx = permissions.resolve_data_scope_context(session, user, "ACCOUNTS")
+
+    order = (
+        session.query(SalesOrder)
+        .options(
+            joinedload(SalesOrder.client),
+            joinedload(SalesOrder.company),
+            joinedload(SalesOrder.service),
+            joinedload(SalesOrder.salesperson),
+            joinedload(SalesOrder.application).joinedload(OperationApplication.assigned_to),
+        )
+        .filter(SalesOrder.order_id == order_id)
+        .first()
+    )
+
+    if not order or order.confirmation_status == "CANCELLED" or not getattr(order, "gst_invoice_required", False):
+        raise ValueError(f"Sales order with ID '{order_id}' not found.")
+
+    if not scope_ctx.is_user_permitted(order.salesperson_user_id, order.company_id):
+        raise permissions.PermissionDeniedError("You are not authorized to view records for this company.")
 
     return _to_accounts_entry_read(order)
 

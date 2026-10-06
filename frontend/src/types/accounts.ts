@@ -68,6 +68,7 @@ export interface AccountsEntryItem {
   formatted_profit_amount: string;
   remarks?: string | null;
   notes?: string | null;
+  gst_invoice_required?: boolean;
   confirmation_status: string;
   created_at: string;
   updated_at: string;

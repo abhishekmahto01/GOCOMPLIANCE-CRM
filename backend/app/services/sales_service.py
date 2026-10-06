@@ -447,6 +447,7 @@ def create_sales_order(
         tax_invoice_no=data.tax_invoice_no.strip() if data.tax_invoice_no else None,
         reimbursement_note=data.reimbursement_note.strip() if data.reimbursement_note else None,
         notes=data.notes,
+        gst_invoice_required=data.gst_invoice_required if data.gst_invoice_required is not None else False,
     )
     session.add(order)
     session.flush()
@@ -503,6 +504,7 @@ def update_sales_order(
         "location": order.location,
         "client_name": order.client.client_name if order.client else "",
         "contact_no": order.client.contact_phone if order.client else "",
+        "gst_invoice_required": getattr(order, "gst_invoice_required", False),
     }
 
     # Financial Field updates & Decimal-safe validations
@@ -574,6 +576,8 @@ def update_sales_order(
         order.reimbursement_note = data.reimbursement_note.strip() if data.reimbursement_note.strip() else None
     if data.notes is not None:
         order.notes = data.notes.strip() if data.notes.strip() else None
+    if data.gst_invoice_required is not None:
+        order.gst_invoice_required = bool(data.gst_invoice_required)
 
     # Update client if client_name or contact_no provided
     if order.client:
@@ -617,6 +621,8 @@ def update_sales_order(
         changes.append(f"Contact No: {old_values['contact_no']} -> {order.client.contact_phone if order.client else ''}")
     if old_values["lead_source"] != order.lead_source:
         changes.append(f"Lead Source: {old_values['lead_source']} -> {order.lead_source}")
+    if old_values.get("gst_invoice_required") != order.gst_invoice_required:
+        changes.append(f"GST Invoice Required: {old_values.get('gst_invoice_required')} -> {order.gst_invoice_required}")
 
     if order.application:
         comment_str = f"Sales order '{order.order_number}' updated: " + (", ".join(changes) if changes else "No field changes detected.")
@@ -691,6 +697,7 @@ def update_sales_order(
         reimbursement_note=order.reimbursement_note,
         notes=order.notes,
         remarks=order.notes,
+        gst_invoice_required=getattr(order, "gst_invoice_required", False),
         created_at=order.created_at,
         updated_at=order.updated_at,
         client_name=c_name,
@@ -823,6 +830,7 @@ def delete_sales_order(
         reimbursement_note=order.reimbursement_note,
         notes=order.notes,
         remarks=order.notes,
+        gst_invoice_required=getattr(order, "gst_invoice_required", False),
         created_at=order.created_at,
         updated_at=order.updated_at,
         client_name=c_name,
@@ -1755,6 +1763,7 @@ def get_sales_register_data(
                 reimbursement_note=o.reimbursement_note,
                 notes=o.notes,
                 remarks=o.notes,
+                gst_invoice_required=getattr(o, "gst_invoice_required", False),
                 created_at=o.created_at,
                 updated_at=o.updated_at,
                 client_name=c_name,
@@ -2057,6 +2066,7 @@ def assign_sales_order_operations(
         reimbursement_note=order.reimbursement_note,
         notes=order.notes,
         remarks=order.notes,
+        gst_invoice_required=getattr(order, "gst_invoice_required", False),
         created_at=order.created_at,
         updated_at=order.updated_at,
         client_name=c_name,
