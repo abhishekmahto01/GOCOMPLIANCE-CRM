@@ -1,11 +1,14 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
-import type { CurrentUser, LoginCredentials } from '../types/auth';
+import type { CurrentUser, ImpersonationMetadata, LoginCredentials } from '../types/auth';
 import type { AccessibleModule, ActionType, DataScope } from '../types/permission';
 import {
   getCurrentUserApi,
   getAccessibleModulesApi,
+  getImpersonationStatusApi,
   loginApi,
   logoutApi,
+  returnToAdminApi,
+  startImpersonationApi,
 } from '../api/auth';
 import { getAccessToken } from '../api/client';
 
@@ -27,11 +30,15 @@ export interface AuthContextType {
   session: AuthSession;
   isAuthenticated: boolean;
   isSuperAdmin: boolean;
+  isImpersonating: boolean;
+  impersonation: ImpersonationMetadata | null;
   mustChangePassword: boolean;
   isLoading: boolean;
   permissionError: string | null;
   login: (credentials: LoginCredentials) => Promise<{ must_change_password: boolean }>;
   logout: () => Promise<void>;
+  startImpersonation: (employeeCode: string) => Promise<ImpersonationMetadata>;
+  returnToAdmin: () => Promise<void>;
   refreshUserProfile: () => Promise<void>;
   hasPermission: (
     moduleOrPageCode: string,
@@ -54,9 +61,30 @@ function normalizeModuleCode(code: string): string {
   return c;
 }
 
+function isTokenImpersonated(token: string | null): boolean {
+  if (!token) return false;
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return false;
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    const payload = JSON.parse(jsonPayload);
+    return !!payload.is_impersonated;
+  } catch {
+    return false;
+  }
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [modules, setModules] = useState<AccessibleModule[]>([]);
+  const [impersonation, setImpersonation] = useState<ImpersonationMetadata | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [permissionError, setPermissionError] = useState<string | null>(null);
 
@@ -65,6 +93,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!token) {
       setUser(null);
       setModules([]);
+      setImpersonation(null);
       setPermissionError(null);
       setIsLoading(false);
       return;
@@ -75,6 +104,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const userData = await getCurrentUserApi();
       setUser(userData);
+
+      // Check active impersonation status only if token payload marks impersonation
+      if (isTokenImpersonated(token)) {
+        try {
+          const impStatus = await getImpersonationStatusApi();
+          if (impStatus.is_impersonated && impStatus.impersonation) {
+            setImpersonation(impStatus.impersonation);
+          } else {
+            setImpersonation(null);
+          }
+        } catch {
+          setImpersonation(null);
+        }
+      } else {
+        setImpersonation(null);
+      }
 
       if (!userData.must_change_password) {
         try {
@@ -98,6 +143,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Failed to load user profile/modules:', err);
       setUser(null);
       setModules([]);
+      setImpersonation(null);
       const errMessage =
         (err as { response?: { data?: { detail?: string } }; message?: string })?.response?.data?.detail ||
         (err as Error)?.message ||
@@ -116,6 +162,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     setUser(null);
     setModules([]);
+    setImpersonation(null);
     setPermissionError(null);
     try {
       const authRes = await loginApi(credentials);
@@ -135,7 +182,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setUser(null);
       setModules([]);
+      setImpersonation(null);
       setPermissionError(null);
+      setIsLoading(false);
+    }
+  };
+
+  const startImpersonation = async (employeeCode: string): Promise<ImpersonationMetadata> => {
+    setIsLoading(true);
+    try {
+      const response = await startImpersonationApi(employeeCode);
+      setImpersonation(response.impersonation);
+      await loadUserData();
+      return response.impersonation;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const returnToAdmin = async (): Promise<void> => {
+    setIsLoading(true);
+    try {
+      await returnToAdminApi();
+      setImpersonation(null);
+      await loadUserData();
+    } finally {
       setIsLoading(false);
     }
   };
@@ -152,8 +223,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return null;
   }
 
-  // Backend-confirmed Super Admin check
+  // Backend-confirmed Super Admin check (strictly disabled during impersonation)
   const isSuperAdmin = useMemo(() => {
+    if (impersonation !== null) {
+      return false;
+    }
     if (
       user?.employee_code === 'CG0001' ||
       user?.designation?.name?.toLowerCase().includes('super admin') ||
@@ -175,7 +249,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         m.can_view &&
         m.can_edit
     );
-  }, [modules, user]);
+  }, [modules, user, impersonation]);
 
   const hasModuleAccess = useCallback(
     (moduleCode: string): boolean => {
@@ -387,11 +461,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     session,
     isAuthenticated: !!user,
     isSuperAdmin,
+    isImpersonating: impersonation !== null,
+    impersonation,
     mustChangePassword: user?.must_change_password ?? false,
     isLoading,
     permissionError,
     login,
     logout,
+    startImpersonation,
+    returnToAdmin,
     refreshUserProfile: loadUserData,
     hasPermission,
     getEffectiveScope,

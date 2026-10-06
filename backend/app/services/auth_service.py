@@ -18,6 +18,7 @@ from app.core.security import (
     validate_password_strength,
     verify_password,
 )
+from app.models.impersonation_session import ImpersonationSession
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.schemas.auth import TokenResponse
@@ -243,15 +244,82 @@ def refresh_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    is_impersonated = bool(payload.get("is_impersonated", False))
+    imp_session = None
+
+    if is_impersonated:
+        if not settings.ENABLE_ADMIN_IMPERSONATION:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Admin impersonation feature is currently disabled.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        session_id_str = payload.get("impersonation_session_id")
+        if not session_id_str:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid impersonation refresh token claims",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        try:
+            imp_session_id = uuid.UUID(session_id_str)
+        except (ValueError, TypeError):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Malformed impersonation session id",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        imp_session = session.get(ImpersonationSession, imp_session_id)
+        if not imp_session or not imp_session.is_active or imp_session.expires_at < now:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Impersonation session has expired or been revoked.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        admin_user = session.get(User, imp_session.actor_admin_id)
+        if not admin_user or admin_user.account_status != "ACTIVE":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Originating Admin account is no longer active.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
     # Rotate token: generate new pair
-    new_raw_refresh, new_jti, new_expires_at = create_refresh_token(
-        user_id=user.user_id,
-        token_version=user.token_version,
-    )
-    new_access_token = create_access_token(
-        user_id=user.user_id,
-        token_version=user.token_version,
-    )
+    if is_impersonated and imp_session:
+        remaining_time = max(timedelta(seconds=1), imp_session.expires_at - now)
+        expires_delta = min(timedelta(minutes=30), remaining_time)
+        new_raw_refresh, new_jti, new_expires_at = create_refresh_token(
+            user_id=user.user_id,
+            token_version=user.token_version,
+            expires_delta=expires_delta,
+            is_impersonated=True,
+            impersonation_session_id=imp_session.session_id,
+            actor_admin_id=imp_session.actor_admin_id,
+        )
+        new_access_token = create_access_token(
+            user_id=user.user_id,
+            token_version=user.token_version,
+            expires_delta=expires_delta,
+            is_impersonated=True,
+            impersonation_session_id=imp_session.session_id,
+            actor_admin_id=imp_session.actor_admin_id,
+        )
+        imp_session.impersonation_token_jti = new_jti
+        expires_in = int(expires_delta.total_seconds())
+    else:
+        new_raw_refresh, new_jti, new_expires_at = create_refresh_token(
+            user_id=user.user_id,
+            token_version=user.token_version,
+        )
+        new_access_token = create_access_token(
+            user_id=user.user_id,
+            token_version=user.token_version,
+        )
+        expires_in = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
 
     # Revoke old token and mark replacement
     db_token.revoked_at = now
@@ -273,7 +341,7 @@ def refresh_access_token(
         access_token=new_access_token,
         refresh_token=new_raw_refresh,
         token_type="bearer",
-        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        expires_in=expires_in,
         must_change_password=user.must_change_password,
     )
 

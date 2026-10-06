@@ -57,6 +57,8 @@ def test_designation_model_table_name_and_metadata() -> None:
         "accounts_audit_log",
         "accounts_expense",
         "accounts_follow_up",
+        "impersonation_sessions",
+        "impersonation_audit_logs",
     }
 
 

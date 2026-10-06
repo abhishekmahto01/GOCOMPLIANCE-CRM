@@ -114,6 +114,9 @@ def create_access_token(
     token_version: int,
     expires_delta: Optional[timedelta] = None,
     jti: Optional[str] = None,
+    is_impersonated: bool = False,
+    impersonation_session_id: Optional[uuid.UUID] = None,
+    actor_admin_id: Optional[uuid.UUID] = None,
 ) -> str:
     """Create a signed JWT access token.
 
@@ -122,6 +125,9 @@ def create_access_token(
         token_version: Current token version for revocation tracking.
         expires_delta: Optional custom token expiration delta.
         jti: Optional unique JWT ID.
+        is_impersonated: Whether this token is for an active impersonation session.
+        impersonation_session_id: The ID of the impersonation session record.
+        actor_admin_id: The user ID of the Super Admin actor.
 
     Returns:
         Encoded JWT string.
@@ -129,6 +135,8 @@ def create_access_token(
     now = datetime.now(timezone.utc)
     if expires_delta:
         expire = now + expires_delta
+    elif is_impersonated:
+        expire = now + timedelta(minutes=30)  # Impersonation session capped at 30 mins
     else:
         expire = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
@@ -140,6 +148,11 @@ def create_access_token(
         "iat": int(now.timestamp()),
         "exp": int(expire.timestamp()),
     }
+
+    if is_impersonated:
+        payload["is_impersonated"] = True
+        payload["impersonation_session_id"] = str(impersonation_session_id) if impersonation_session_id else None
+        payload["actor_admin_id"] = str(actor_admin_id) if actor_admin_id else None
 
     return jwt.encode(
         payload,
@@ -153,6 +166,9 @@ def create_refresh_token(
     token_version: int,
     expires_delta: Optional[timedelta] = None,
     jti: Optional[str] = None,
+    is_impersonated: bool = False,
+    impersonation_session_id: Optional[uuid.UUID] = None,
+    actor_admin_id: Optional[uuid.UUID] = None,
 ) -> Tuple[str, str, datetime]:
     """Create a signed JWT refresh token.
 
@@ -161,6 +177,9 @@ def create_refresh_token(
         token_version: Current token version for revocation tracking.
         expires_delta: Optional custom expiration delta.
         jti: Optional unique JWT ID.
+        is_impersonated: Whether this token is for an active impersonation session.
+        impersonation_session_id: The ID of the impersonation session record.
+        actor_admin_id: The user ID of the Super Admin actor.
 
     Returns:
         Tuple containing:
@@ -171,6 +190,8 @@ def create_refresh_token(
     now = datetime.now(timezone.utc)
     if expires_delta:
         expires_at = now + expires_delta
+    elif is_impersonated:
+        expires_at = now + timedelta(minutes=30)  # Impersonation session capped at 30 mins
     else:
         expires_at = now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
 
@@ -184,6 +205,11 @@ def create_refresh_token(
         "iat": int(now.timestamp()),
         "exp": int(expires_at.timestamp()),
     }
+
+    if is_impersonated:
+        payload["is_impersonated"] = True
+        payload["impersonation_session_id"] = str(impersonation_session_id) if impersonation_session_id else None
+        payload["actor_admin_id"] = str(actor_admin_id) if actor_admin_id else None
 
     raw_token = jwt.encode(
         payload,

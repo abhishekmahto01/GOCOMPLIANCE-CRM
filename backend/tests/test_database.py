@@ -80,6 +80,8 @@ def test_registered_tables_in_metadata() -> None:
         "accounts_audit_log",
         "accounts_expense",
         "accounts_follow_up",
+        "impersonation_sessions",
+        "impersonation_audit_logs",
     }
 
 

@@ -7,6 +7,7 @@ from app.models.client import ClientMaster
 from app.models.company import Company
 from app.models.department import Department
 from app.models.designation import Designation
+from app.models.impersonation_session import ImpersonationAuditLog, ImpersonationSession
 from app.models.module import Module
 from app.models.operation_application import (
     ApplicationActivityLog,
@@ -35,6 +36,8 @@ __all__ = [
     "Company",
     "Department",
     "Designation",
+    "ImpersonationAuditLog",
+    "ImpersonationSession",
     "Module",
     "OperationApplication",
     "OperationRemark",

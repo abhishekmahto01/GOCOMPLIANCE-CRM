@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     TRIAL_DEFAULT_PASSWORD_ENABLED: bool = False
     TRIAL_DEFAULT_PASSWORD: Optional[str] = None
 
+    # Admin Impersonation ("Login as Employee") feature flag
+    ENABLE_ADMIN_IMPERSONATION: bool = False
+
     @field_validator("DATABASE_URL")
     @classmethod
     def validate_database_url(cls, v: str) -> str:

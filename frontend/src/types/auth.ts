@@ -72,3 +72,37 @@ export interface ChangeInitialPasswordPayload {
   confirm_password?: string;
 }
 
+export interface ImpersonationMetadata {
+  session_id: string;
+  actor_admin_id: string;
+  actor_name: string;
+  actor_employee_code: string;
+  target_user_id: string;
+  target_name: string;
+  target_employee_code: string;
+  expires_at: string;
+}
+
+export interface ImpersonationTokenResponse {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  expires_in: number;
+  is_impersonated: boolean;
+  impersonation: ImpersonationMetadata;
+}
+
+export interface ImpersonationStatusResponse {
+  is_impersonated: boolean;
+  impersonation?: ImpersonationMetadata | null;
+}
+
+export interface ReturnToAdminResponse {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  expires_in: number;
+  message: string;
+}
+
+

@@ -1,11 +1,17 @@
 """Authentication API routes."""
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_active_user, require_fully_activated_user
+from app.api.deps import (
+    get_current_active_user,
+    oauth2_scheme,
+    require_fully_activated_user,
+    require_super_admin,
+)
 from app.core.config import settings
+from app.core.security import decode_and_validate_token
 from app.database.session import get_db
 from app.models.company import Company
 from app.models.department import Department
@@ -23,8 +29,14 @@ from app.schemas.auth import (
     RefreshTokenRequest,
     TokenResponse,
 )
+from app.schemas.impersonation import (
+    ImpersonateStartRequest,
+    ImpersonationStatusResponse,
+    ImpersonationTokenResponse,
+    ReturnToAdminResponse,
+)
 from app.schemas.permission import AccessibleModuleRead, UserEffectivePermissionsResponse
-from app.services import permissions
+from app.services import impersonation_service, permissions
 from app.services.auth_service import (
     authenticate_user,
     change_user_password,
@@ -89,15 +101,132 @@ def refresh_token(
     "/logout",
     status_code=status.HTTP_200_OK,
     summary="User Logout",
-    description="Revoke the supplied refresh token to terminate the session.",
+    description="Revoke the supplied refresh token and any active impersonation session.",
 )
 def logout(
     logout_data: LogoutRequest,
+    request: Request,
+    token: Optional[str] = Depends(oauth2_scheme),
     session: Session = Depends(get_db),
 ) -> Dict[str, str]:
     """Revoke refresh token and invalidate current session."""
+    client_ip = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+
+    if token:
+        try:
+            payload = decode_and_validate_token(token, expected_type="access")
+            if payload.get("is_impersonated"):
+                impersonation_service.end_impersonation_on_logout(
+                    session=session,
+                    token_payload=payload,
+                    client_ip=client_ip,
+                    user_agent=user_agent,
+                )
+        except Exception:
+            pass
+
     logout_user(session=session, raw_refresh_token=logout_data.refresh_token)
     return {"message": "Successfully logged out"}
+
+
+@router.post(
+    "/impersonate",
+    response_model=ImpersonationTokenResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Start Employee Impersonation",
+    description="Allows an authenticated Super Admin to temporarily log in as a target employee.",
+)
+def start_impersonate(
+    data: ImpersonateStartRequest,
+    request: Request,
+    current_user: User = Depends(require_super_admin),
+    session: Session = Depends(get_db),
+) -> ImpersonationTokenResponse:
+    """Switch active context to target employee for Super Admin."""
+    client_ip = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+
+    return impersonation_service.start_impersonation(
+        session=session,
+        admin_user=current_user,
+        employee_code=data.employee_code,
+        client_ip=client_ip,
+        user_agent=user_agent,
+    )
+
+
+@router.get(
+    "/impersonate/status",
+    response_model=ImpersonationStatusResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get Impersonation Status",
+    description="Check whether the active bearer token is an impersonation session and return metadata.",
+)
+def get_impersonate_status(
+    token: Optional[str] = Depends(oauth2_scheme),
+    session: Session = Depends(get_db),
+) -> ImpersonationStatusResponse:
+    """Check if current session is impersonated."""
+    if not token:
+        return ImpersonationStatusResponse(is_impersonated=False)
+
+    try:
+        payload = decode_and_validate_token(token, expected_type="access")
+        return impersonation_service.get_impersonation_status(
+            session=session,
+            token_payload=payload,
+        )
+    except Exception:
+        return ImpersonationStatusResponse(is_impersonated=False)
+
+
+@router.post(
+    "/impersonate/exit",
+    response_model=ReturnToAdminResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Return to Super Admin Session",
+    description="Terminate active impersonation session and restore originating Super Admin credentials.",
+)
+def exit_impersonate(
+    request: Request,
+    token: Optional[str] = Depends(oauth2_scheme),
+    session: Session = Depends(get_db),
+) -> ReturnToAdminResponse:
+    """Restore Super Admin session from active impersonation."""
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication token required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    client_ip = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+
+    payload = decode_and_validate_token(token, expected_type="access")
+    return impersonation_service.return_to_admin(
+        session=session,
+        token_payload=payload,
+        client_ip=client_ip,
+        user_agent=user_agent,
+    )
+
+
+@router.post(
+    "/impersonate/return",
+    response_model=ReturnToAdminResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Return to Super Admin Session (Alias)",
+    description="Alias for /impersonate/exit.",
+)
+def return_impersonate(
+    request: Request,
+    token: Optional[str] = Depends(oauth2_scheme),
+    session: Session = Depends(get_db),
+) -> ReturnToAdminResponse:
+    """Alias for exit_impersonate."""
+    return exit_impersonate(request=request, token=token, session=session)
 
 
 @router.get(
