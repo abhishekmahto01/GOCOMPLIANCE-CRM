@@ -16,12 +16,18 @@ from app.models.accounts_follow_up import AccountsFollowUp
 from app.models.accounts_invoice import AccountsInvoice
 from app.models.client import ClientMaster
 from app.models.company import Company
-from app.models.operation_application import OperationApplication
+from app.models.operation_application import ApplicationActivityLog, OperationApplication
 from app.models.payment_transaction import PaymentTransaction
 from app.models.sales_order import SalesOrder
+from app.models.service import ServiceMaster
 from app.models.user import User
 from app.schemas.accounts import (
     AccountsDashboardResponse,
+    AccountsEntriesResponse,
+    AccountsEntriesSummary,
+    AccountsEntryRead,
+    AccountsEntryUpdate,
+    AccountsExpenseApproval,
     AccountsExpenseCreate,
     AccountsExpenseListResponse,
     AccountsExpenseRead,
@@ -34,6 +40,7 @@ from app.schemas.accounts import (
     AccountsInvoiceRead,
     AccountsInvoiceUpdate,
     AccountsKpiSummary,
+    AccountsReimbursementSettle,
     AgeingBreakdownItem,
     CategoryExpenseItem,
     CollectionsTrendPoint,
@@ -44,13 +51,12 @@ from app.schemas.accounts import (
     PaymentRegisterItemRead,
     PaymentRegisterResponse,
     PaymentRegisterSummary,
+    PaymentStatusBreakdownItem,
     PaymentTransactionCreate,
     PaymentTransactionListResponse,
     PaymentTransactionRead,
     PaymentTransactionReverse,
     PaymentTransactionVerify,
-    AccountsExpenseApproval,
-    AccountsReimbursementSettle,
     RecentTransactionItem,
     TopOutstandingItem,
 )
@@ -223,26 +229,13 @@ def _apply_accounts_scope(
     user: User,
     context: permissions.DataScopeContext,
 ) -> Any:
-    """Apply RBAC data scope filters to SalesOrder or Accounts queries."""
+    """Apply RBAC data scope filters to SalesOrder or Accounts queries.
+    Accounts users see all sales entries within their authorized company scope.
+    """
     if context.scope == "ALL":
         return stmt
-    if context.scope in ("COMPANY", "DEPARTMENT"):
-        return stmt.where(SalesOrder.company_id == context.company_id)
-    if context.scope == "TEAM":
-        return stmt.where(
-            or_(
-                SalesOrder.salesperson_user_id.in_(context.team_user_ids),
-                SalesOrder.company_id == context.company_id,
-            )
-        )
-    if context.scope == "SELF":
-        return stmt.where(
-            or_(
-                SalesOrder.salesperson_user_id == user.user_id,
-                SalesOrder.company_id == context.company_id,
-            )
-        )
-    return stmt.where(SalesOrder.company_id == context.company_id)
+    return stmt.where(SalesOrder.company_id == (context.company_id or user.company_id))
+
 
 
 # -----------------------------------------------------------------------------
@@ -1713,344 +1706,531 @@ def get_accounts_dashboard_data(
     end_date: Optional[date] = None,
     **kwargs,
 ) -> AccountsDashboardResponse:
-    """Compute live financial metrics, collection trends, ageing analysis, and drill-down datasets."""
-    scope_ctx = permissions.resolve_data_scope_context(session, user, "ACCOUNTS_DASHBOARD")
-    
-    today = date.today()
-    dt_from = date_from or start_date or (today - timedelta(days=30))
-    dt_to = date_to or end_date or today
-    
-    # 1. Confirmed Orders in date range
+    """Compute live Accounts Dashboard KPIs and payment status breakdown based on authorized Sales records."""
+    try:
+        scope_ctx = permissions.resolve_data_scope_context(session, user, "ACCOUNTS_DASHBOARD")
+    except permissions.PermissionDeniedError:
+        scope_ctx = permissions.resolve_data_scope_context(session, user, "ACCOUNTS")
+
+    dt_from = date_from or start_date
+    dt_to = date_to or end_date
+
     order_stmt = (
         select(SalesOrder)
-        .where(
-            SalesOrder.confirmation_status == "CONFIRMED",
-            SalesOrder.order_date >= dt_from,
-            SalesOrder.order_date <= dt_to,
-        )
+        .where(SalesOrder.confirmation_status != "CANCELLED")
         .options(
             joinedload(SalesOrder.client),
             joinedload(SalesOrder.company),
             joinedload(SalesOrder.salesperson),
             joinedload(SalesOrder.service),
+            joinedload(SalesOrder.application).joinedload(OperationApplication.assigned_to),
             selectinload(SalesOrder.payment_transactions),
         )
     )
     order_stmt = _apply_accounts_scope(order_stmt, user, scope_ctx)
+
     if company_id and company_id != "ALL":
         try:
             order_stmt = order_stmt.where(SalesOrder.company_id == uuid.UUID(company_id))
         except ValueError:
             pass
+
     if salesperson_id and salesperson_id != "ALL":
         try:
             order_stmt = order_stmt.where(SalesOrder.salesperson_user_id == uuid.UUID(salesperson_id))
         except ValueError:
             pass
-            
-    range_orders = session.execute(order_stmt).unique().scalars().all()
-    _reconcile_legacy_advances(session, range_orders)
-    
-    conf_order_val = sum(float(o.order_value or 0) for o in range_orders)
-    conf_order_cnt = len(range_orders)
-    
-    # 2. Verified Collections in date range
-    pay_stmt = (
-        select(PaymentTransaction)
-        .where(
-            PaymentTransaction.payment_date >= dt_from,
-            PaymentTransaction.payment_date <= dt_to,
+
+    if dt_from:
+        order_stmt = order_stmt.where(SalesOrder.order_date >= dt_from)
+    if dt_to:
+        order_stmt = order_stmt.where(SalesOrder.order_date <= dt_to)
+
+    order_stmt = order_stmt.order_by(SalesOrder.order_date.desc(), SalesOrder.created_at.desc())
+
+    orders = session.execute(order_stmt).unique().scalars().all()
+
+    total_entries = len(orders)
+    tot_amt = sum(float(o.order_value or 0) for o in orders)
+    adv_amt = sum(float(o.amount_received or 0) for o in orders)
+    pend_amt = sum(float(o.balance_amount or 0) for o in orders)
+    g_fees = sum(float(o.govt_fees or 0) for o in orders)
+    inc_cost = sum(float(o.incidental_cost or 0) for o in orders)
+    est_profit = sum(
+        float(
+            o.profit_amount
+            if (o.profit_amount is not None and float(o.profit_amount) != 0)
+            else ((o.order_value or 0) - (o.govt_fees or 0) - (o.incidental_cost or 0))
         )
-        .options(
-            joinedload(PaymentTransaction.sales_order).joinedload(SalesOrder.client),
-        )
+        for o in orders
     )
-    if scope_ctx.scope != "ALL":
-        pay_stmt = pay_stmt.where(PaymentTransaction.company_id == scope_ctx.company_id)
-    if company_id and company_id != "ALL":
-        try:
-            pay_stmt = pay_stmt.where(PaymentTransaction.company_id == uuid.UUID(company_id))
-        except ValueError:
-            pass
-            
-    range_payments = session.execute(pay_stmt).scalars().all()
-    verified_payments = [p for p in range_payments if p.verification_status == "VERIFIED"]
-    unverified_payments = [p for p in range_payments if p.verification_status == "PENDING_VERIFICATION"]
-    
-    ver_col_amt = sum(float(p.amount) for p in verified_payments)
-    unver_col_amt = sum(float(p.amount) for p in unverified_payments)
-    
-    # 3. As-of-Today Outstanding & Overdue across all confirmed orders
-    all_order_stmt = (
-        select(SalesOrder)
-        .where(SalesOrder.confirmation_status == "CONFIRMED")
-        .options(
-            joinedload(SalesOrder.company),
-            joinedload(SalesOrder.client),
-            joinedload(SalesOrder.service),
-            joinedload(SalesOrder.salesperson),
-            joinedload(SalesOrder.application),
-            selectinload(SalesOrder.payment_transactions),
-        )
-    )
-    all_order_stmt = _apply_accounts_scope(all_order_stmt, user, scope_ctx)
-    if company_id and company_id != "ALL":
-        try:
-            all_order_stmt = all_order_stmt.where(SalesOrder.company_id == uuid.UUID(company_id))
-        except ValueError:
-            pass
-    if salesperson_id and salesperson_id != "ALL":
-        try:
-            all_order_stmt = all_order_stmt.where(SalesOrder.salesperson_user_id == uuid.UUID(salesperson_id))
-        except ValueError:
-            pass
-            
-    all_orders = session.execute(all_order_stmt).unique().scalars().all()
-    _reconcile_legacy_advances(session, all_orders)
-    
-    curr_outstanding = 0.0
-    curr_overdue = 0.0
-    outstanding_cnt = 0
-    overdue_cnt = 0
-    
-    ageing_dict: Dict[str, Dict[str, Any]] = {
-        "CURRENT": {"label": "Current (Not Due)", "amount": 0.0, "count": 0, "color": "#10b981"},
-        "1_30_DAYS": {"label": "1–30 Days Overdue", "amount": 0.0, "count": 0, "color": "#3b82f6"},
-        "31_60_DAYS": {"label": "31–60 Days Overdue", "amount": 0.0, "count": 0, "color": "#f59e0b"},
-        "61_90_DAYS": {"label": "61–90 Days Overdue", "amount": 0.0, "count": 0, "color": "#f97316"},
-        "OVER_90_DAYS": {"label": "90+ Days Critical", "amount": 0.0, "count": 0, "color": "#ef4444"},
-    }
-    
-    debtor_list: List[TopOutstandingItem] = []
-    company_agg: Dict[uuid.UUID, Dict[str, Any]] = {}
-    
-    for order in all_orders:
-        t_val = float(order.order_value or 0)
-        v_rec = sum(float(p.amount) for p in order.payment_transactions if p.verification_status == "VERIFIED")
-        pend = max(0.0, t_val - v_rec)
-        
-        c_id = order.company_id
-        c_name = order.company.company_name if order.company else "GoCompliance"
-        if c_id not in company_agg:
-            company_agg[c_id] = {"name": c_name, "order_val": 0.0, "received": 0.0, "outstanding": 0.0}
-        company_agg[c_id]["order_val"] += t_val
-        company_agg[c_id]["received"] += v_rec
-        company_agg[c_id]["outstanding"] += pend
-        
-        if pend > 0:
-            curr_outstanding += pend
-            outstanding_cnt += 1
-            
-            due_dt = order.order_date + timedelta(days=15)
-            days_od = (today - due_dt).days if today > due_dt else 0
-            
-            if days_od > 0:
-                curr_overdue += pend
-                overdue_cnt += 1
-                
-            if today <= due_dt:
-                ageing_dict["CURRENT"]["amount"] += pend
-                ageing_dict["CURRENT"]["count"] += 1
-            elif 1 <= days_od <= 30:
-                ageing_dict["1_30_DAYS"]["amount"] += pend
-                ageing_dict["1_30_DAYS"]["count"] += 1
-            elif 31 <= days_od <= 60:
-                ageing_dict["31_60_DAYS"]["amount"] += pend
-                ageing_dict["31_60_DAYS"]["count"] += 1
-            elif 61 <= days_od <= 90:
-                ageing_dict["61_90_DAYS"]["amount"] += pend
-                ageing_dict["61_90_DAYS"]["count"] += 1
-            else:
-                ageing_dict["OVER_90_DAYS"]["amount"] += pend
-                ageing_dict["OVER_90_DAYS"]["count"] += 1
-                
-            sp_name = f"{order.salesperson.first_name} {order.salesperson.last_name}".strip() if order.salesperson else "—"
-            op_st = order.application.application_status if order.application else None
-            
-            debtor_list.append(
-                TopOutstandingItem(
-                    sales_order_id=order.order_id,
-                    order_number=order.order_number,
-                    client_name=order.client.client_name if order.client else "—",
-                    service_name=order.service.service_name if order.service else "—",
-                    salesperson_name=sp_name,
-                    total_payable=t_val,
-                    verified_received=v_rec,
-                    pending_amount=pend,
-                    formatted_pending_amount=format_inr(pend),
-                    days_overdue=days_od,
-                    operation_status=op_st,
-                )
-            )
-            
-    debtor_list.sort(key=lambda d: d.pending_amount, reverse=True)
-    top_outstanding = debtor_list[:5]
-    
-    # 4. Direct Costs in date range
-    exp_stmt = (
-        select(AccountsExpense)
-        .where(
-            AccountsExpense.approval_status == "APPROVED",
-            AccountsExpense.expense_date >= dt_from,
-            AccountsExpense.expense_date <= dt_to,
-        )
-    )
-    if scope_ctx.scope != "ALL":
-        exp_stmt = exp_stmt.where(AccountsExpense.company_id == scope_ctx.company_id)
-    if company_id and company_id != "ALL":
-        try:
-            exp_stmt = exp_stmt.where(AccountsExpense.company_id == uuid.UUID(company_id))
-        except ValueError:
-            pass
-            
-    approved_expenses = session.execute(exp_stmt).scalars().all()
-    direct_costs_amt = sum(float(e.amount) for e in approved_expenses)
-    
-    # Estimated Margin
-    est_margin = max(0.0, conf_order_val - direct_costs_amt)
-    margin_pct = (est_margin / conf_order_val * 100.0) if conf_order_val > 0 else 0.0
-    
+
     kpis = AccountsKpiSummary(
-        confirmed_order_value=conf_order_val,
-        formatted_confirmed_order_value=format_inr(conf_order_val),
-        confirmed_order_count=conf_order_cnt,
-        verified_collections=ver_col_amt,
-        formatted_verified_collections=format_inr(ver_col_amt),
-        verified_collections_count=len(verified_payments),
-        unverified_collections=unver_col_amt,
-        formatted_unverified_collections=format_inr(unver_col_amt),
-        unverified_collections_count=len(unverified_payments),
-        current_outstanding=curr_outstanding,
-        formatted_current_outstanding=format_inr(curr_outstanding),
-        outstanding_orders_count=outstanding_cnt,
-        current_overdue=curr_overdue,
-        formatted_current_overdue=format_inr(curr_overdue),
-        overdue_orders_count=overdue_cnt,
-        recorded_direct_costs=direct_costs_amt,
-        formatted_recorded_direct_costs=format_inr(direct_costs_amt),
-        estimated_order_margin=est_margin,
-        formatted_estimated_order_margin=format_inr(est_margin),
-        margin_percentage=round(margin_pct, 1),
+        total_entries=total_entries,
+        total_amount=tot_amt,
+        formatted_total_amount=format_inr(tot_amt),
+        advance_amount=adv_amt,
+        formatted_advance_amount=format_inr(adv_amt),
+        pending_amount=pend_amt,
+        formatted_pending_amount=format_inr(pend_amt),
+        govt_fees=g_fees,
+        formatted_govt_fees=format_inr(g_fees),
+        incidental_cost=inc_cost,
+        formatted_incidental_cost=format_inr(inc_cost),
+        estimated_profit=est_profit,
+        formatted_estimated_profit=format_inr(est_profit),
+        # Legacy compatibility aliases
+        confirmed_order_value=tot_amt,
+        formatted_confirmed_order_value=format_inr(tot_amt),
+        confirmed_order_count=total_entries,
+        verified_collections=adv_amt,
+        formatted_verified_collections=format_inr(adv_amt),
+        current_outstanding=pend_amt,
+        formatted_current_outstanding=format_inr(pend_amt),
     )
-    
-    # 5. Collections Trend Points (grouped by day)
-    trend_map: Dict[str, float] = {}
-    trend_cnt_map: Dict[str, int] = {}
-    curr_dt = dt_from
-    while curr_dt <= dt_to:
-        ds = curr_dt.strftime("%Y-%m-%d")
-        trend_map[ds] = 0.0
-        trend_cnt_map[ds] = 0
-        curr_dt += timedelta(days=1)
-        
-    for p in verified_payments:
-        ds = p.payment_date.strftime("%Y-%m-%d")
-        if ds in trend_map:
-            trend_map[ds] += float(p.amount)
-            trend_cnt_map[ds] += 1
-            
-    trend_points: List[CollectionsTrendPoint] = [
-        CollectionsTrendPoint(
-            date=d_str,
-            label=datetime.strptime(d_str, "%Y-%m-%d").strftime("%d %b"),
-            verified_amount=amt,
-            order_count=trend_cnt_map[d_str],
-        )
-        for d_str, amt in sorted(trend_map.items())
+
+    # Payment status breakdown
+    status_order = [
+        ("FULLY_PAID", "Fully Paid"),
+        ("PARTIALLY_PAID", "Partially Paid"),
+        ("PENDING", "Pending"),
+        ("OVERDUE", "Overdue"),
     ]
-    
-    # 6. Ageing Breakdown Items
-    ageing_breakdown: List[AgeingBreakdownItem] = []
-    tot_ageing_amt = sum(v["amount"] for v in ageing_dict.values())
-    for b_key, b_info in ageing_dict.items():
-        pct = (b_info["amount"] / tot_ageing_amt * 100.0) if tot_ageing_amt > 0 else 0.0
-        ageing_breakdown.append(
-            AgeingBreakdownItem(
-                bucket=b_key,
-                label=b_info["label"],
-                amount=b_info["amount"],
-                count=b_info["count"],
-                percentage=round(pct, 1),
-                color=b_info["color"],
+    payment_breakdown: List[PaymentStatusBreakdownItem] = []
+    for st_code, st_lbl in status_order:
+        st_orders = [o for o in orders if o.payment_status == st_code]
+        cnt = len(st_orders)
+        amt = sum(float(o.order_value or 0) for o in st_orders)
+        pct = round((cnt / total_entries * 100.0), 1) if total_entries > 0 else 0.0
+        payment_breakdown.append(
+            PaymentStatusBreakdownItem(
+                status=st_code,
+                label=st_lbl,
+                count=cnt,
+                amount=amt,
+                formatted_amount=format_inr(amt),
+                percentage=pct,
             )
         )
-        
-    # 7. Company Breakdown Items
-    company_breakdown: List[CompanyFinancialItem] = []
-    for c_uuid, c_data in company_agg.items():
-        c_rate = (c_data["received"] / c_data["order_val"] * 100.0) if c_data["order_val"] > 0 else 0.0
-        company_breakdown.append(
-            CompanyFinancialItem(
-                company_id=c_uuid,
-                company_name=c_data["name"],
-                order_value=c_data["order_val"],
-                verified_received=c_data["received"],
-                outstanding=c_data["outstanding"],
-                collection_rate=round(c_rate, 1),
-            )
-        )
-        
-    # 8. Category Expense Items
-    cat_names = {
-        "GOVT_FEES": "Statutory / Govt Fees",
-        "VENDOR_COST": "Vendor / Outlay Cost",
-        "INCIDENTAL_COST": "Incidental Cost",
-        "EMPLOYEE_REIMBURSEMENT": "Employee Reimbursements",
-        "OTHER_DIRECT_COST": "Other Direct Cost",
-    }
-    cat_agg: Dict[str, float] = {}
-    cat_cnt: Dict[str, int] = {}
-    for exp in approved_expenses:
-        cat_agg[exp.category] = cat_agg.get(exp.category, 0.0) + float(exp.amount)
-        cat_cnt[exp.category] = cat_cnt.get(exp.category, 0) + 1
-        
-    expense_breakdown: List[CategoryExpenseItem] = []
-    for c_code, c_amt in cat_agg.items():
-        pct = (c_amt / direct_costs_amt * 100.0) if direct_costs_amt > 0 else 0.0
-        expense_breakdown.append(
-            CategoryExpenseItem(
-                category=c_code,
-                label=cat_names.get(c_code, c_code),
-                amount=c_amt,
-                percentage=round(pct, 1),
-                count=cat_cnt.get(c_code, 0),
-            )
-        )
-        
-    # 9. Recent Transactions
-    sorted_recent = sorted(range_payments, key=lambda p: (p.payment_date, p.created_at), reverse=True)[:6]
-    recent_transactions: List[RecentTransactionItem] = [
-        RecentTransactionItem(
-            payment_id=p.payment_id,
-            payment_number=p.payment_number,
-            sales_order_number=p.sales_order.order_number if p.sales_order else "—",
-            client_name=p.sales_order.client.client_name if p.sales_order and p.sales_order.client else "—",
-            amount=float(p.amount),
-            formatted_amount=format_inr(float(p.amount)),
-            payment_date=p.payment_date.strftime("%d %b %Y"),
-            payment_mode=p.payment_mode,
-            verification_status=p.verification_status,
-        )
-        for p in sorted_recent
-    ]
-    
+
+    # Recent entries (canonical 21-column schema)
+    recent_entries = [_to_accounts_entry_read(o, idx + 1) for idx, o in enumerate(orders[:8])]
+
     filter_opts = get_accounts_filter_options(session, user)
-    
+
+    date_range_dict = {
+        "start_date": dt_from.strftime("%Y-%m-%d") if dt_from else "",
+        "end_date": dt_to.strftime("%Y-%m-%d") if dt_to else "",
+        "formatted": f"{dt_from.strftime('%d %b %Y')} – {dt_to.strftime('%d %b %Y')}" if (dt_from and dt_to) else "All Time",
+    }
+
     return AccountsDashboardResponse(
-        date_range={
-            "start_date": dt_from.strftime("%Y-%m-%d"),
-            "end_date": dt_to.strftime("%Y-%m-%d"),
-            "formatted": f"{dt_from.strftime('%d %b %Y')} – {dt_to.strftime('%d %b %Y')}",
-        },
+        date_range=date_range_dict,
         kpis=kpis,
-        collections_trend=trend_points,
-        ageing_breakdown=ageing_breakdown,
-        company_breakdown=company_breakdown,
-        expense_breakdown=expense_breakdown,
-        recent_transactions=recent_transactions,
-        top_outstanding=top_outstanding,
+        payment_status_breakdown=payment_breakdown,
+        recent_entries=recent_entries,
         filter_options=filter_opts,
     )
+
+
+# -----------------------------------------------------------------------------
+# 7.1 Accounts Entries (Shared Sales Records with Canonical 21 Columns)
+# -----------------------------------------------------------------------------
+def _to_accounts_entry_read(order: SalesOrder, s_no: int = 1) -> AccountsEntryRead:
+    """Map SalesOrder to canonical 21-column AccountsEntryRead."""
+    c_name = order.client.client_name if order.client else "—"
+    c_phone = order.client.contact_phone if order.client else None
+    s_name = order.service.service_name if order.service else "—"
+    s_code = order.service.service_code if order.service else None
+    sp_name = f"{order.salesperson.first_name} {order.salesperson.last_name}".strip() if order.salesperson else "—"
+    sp_code = order.salesperson.employee_code if order.salesperson else None
+
+    app = order.application
+    app_id = app.application_id if app else None
+    assigned_to_id = app.assigned_to_user_id if app else None
+    assigned_to_name = (
+        f"{app.assigned_to.first_name} {app.assigned_to.last_name}".strip()
+        if (app and app.assigned_to)
+        else "Unassigned"
+    )
+    assigned_to_code = app.assigned_to.employee_code if (app and app.assigned_to) else None
+    op_status = app.application_status if app else None
+    work_status = app.application_status if app else order.confirmation_status
+
+    t_val = float(order.order_value or 0)
+    r_val = float(order.amount_received or 0)
+    b_val = float(order.balance_amount or 0)
+    g_val = float(order.govt_fees or 0)
+    i_val = float(order.incidental_cost or 0)
+    p_val = float(
+        order.profit_amount
+        if (order.profit_amount is not None and float(order.profit_amount) != 0)
+        else (t_val - g_val - i_val)
+    )
+
+    return AccountsEntryRead(
+        s_no=s_no,
+        order_id=order.order_id,
+        order_number=order.order_number,
+        company_id=order.company_id,
+        client_id=order.client_id,
+        service_id=order.service_id,
+        salesperson_user_id=order.salesperson_user_id,
+        assigned_to_user_id=assigned_to_id,
+        application_id=app_id,
+        order_date=order.order_date,
+        formatted_date=order.order_date.strftime("%d %b %Y"),
+        client_name=c_name,
+        location=order.location,
+        contact_no=c_phone,
+        lead_source=order.lead_source,
+        service_name=s_name,
+        service_code=s_code,
+        salesperson_name=sp_name,
+        salesperson_code=sp_code,
+        assigned_to_name=assigned_to_name,
+        assigned_to_code=assigned_to_code,
+        work_status=work_status,
+        operation_status=op_status,
+        order_value=t_val,
+        formatted_order_value=format_inr(t_val),
+        amount_received=r_val,
+        formatted_amount_received=format_inr(r_val),
+        balance_amount=b_val,
+        formatted_balance_amount=format_inr(b_val),
+        payment_status=order.payment_status,
+        proforma_invoice_no=order.proforma_invoice_no,
+        tax_invoice_no=order.tax_invoice_no,
+        reimbursement_note=order.reimbursement_note,
+        govt_fees=g_val,
+        formatted_govt_fees=format_inr(g_val),
+        incidental_cost=i_val,
+        formatted_incidental_cost=format_inr(i_val),
+        profit_amount=p_val,
+        formatted_profit_amount=format_inr(p_val),
+        remarks=order.notes,
+        notes=order.notes,
+        confirmation_status=order.confirmation_status,
+        created_at=order.created_at,
+        updated_at=order.updated_at,
+    )
+
+
+def get_accounts_entries(
+    session: Session,
+    user: User,
+    page: int = 1,
+    limit: int = 50,
+    search: Optional[str] = None,
+    payment_status: Optional[str] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    company_id: Optional[str] = None,
+) -> AccountsEntriesResponse:
+    """Retrieve filtered, paginated Accounts entries showing shared Sales orders across company scope."""
+    try:
+        scope_ctx = permissions.resolve_data_scope_context(session, user, "ACCOUNTS_ENTRIES")
+    except permissions.PermissionDeniedError:
+        scope_ctx = permissions.resolve_data_scope_context(session, user, "ACCOUNTS")
+
+    query = (
+        select(SalesOrder)
+        .join(ClientMaster, SalesOrder.client_id == ClientMaster.client_id)
+        .join(ServiceMaster, SalesOrder.service_id == ServiceMaster.service_id)
+        .join(User, SalesOrder.salesperson_user_id == User.user_id)
+        .outerjoin(OperationApplication, SalesOrder.order_id == OperationApplication.sales_order_id)
+        .options(
+            joinedload(SalesOrder.client),
+            joinedload(SalesOrder.company),
+            joinedload(SalesOrder.service),
+            joinedload(SalesOrder.salesperson),
+            joinedload(SalesOrder.application).joinedload(OperationApplication.assigned_to),
+        )
+        .where(SalesOrder.confirmation_status != "CANCELLED")
+    )
+
+    query = _apply_accounts_scope(query, user, scope_ctx)
+
+    if company_id and company_id != "ALL":
+        try:
+            query = query.where(SalesOrder.company_id == uuid.UUID(company_id))
+        except ValueError:
+            pass
+
+    if date_from:
+        query = query.where(SalesOrder.order_date >= date_from)
+    if date_to:
+        query = query.where(SalesOrder.order_date <= date_to)
+
+    if payment_status and payment_status != "ALL":
+        query = query.where(SalesOrder.payment_status == payment_status.upper())
+
+    if search and search.strip():
+        term = f"%{search.strip()}%"
+        query = query.where(
+            or_(
+                ClientMaster.client_name.ilike(term),
+                ClientMaster.contact_phone.ilike(term),
+                SalesOrder.location.ilike(term),
+                SalesOrder.order_number.ilike(term),
+                SalesOrder.proforma_invoice_no.ilike(term),
+                SalesOrder.tax_invoice_no.ilike(term),
+                SalesOrder.reimbursement_note.ilike(term),
+                SalesOrder.notes.ilike(term),
+                ServiceMaster.service_name.ilike(term),
+                User.first_name.ilike(term),
+                User.last_name.ilike(term),
+                User.employee_code.ilike(term),
+            )
+        )
+
+    query = query.order_by(SalesOrder.order_date.desc(), SalesOrder.created_at.desc())
+
+    all_matched = session.execute(query).unique().scalars().all()
+
+    total_count = len(all_matched)
+    total_val = sum(float(o.order_value or 0) for o in all_matched)
+    total_adv = sum(float(o.amount_received or 0) for o in all_matched)
+    total_pend = sum(float(o.balance_amount or 0) for o in all_matched)
+    total_g_fees = sum(float(o.govt_fees or 0) for o in all_matched)
+    total_inc = sum(float(o.incidental_cost or 0) for o in all_matched)
+    total_prof = sum(
+        float(
+            o.profit_amount
+            if (o.profit_amount is not None and float(o.profit_amount) != 0)
+            else ((o.order_value or 0) - (o.govt_fees or 0) - (o.incidental_cost or 0))
+        )
+        for o in all_matched
+    )
+
+    summary = AccountsEntriesSummary(
+        total_orders=total_count,
+        total_amount=total_val,
+        formatted_total_amount=format_inr(total_val),
+        total_advance=total_adv,
+        formatted_total_advance=format_inr(total_adv),
+        total_pending=total_pend,
+        formatted_total_pending=format_inr(total_pend),
+        total_govt_fees=total_g_fees,
+        formatted_total_govt_fees=format_inr(total_g_fees),
+        total_incidental_cost=total_inc,
+        formatted_total_incidental_cost=format_inr(total_inc),
+        total_profits=total_prof,
+        formatted_total_profits=format_inr(total_prof),
+    )
+
+    safe_page = max(1, page)
+    safe_limit = max(1, min(200, limit))
+    offset_val = (safe_page - 1) * safe_limit
+    paged_orders = all_matched[offset_val : offset_val + safe_limit]
+    total_pages = max(1, (total_count + safe_limit - 1) // safe_limit)
+
+    items = [
+        _to_accounts_entry_read(o, s_no=offset_val + idx + 1)
+        for idx, o in enumerate(paged_orders)
+    ]
+
+    return AccountsEntriesResponse(
+        items=items,
+        total_count=total_count,
+        page=safe_page,
+        limit=safe_limit,
+        total_pages=total_pages,
+        summary=summary,
+    )
+
+
+def update_accounts_entry(
+    session: Session,
+    user: User,
+    order_id: uuid.UUID,
+    data: AccountsEntryUpdate,
+    ip_address: Optional[str] = None,
+) -> AccountsEntryRead:
+    """Update only allowed accounts fields (Proforma Inv, Tax Inv, Reimbursement Note, Remarks) on SalesOrder."""
+    has_perm = (
+        permissions.is_super_admin_user(session, user)
+        or permissions.has_permission(session, user, "ACCOUNTS_ENTRIES", "edit")
+        or permissions.has_permission(session, user, "ACCOUNTS_ENTRIES", "update")
+        or permissions.has_permission(session, user, "ACCOUNTS", "edit")
+        or permissions.has_permission(session, user, "ACCOUNTS", "update")
+    )
+    if not has_perm:
+        raise permissions.PermissionDeniedError("You do not have permission to edit Accounts entry fields.")
+
+    try:
+        scope_ctx = permissions.resolve_data_scope_context(session, user, "ACCOUNTS_ENTRIES")
+    except permissions.PermissionDeniedError:
+        scope_ctx = permissions.resolve_data_scope_context(session, user, "ACCOUNTS")
+
+    order = (
+        session.query(SalesOrder)
+        .options(
+            joinedload(SalesOrder.client),
+            joinedload(SalesOrder.company),
+            joinedload(SalesOrder.service),
+            joinedload(SalesOrder.salesperson),
+            joinedload(SalesOrder.application).joinedload(OperationApplication.assigned_to),
+        )
+        .filter(SalesOrder.order_id == order_id)
+        .first()
+    )
+
+    if not order or order.confirmation_status == "CANCELLED":
+        raise ValueError(f"Sales order with ID '{order_id}' not found.")
+
+    if not scope_ctx.is_user_permitted(order.salesperson_user_id, order.company_id):
+        raise permissions.PermissionDeniedError("You are not authorized to update records for this company.")
+
+    old_values = {
+        "proforma_invoice_no": order.proforma_invoice_no,
+        "tax_invoice_no": order.tax_invoice_no,
+        "reimbursement_note": order.reimbursement_note,
+        "notes": order.notes,
+    }
+
+    changed = False
+    new_values: Dict[str, Any] = {}
+
+    if data.proforma_invoice_no is not None:
+        val = data.proforma_invoice_no.strip() if data.proforma_invoice_no else None
+        if val != order.proforma_invoice_no:
+            order.proforma_invoice_no = val
+            changed = True
+        new_values["proforma_invoice_no"] = val
+
+    if data.tax_invoice_no is not None:
+        val = data.tax_invoice_no.strip() if data.tax_invoice_no else None
+        if val != order.tax_invoice_no:
+            order.tax_invoice_no = val
+            changed = True
+        new_values["tax_invoice_no"] = val
+
+    if data.reimbursement_note is not None:
+        val = data.reimbursement_note.strip() if data.reimbursement_note else None
+        if val != order.reimbursement_note:
+            order.reimbursement_note = val
+            changed = True
+        new_values["reimbursement_note"] = val
+
+    remarks_input = data.remarks if data.remarks is not None else data.notes
+    if remarks_input is not None:
+        val = remarks_input.strip() if remarks_input else None
+        if val != order.notes:
+            order.notes = val
+            changed = True
+        new_values["notes"] = val
+
+    if changed:
+        order.updated_at = datetime.now(timezone.utc)
+        session.flush()
+
+        _log_accounts_audit(
+            session=session,
+            company_id=order.company_id,
+            entity_type="SALES_ORDER",
+            entity_id=order.order_id,
+            action="ACCOUNTS_UPDATE",
+            actor_user_id=user.user_id,
+            old_values=old_values,
+            new_values=new_values,
+            reason="Updated Accounts financial fields",
+            ip_address=ip_address,
+        )
+
+        if order.application:
+            comment_str = f"Accounts fields updated by {user.first_name} {user.last_name}"
+            activity = ApplicationActivityLog(
+                application_id=order.application.application_id,
+                actor_user_id=user.user_id,
+                action_type="ACCOUNTS_UPDATE",
+                old_value=json.dumps(old_values, default=str)[:255],
+                new_value=json.dumps(new_values, default=str)[:255],
+                comment=comment_str,
+                created_at=datetime.now(timezone.utc),
+            )
+            session.add(activity)
+
+        session.commit()
+
+    return _to_accounts_entry_read(order)
+
+
+def export_accounts_entries_csv(
+    session: Session,
+    user: User,
+    search: Optional[str] = None,
+    payment_status: Optional[str] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    company_id: Optional[str] = None,
+) -> str:
+    """Generate safe, sanitized CSV export covering all 21 canonical columns."""
+    res = get_accounts_entries(
+        session=session,
+        user=user,
+        page=1,
+        limit=10000,
+        search=search,
+        payment_status=payment_status,
+        date_from=date_from,
+        date_to=date_to,
+        company_id=company_id,
+    )
+
+    output = io.StringIO()
+    writer = csv.writer(output, dialect="excel")
+
+    writer.writerow([
+        "S.No",
+        "Date",
+        "Client Name",
+        "Location",
+        "Contact No",
+        "Source",
+        "Work",
+        "Converted By",
+        "Assigned To",
+        "Work Status",
+        "Total Amount (INR)",
+        "Advance Amount (INR)",
+        "Pending Amount (INR)",
+        "Payment Status",
+        "Proforma Inv. No.",
+        "Tax Inv. No.",
+        "Reimbursement Note",
+        "Govt Fees (INR)",
+        "Incidental Cost (INR)",
+        "Profits (INR)",
+        "Remarks",
+    ])
+
+    for item in res.items:
+        writer.writerow([
+            item.s_no,
+            sanitize_csv_field(item.formatted_date),
+            sanitize_csv_field(item.client_name),
+            sanitize_csv_field(item.location or ""),
+            sanitize_csv_field(item.contact_no or ""),
+            sanitize_csv_field(item.lead_source),
+            sanitize_csv_field(item.service_name),
+            sanitize_csv_field(item.salesperson_name),
+            sanitize_csv_field(item.assigned_to_name or "Unassigned"),
+            sanitize_csv_field(item.work_status),
+            item.order_value,
+            item.amount_received,
+            item.balance_amount,
+            sanitize_csv_field(item.payment_status),
+            sanitize_csv_field(item.proforma_invoice_no or ""),
+            sanitize_csv_field(item.tax_invoice_no or ""),
+            sanitize_csv_field(item.reimbursement_note or ""),
+            item.govt_fees,
+            item.incidental_cost,
+            item.profit_amount,
+            sanitize_csv_field(item.remarks or item.notes or ""),
+        ])
+
+    return output.getvalue()
 
 
 # -----------------------------------------------------------------------------

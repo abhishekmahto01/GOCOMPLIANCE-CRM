@@ -1,26 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from '../context/AuthContext';
 import { ThemeProvider } from '../context/ThemeContext';
 import { DashboardPage } from '../pages/DashboardPage';
 import { AccountsLayout } from '../components/accounts/AccountsLayout';
 import { AccountsDashboardPage } from '../pages/accounts/AccountsDashboardPage';
-import { PaymentRegisterPage } from '../pages/accounts/PaymentRegisterPage';
-import { OutstandingFollowupsPage } from '../pages/accounts/OutstandingFollowupsPage';
-import { InvoicesReceiptsPage } from '../pages/accounts/InvoicesReceiptsPage';
-import { ExpensesReimbursementsPage } from '../pages/accounts/ExpensesReimbursementsPage';
-import { FinancialReportsPage } from '../pages/accounts/FinancialReportsPage';
+import { AccountsEntriesPage } from '../pages/accounts/AccountsEntriesPage';
 import { ProtectedRoute } from '../components/auth/ProtectedRoute';
 import * as authApi from '../api/auth';
 import * as accountsApi from '../api/accounts';
 import { ACCESS_TOKEN_KEY } from '../api/client';
 import type { CurrentUser } from '../types/auth';
 import type { AccessibleModule } from '../types/permission';
-import type { AccountsDashboardResponse } from '../types/accounts';
+import type { AccountsDashboardResponse, AccountsEntriesResponse } from '../types/accounts';
 
-// Mock ResizeObserver for Recharts
+// Mock ResizeObserver for charts
 globalThis.ResizeObserver = class ResizeObserver {
   observe() {}
   unobserve() {}
@@ -64,76 +60,145 @@ const mockDashboardData: AccountsDashboardResponse = {
     to_date: '2026-09-30',
   },
   kpis: {
-    confirmed_order_value: 500000.0,
-    formatted_confirmed_order_value: '₹5,00,000',
-    confirmed_order_count: 10,
-    verified_collections: 350000.0,
-    formatted_verified_collections: '₹3,50,000',
-    verified_collections_count: 7,
-    unverified_collections: 50000.0,
-    formatted_unverified_collections: '₹50,000',
-    unverified_collections_count: 1,
-    current_outstanding: 150000.0,
-    formatted_current_outstanding: '₹1,50,000',
-    outstanding_orders_count: 3,
-    current_overdue: 80000.0,
-    formatted_current_overdue: '₹80,000',
-    overdue_orders_count: 2,
-    recorded_direct_costs: 45000.0,
-    formatted_recorded_direct_costs: '₹45,000',
-    estimated_order_margin: 455000.0,
-    formatted_estimated_order_margin: '₹4,55,000',
-    margin_percentage: 91.0,
+    total_entries: 10,
+    total_amount: 500000.0,
+    formatted_total_amount: '₹5,00,000',
+    advance_amount: 350000.0,
+    formatted_advance_amount: '₹3,50,000',
+    pending_amount: 150000.0,
+    formatted_pending_amount: '₹1,50,000',
+    govt_fees: 25000.0,
+    formatted_govt_fees: '₹25,000',
+    incidental_cost: 5000.0,
+    formatted_incidental_cost: '₹5,000',
+    estimated_profit: 470000.0,
+    formatted_estimated_profit: '₹4,70,000',
   },
-  collections_trend: [
-    { date: '2026-09-01', label: '01 Sep', verified_amount: 50000.0, order_count: 2 },
-    { date: '2026-09-15', label: '15 Sep', verified_amount: 100000.0, order_count: 3 },
-  ],
-  ageing_breakdown: [
-    { bucket: '1_30_DAYS', label: '1 - 30 Days', amount: 30000.0, count: 2, percentage: 37.5, color: '#3B82F6' },
-    { bucket: '31_60_DAYS', label: '31 - 60 Days', amount: 50000.0, count: 1, percentage: 62.5, color: '#F59E0B' },
-  ],
-  company_breakdown: [
+  payment_status_breakdown: [
     {
-      company_id: 'comp-1',
-      company_name: 'GoCompliances Pvt Ltd',
-      order_value: 500000.0,
-      verified_received: 350000.0,
-      outstanding: 150000.0,
-      collection_rate: 70.0,
+      status: 'PAID',
+      label: 'Fully Paid',
+      count: 7,
+      amount: 350000.0,
+      formatted_amount: '₹3,50,000',
+      percentage: 70.0,
+    },
+    {
+      status: 'PARTIAL',
+      label: 'Partially Paid',
+      count: 3,
+      amount: 150000.0,
+      formatted_amount: '₹1,50,000',
+      percentage: 30.0,
     },
   ],
-  expense_breakdown: [
-    { category: 'GOVT_FEES', label: 'Govt Fees', amount: 25000.0, percentage: 55.5, count: 2 },
-  ],
-  recent_transactions: [],
-  top_outstanding: [
+  recent_entries: [
     {
-      sales_order_id: 'so-1',
+      s_no: 1,
+      order_id: 'so-1',
       order_number: 'SO-001',
+      company_id: 'comp-1',
+      client_id: 'cli-1',
+      service_id: 'srv-1',
+      salesperson_user_id: 'u-1',
+      order_date: '2026-09-15',
+      formatted_date: '15/09/2026',
       client_name: 'Apex Corp',
+      location: 'Mumbai',
+      contact_no: '+919876543210',
+      lead_source: 'Google Ads',
       service_name: 'GST Registration',
       salesperson_name: 'Rahul Sharma',
-      total_payable: 100000.0,
-      verified_received: 20000.0,
-      pending_amount: 80000.0,
-      formatted_pending_amount: '₹80,000',
-      days_overdue: 45,
-      operation_status: 'IN_PROGRESS',
+      assigned_to_name: 'Amit Patel',
+      work_status: 'IN_PROGRESS',
+      order_value: 100000.0,
+      formatted_order_value: '₹1,00,000',
+      amount_received: 40000.0,
+      formatted_amount_received: '₹40,000',
+      balance_amount: 60000.0,
+      formatted_balance_amount: '₹60,000',
+      payment_status: 'PARTIAL',
+      proforma_invoice_no: 'PI-2026-001',
+      tax_invoice_no: 'TI-2026-001',
+      reimbursement_note: 'Travel expense',
+      govt_fees: 5000.0,
+      formatted_govt_fees: '₹5,000',
+      incidental_cost: 1000.0,
+      formatted_incidental_cost: '₹1,000',
+      profit_amount: 94000.0,
+      formatted_profit_amount: '₹94,000',
+      remarks: 'First payment received',
+      confirmation_status: 'CONFIRMED',
+      created_at: '2026-09-15T10:00:00Z',
+      updated_at: '2026-09-15T10:00:00Z',
     },
   ],
-  filter_options: {
-    companies: [{ id: 'comp-1', label: 'GoCompliances Pvt Ltd' }],
-    clients: [],
-    salespersons: [{ id: 'u-1', label: 'Rahul Sharma' }],
-    payment_statuses: [],
-    payment_modes: [],
-    expense_categories: [],
-    receiving_accounts: [],
+};
+
+const mockEntriesData: AccountsEntriesResponse = {
+  items: [
+    {
+      s_no: 1,
+      order_id: 'so-1',
+      order_number: 'SO-001',
+      company_id: 'comp-1',
+      client_id: 'cli-1',
+      service_id: 'srv-1',
+      salesperson_user_id: 'u-1',
+      order_date: '2026-09-15',
+      formatted_date: '15/09/2026',
+      client_name: 'Apex Corp',
+      location: 'Mumbai',
+      contact_no: '+919876543210',
+      lead_source: 'Google Ads',
+      service_name: 'GST Registration',
+      salesperson_name: 'Rahul Sharma',
+      assigned_to_name: 'Amit Patel',
+      work_status: 'IN_PROGRESS',
+      order_value: 100000.0,
+      formatted_order_value: '₹1,00,000',
+      amount_received: 40000.0,
+      formatted_amount_received: '₹40,000',
+      balance_amount: 60000.0,
+      formatted_balance_amount: '₹60,000',
+      payment_status: 'PARTIAL',
+      proforma_invoice_no: 'PI-2026-001',
+      tax_invoice_no: 'TI-2026-001',
+      reimbursement_note: 'Travel expense',
+      govt_fees: 5000.0,
+      formatted_govt_fees: '₹5,000',
+      incidental_cost: 1000.0,
+      formatted_incidental_cost: '₹1,000',
+      profit_amount: 94000.0,
+      formatted_profit_amount: '₹94,000',
+      remarks: 'First payment received',
+      confirmation_status: 'CONFIRMED',
+      created_at: '2026-09-15T10:00:00Z',
+      updated_at: '2026-09-15T10:00:00Z',
+    },
+  ],
+  total_count: 1,
+  page: 1,
+  limit: 25,
+  total_pages: 1,
+  summary: {
+    total_orders: 1,
+    total_amount: 100000.0,
+    formatted_total_amount: '₹1,00,000',
+    total_advance: 40000.0,
+    formatted_total_advance: '₹40,000',
+    total_pending: 60000.0,
+    formatted_total_pending: '₹60,000',
+    total_govt_fees: 5000.0,
+    formatted_total_govt_fees: '₹5,000',
+    total_incidental_cost: 1000.0,
+    formatted_total_incidental_cost: '₹1,000',
+    total_profits: 94000.0,
+    formatted_total_profits: '₹94,000',
   },
 };
 
-describe('Accounts Module & Workspace Navigation Tests', () => {
+describe('Accounts Module Navigation & Page Tests', () => {
   beforeEach(() => {
     localStorage.clear();
     localStorage.setItem(ACCESS_TOKEN_KEY, 'mock-jwt-token');
@@ -157,11 +222,12 @@ describe('Accounts Module & Workspace Navigation Tests', () => {
               >
                 <Route index element={<AccountsDashboardPage />} />
                 <Route path="dashboard" element={<AccountsDashboardPage />} />
-                <Route path="payments" element={<PaymentRegisterPage />} />
-                <Route path="outstanding" element={<OutstandingFollowupsPage />} />
-                <Route path="invoices" element={<InvoicesReceiptsPage />} />
-                <Route path="expenses" element={<ExpensesReimbursementsPage />} />
-                <Route path="reports" element={<FinancialReportsPage />} />
+                <Route path="entries" element={<AccountsEntriesPage />} />
+                <Route path="payments" element={<Navigate to="/accounts/entries" replace />} />
+                <Route path="outstanding" element={<Navigate to="/accounts/entries" replace />} />
+                <Route path="invoices" element={<Navigate to="/accounts/entries" replace />} />
+                <Route path="expenses" element={<Navigate to="/accounts/entries" replace />} />
+                <Route path="reports" element={<Navigate to="/accounts/entries" replace />} />
               </Route>
             </Routes>
           </MemoryRouter>
@@ -174,55 +240,82 @@ describe('Accounts Module & Workspace Navigation Tests', () => {
     vi.spyOn(authApi, 'getCurrentUserApi').mockResolvedValue(superAdminUser);
     vi.spyOn(authApi, 'getAccessibleModulesApi').mockResolvedValue(mockAccessibleModules);
     vi.spyOn(accountsApi, 'getAccountsDashboardApi').mockResolvedValue(mockDashboardData);
-    vi.spyOn(accountsApi, 'getAccountsFilterOptionsApi').mockResolvedValue(mockDashboardData.filter_options);
 
     renderWithAccountsRouter('/dashboard');
 
-    // Wait for module cards to load
     await screen.findByRole('heading', { name: 'Accounts' });
     expect(screen.getByRole('heading', { name: 'Accounts' })).toBeInTheDocument();
 
-    // Click Accounts card
     const accountsCard = screen.getByRole('heading', { name: 'Accounts' }).closest('div');
     expect(accountsCard).toBeTruthy();
     await userEvent.click(accountsCard!);
 
-    // Should navigate directly to Accounts Dashboard
-    await screen.findByText(/Financial Health & Collections/i);
-    expect(screen.getByText(/Financial Health & Collections/i)).toBeInTheDocument();
+    await screen.findByRole('heading', { name: /Accounts Dashboard/i });
+    expect(screen.getByRole('heading', { name: /Accounts Dashboard/i })).toBeInTheDocument();
   });
 
-  it('2. Renders Accounts KPI summary cards and financial metrics on /accounts', async () => {
+  it('2. Renders exactly 7 canonical KPI summary cards with proper labels on /accounts/dashboard', async () => {
     vi.spyOn(authApi, 'getCurrentUserApi').mockResolvedValue(superAdminUser);
     vi.spyOn(authApi, 'getAccessibleModulesApi').mockResolvedValue(mockAccessibleModules);
     vi.spyOn(accountsApi, 'getAccountsDashboardApi').mockResolvedValue(mockDashboardData);
-    vi.spyOn(accountsApi, 'getAccountsFilterOptionsApi').mockResolvedValue(mockDashboardData.filter_options);
 
-    renderWithAccountsRouter('/accounts');
+    renderWithAccountsRouter('/accounts/dashboard');
 
-    await screen.findByText(/Financial Health & Collections/i);
-    expect(screen.getAllByText(/Confirmed Order Value/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Verified Collections/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Current Outstanding/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Overdue Receivables/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Direct Operational Costs/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Estimated Order Margin/i).length).toBeGreaterThan(0);
+    await screen.findByRole('heading', { name: /Accounts Dashboard/i });
+    expect(screen.getAllByText(/Total Entries/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Total Amount/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Advance Amount/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Pending Amount/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Govt Fees/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Incidental Cost/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Estimated Profit/i).length).toBeGreaterThan(0);
+    // Verify "Verified Collections" is NOT present
+    expect(screen.queryByText(/Verified Collections/i)).not.toBeInTheDocument();
   });
 
-  it('3. Accounts sidebar renders all 6 navigation links and Back to Main Portal link', async () => {
+  it('3. Accounts sidebar renders exactly 2 navigation links (Dashboard, Accounts Entries)', async () => {
     vi.spyOn(authApi, 'getCurrentUserApi').mockResolvedValue(superAdminUser);
     vi.spyOn(authApi, 'getAccessibleModulesApi').mockResolvedValue(mockAccessibleModules);
     vi.spyOn(accountsApi, 'getAccountsDashboardApi').mockResolvedValue(mockDashboardData);
-    vi.spyOn(accountsApi, 'getAccountsFilterOptionsApi').mockResolvedValue(mockDashboardData.filter_options);
 
-    renderWithAccountsRouter('/accounts');
+    renderWithAccountsRouter('/accounts/dashboard');
 
-    await screen.findByText(/Financial Health & Collections/i);
-    expect(screen.getByRole('link', { name: /Payment Register/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Outstanding & Ageing/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Invoices & Receipts/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Expenses & Reimbursements/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Financial Reports/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Main Dashboard/i })).toBeInTheDocument();
+    await screen.findByRole('heading', { name: /Accounts Dashboard/i });
+    const navs = screen.getAllByRole('navigation', { name: /Accounts Navigation/i });
+    expect(navs.length).toBeGreaterThan(0);
+    const nav = navs[0];
+    expect(within(nav).getByRole('link', { name: /Dashboard/i })).toBeInTheDocument();
+    expect(within(nav).getByRole('link', { name: /Accounts Entries/i })).toBeInTheDocument();
+
+    // Verify obsolete links are NOT in navigation
+    expect(within(nav).queryByRole('link', { name: /Payment Register/i })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole('link', { name: /Outstanding & Ageing/i })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole('link', { name: /Invoices & Receipts/i })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole('link', { name: /Expenses & Reimbursements/i })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole('link', { name: /Financial Reports/i })).not.toBeInTheDocument();
+  });
+
+  it('4. Renders Accounts Entries page with 21 columns and entry details', async () => {
+    vi.spyOn(authApi, 'getCurrentUserApi').mockResolvedValue(superAdminUser);
+    vi.spyOn(authApi, 'getAccessibleModulesApi').mockResolvedValue(mockAccessibleModules);
+    vi.spyOn(accountsApi, 'getAccountsEntriesApi').mockResolvedValue(mockEntriesData);
+
+    renderWithAccountsRouter('/accounts/entries');
+
+    // Wait for the table data to load
+    await screen.findByText('Apex Corp');
+    expect(screen.getByText('Apex Corp')).toBeInTheDocument();
+
+    // Check key columns from the 21 columns
+    expect(screen.getByText(/15\.\s*Proforma Inv\.\s*No\./i)).toBeInTheDocument();
+    expect(screen.getByText(/16\.\s*Tax Inv\.\s*No\./i)).toBeInTheDocument();
+    expect(screen.getByText(/17\.\s*Reimbursement Note/i)).toBeInTheDocument();
+    expect(screen.getByText(/18\.\s*Govt Fees/i)).toBeInTheDocument();
+    expect(screen.getByText(/19\.\s*Incidental Cost/i)).toBeInTheDocument();
+    expect(screen.getByText(/20\.\s*Profits/i)).toBeInTheDocument();
+
+    // Check entry data
+    expect(screen.getByText('PI-2026-001')).toBeInTheDocument();
+    expect(screen.getByText('TI-2026-001')).toBeInTheDocument();
   });
 });

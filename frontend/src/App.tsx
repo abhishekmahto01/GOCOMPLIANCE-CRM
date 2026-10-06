@@ -33,11 +33,7 @@ import { TaskAssignmentPage } from './pages/operations/TaskAssignmentPage';
 
 import { AccountsLayout } from './components/accounts/AccountsLayout';
 import { AccountsDashboardPage } from './pages/accounts/AccountsDashboardPage';
-import { PaymentRegisterPage } from './pages/accounts/PaymentRegisterPage';
-import { OutstandingFollowupsPage } from './pages/accounts/OutstandingFollowupsPage';
-import { InvoicesReceiptsPage } from './pages/accounts/InvoicesReceiptsPage';
-import { ExpensesReimbursementsPage } from './pages/accounts/ExpensesReimbursementsPage';
-import { FinancialReportsPage } from './pages/accounts/FinancialReportsPage';
+import { AccountsEntriesPage } from './pages/accounts/AccountsEntriesPage';
 
 
 export const App: React.FC = () => {
@@ -229,83 +225,29 @@ export const App: React.FC = () => {
             <Route
               path="dashboard"
               element={
-                <ProtectedRoute requiredModule="ACCOUNTS" requiredAction="view">
+                <ProtectedRoute requiredModule="ACCOUNTS_DASHBOARD" requiredAction="view">
                   <AccountsDashboardPage />
                 </ProtectedRoute>
               }
             />
             <Route
-              path="payments"
+              path="entries"
               element={
-                <ProtectedRoute requiredModule="ACCOUNTS" requiredAction="view">
-                  <PaymentRegisterPage />
+                <ProtectedRoute requiredModule="ACCOUNTS_ENTRIES" requiredAction="view">
+                  <AccountsEntriesPage />
                 </ProtectedRoute>
               }
             />
-            <Route
-              path="payment-register"
-              element={
-                <ProtectedRoute requiredModule="ACCOUNTS" requiredAction="view">
-                  <PaymentRegisterPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="outstanding"
-              element={
-                <ProtectedRoute requiredModule="ACCOUNTS" requiredAction="view">
-                  <OutstandingFollowupsPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="follow-ups"
-              element={
-                <ProtectedRoute requiredModule="ACCOUNTS" requiredAction="view">
-                  <OutstandingFollowupsPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="invoices"
-              element={
-                <ProtectedRoute requiredModule="ACCOUNTS" requiredAction="view">
-                  <InvoicesReceiptsPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="receipts"
-              element={
-                <ProtectedRoute requiredModule="ACCOUNTS" requiredAction="view">
-                  <InvoicesReceiptsPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="expenses"
-              element={
-                <ProtectedRoute requiredModule="ACCOUNTS" requiredAction="view">
-                  <ExpensesReimbursementsPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="reimbursements"
-              element={
-                <ProtectedRoute requiredModule="ACCOUNTS" requiredAction="view">
-                  <ExpensesReimbursementsPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="reports"
-              element={
-                <ProtectedRoute requiredModule="ACCOUNTS" requiredAction="view">
-                  <FinancialReportsPage />
-                </ProtectedRoute>
-              }
-            />
+            {/* Redirect legacy accounts routes to /accounts/entries */}
+            <Route path="payments" element={<Navigate to="/accounts/entries" replace />} />
+            <Route path="payment-register" element={<Navigate to="/accounts/entries" replace />} />
+            <Route path="outstanding" element={<Navigate to="/accounts/entries" replace />} />
+            <Route path="follow-ups" element={<Navigate to="/accounts/entries" replace />} />
+            <Route path="invoices" element={<Navigate to="/accounts/entries" replace />} />
+            <Route path="receipts" element={<Navigate to="/accounts/entries" replace />} />
+            <Route path="expenses" element={<Navigate to="/accounts/entries" replace />} />
+            <Route path="reimbursements" element={<Navigate to="/accounts/entries" replace />} />
+            <Route path="reports" element={<Navigate to="/accounts/entries" replace />} />
           </Route>
 
 

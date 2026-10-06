@@ -40,10 +40,16 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
   const isDark = theme === 'dark';
 
   return (
-    <header className="w-full bg-white/80 dark:bg-slate-900/85 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800 px-4 sm:px-8 py-3 transition-colors duration-300">
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
-        {/* Left: Mobile Drawer Trigger / Desktop Sidebar Collapse + Brand Identity & Breadcrumbs */}
+    <header className="w-full bg-white/80 dark:bg-slate-900/85 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800 px-4 sm:px-6 lg:px-8 py-3 transition-colors duration-300">
+      <div className="w-full flex flex-col md:flex-row items-center justify-between gap-3">
+        {/* Left: Brand Identity + Sidebar Toggle + Breadcrumbs */}
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-4 self-start md:self-center">
+          {showLogo && (
+            <Link to="/dashboard" className="shrink-0">
+              <BrandLogo showTagline={false} theme={isDark ? 'light' : 'dark'} size="sm" />
+            </Link>
+          )}
+
           {onOpenMobileMenu && (
             <button
               type="button"
@@ -65,12 +71,6 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
             >
               <Menu className="w-4 h-4" />
             </button>
-          )}
-
-          {showLogo && (
-            <Link to="/dashboard" className="shrink-0">
-              <BrandLogo showTagline={false} theme={isDark ? 'light' : 'dark'} size="sm" />
-            </Link>
           )}
 
           {breadcrumbs.length > 0 && (

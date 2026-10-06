@@ -48,20 +48,8 @@ export const AccountsLayout: React.FC = () => {
   // Compute Breadcrumbs from pathname
   const getBreadcrumbs = (): BreadcrumbItem[] => {
     const path = location.pathname;
-    if (path.includes('/payments')) {
-      return [{ label: 'Accounts', href: '/accounts/dashboard' }, { label: 'Payment Register' }];
-    }
-    if (path.includes('/outstanding')) {
-      return [{ label: 'Accounts', href: '/accounts/dashboard' }, { label: 'Outstanding & Ageing' }];
-    }
-    if (path.includes('/invoices')) {
-      return [{ label: 'Accounts', href: '/accounts/dashboard' }, { label: 'Invoices & Receipts' }];
-    }
-    if (path.includes('/expenses')) {
-      return [{ label: 'Accounts', href: '/accounts/dashboard' }, { label: 'Expenses & Reimbursements' }];
-    }
-    if (path.includes('/reports')) {
-      return [{ label: 'Accounts', href: '/accounts/dashboard' }, { label: 'Financial Reports' }];
+    if (path.includes('/entries')) {
+      return [{ label: 'Accounts', href: '/accounts/dashboard' }, { label: 'Accounts Entries' }];
     }
     return [{ label: 'Accounts', href: '/accounts/dashboard' }, { label: 'Dashboard' }];
   };

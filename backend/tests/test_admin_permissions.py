@@ -106,15 +106,17 @@ def standard_employee(test_company_id: uuid.UUID, test_department_id: uuid.UUID,
 # ==============================================================================
 
 def test_permission_catalog_structure(mock_db: MagicMock) -> None:
-    """Verify catalog generates Sales (6 pages) and Operations (8 pages) with exact actions."""
+    """Verify catalog generates Sales (6 pages), Operations (8 pages), and Accounts (2 pages) with exact actions."""
     catalog = get_permission_catalog(mock_db)
-    assert len(catalog.modules) == 2
+    assert len(catalog.modules) == 3
 
     sales_mod = next(m for m in catalog.modules if m.module_code == "SALES")
     op_mod = next(m for m in catalog.modules if m.module_code == "OPERATIONS")
+    acc_mod = next(m for m in catalog.modules if m.module_code == "ACCOUNTS")
 
     assert len(sales_mod.pages) == 6
     assert len(op_mod.pages) == 8
+    assert len(acc_mod.pages) == 2
 
     # Sales pages check
     sales_pages_dict = {p.page_code: p for p in sales_mod.pages}
@@ -146,6 +148,13 @@ def test_permission_catalog_structure(mock_db: MagicMock) -> None:
     assert "OPERATION_ALL_TASKS" in op_pages_dict
     assert op_pages_dict["OPERATION_ALL_TASKS"].supported_actions == ["read", "update", "assign", "reassign"]
 
+    # Accounts pages check
+    acc_pages_dict = {p.page_code: p for p in acc_mod.pages}
+    assert "ACCOUNTS_DASHBOARD" in acc_pages_dict
+    assert acc_pages_dict["ACCOUNTS_DASHBOARD"].supported_actions == ["read", "export"]
+    assert "ACCOUNTS_ENTRIES" in acc_pages_dict
+    assert acc_pages_dict["ACCOUNTS_ENTRIES"].supported_actions == ["read", "update", "export"]
+
 
 def test_permission_catalog_endpoint(
     client: TestClient,
@@ -162,7 +171,7 @@ def test_permission_catalog_endpoint(
         assert resp.status_code == status.HTTP_200_OK
         data = resp.json()
         assert "modules" in data
-        assert len(data["modules"]) == 2
+        assert len(data["modules"]) == 3
 
     app.dependency_overrides.clear()
 
@@ -205,7 +214,7 @@ def test_get_user_permissions_bundle(
     bundle = get_user_permissions_bundle(mock_db, standard_employee.user_id)
     assert bundle.employee_code == standard_employee.employee_code
     assert bundle.first_name == "Aadarsh"
-    assert len(bundle.permissions) == 20  # 6 Sales + 8 Operation + 6 Accounts
+    assert len(bundle.permissions) == 16  # 6 Sales + 8 Operation + 2 Accounts
 
 
 def test_save_user_permissions_bundle(

@@ -449,41 +449,53 @@ class AccountsExpenseListResponse(BaseModel):
 # -----------------------------------------------------------------------------
 # Accounts Dashboard Metrics & Aggregates
 # -----------------------------------------------------------------------------
+class PaymentStatusBreakdownItem(BaseModel):
+    """Breakdown item for payment status."""
+    status: str
+    label: str
+    count: int
+    amount: float
+    formatted_amount: str
+    percentage: float
+
+
 class AccountsKpiSummary(BaseModel):
     """Top KPI card metrics for Accounts Dashboard."""
-    # 1. Confirmed Order Value (for selected order dates)
-    confirmed_order_value: float
-    formatted_confirmed_order_value: str
-    confirmed_order_count: int
-    
-    # 2. Verified Collections (for selected payment dates)
-    verified_collections: float
-    formatted_verified_collections: str
-    verified_collections_count: int
-    
-    # 3. Unverified Collections pending verification
-    unverified_collections: float
-    formatted_unverified_collections: str
-    unverified_collections_count: int
-    
-    # 4. Current Outstanding as of today
-    current_outstanding: float
-    formatted_current_outstanding: str
-    outstanding_orders_count: int
-    
-    # 5. Current Overdue Amount as of today
-    current_overdue: float
-    formatted_current_overdue: str
-    overdue_orders_count: int
-    
-    # 6. Recorded Direct Costs (for selected expense dates)
-    recorded_direct_costs: float
-    formatted_recorded_direct_costs: str
-    
-    # 7. Estimated Order Margin
-    estimated_order_margin: float
-    formatted_estimated_order_margin: str
-    margin_percentage: float
+    total_entries: int = 0
+    total_amount: float = 0.0
+    formatted_total_amount: str = "₹0"
+    advance_amount: float = 0.0
+    formatted_advance_amount: str = "₹0"
+    pending_amount: float = 0.0
+    formatted_pending_amount: str = "₹0"
+    govt_fees: float = 0.0
+    formatted_govt_fees: str = "₹0"
+    incidental_cost: float = 0.0
+    formatted_incidental_cost: str = "₹0"
+    estimated_profit: float = 0.0
+    formatted_estimated_profit: str = "₹0"
+
+    # Compatibility fields for any legacy consumer
+    confirmed_order_value: float = 0.0
+    formatted_confirmed_order_value: str = "₹0"
+    confirmed_order_count: int = 0
+    verified_collections: float = 0.0
+    formatted_verified_collections: str = "₹0"
+    verified_collections_count: int = 0
+    unverified_collections: float = 0.0
+    formatted_unverified_collections: str = "₹0"
+    unverified_collections_count: int = 0
+    current_outstanding: float = 0.0
+    formatted_current_outstanding: str = "₹0"
+    outstanding_orders_count: int = 0
+    current_overdue: float = 0.0
+    formatted_current_overdue: str = "₹0"
+    overdue_orders_count: int = 0
+    recorded_direct_costs: float = 0.0
+    formatted_recorded_direct_costs: str = "₹0"
+    estimated_order_margin: float = 0.0
+    formatted_estimated_order_margin: str = "₹0"
+    margin_percentage: float = 0.0
 
 
 class CollectionsTrendPoint(BaseModel):
@@ -551,16 +563,158 @@ class TopOutstandingItem(BaseModel):
     operation_status: Optional[str] = None
 
 
-class AccountsDashboardResponse(BaseModel):
-    """Full payload for the Accounts Dashboard."""
-    date_range: Dict[str, str]
-    kpis: AccountsKpiSummary
-    collections_trend: List[CollectionsTrendPoint]
-    ageing_breakdown: List[AgeingBreakdownItem]
-    company_breakdown: List[CompanyFinancialItem]
-    expense_breakdown: List[CategoryExpenseItem]
-    recent_transactions: List[RecentTransactionItem]
-    top_outstanding: List[TopOutstandingItem]
-    filter_options: AccountsFilterOptions
+# -----------------------------------------------------------------------------
+# Accounts Entries (21 Columns)
+# -----------------------------------------------------------------------------
+class AccountsEntryRead(BaseModel):
+    """Accounts Entry representing a shared Sales Order with the exact 21 canonical columns."""
+    # 1. S.No
+    s_no: int = 1
+
+    # Identifiers
+    order_id: uuid.UUID
+    order_number: str
+    company_id: uuid.UUID
+    client_id: uuid.UUID
+    service_id: uuid.UUID
+    salesperson_user_id: uuid.UUID
+    assigned_to_user_id: Optional[uuid.UUID] = None
+    application_id: Optional[uuid.UUID] = None
+
+    # 2. Date
+    order_date: date
+    formatted_date: str
+
+    # 3. Client Name
+    client_name: str
+
+    # 4. Location
+    location: Optional[str] = None
+
+    # 5. Contact No
+    contact_no: Optional[str] = None
+
+    # 6. Source
+    lead_source: str
+
+    # 7. Work
+    service_name: str
+    service_code: Optional[str] = None
+
+    # 8. Converted By
+    salesperson_name: str
+    salesperson_code: Optional[str] = None
+
+    # 9. Assigned To
+    assigned_to_name: Optional[str] = None
+    assigned_to_code: Optional[str] = None
+
+    # 10. Work Status
+    work_status: str
+    operation_status: Optional[str] = None
+
+    # 11. Total Amount
+    order_value: float
+    formatted_order_value: str
+
+    # 12. Advance Amount
+    amount_received: float
+    formatted_amount_received: str
+
+    # 13. Pending Amount
+    balance_amount: float
+    formatted_balance_amount: str
+
+    # 14. Payment Status
+    payment_status: str
+
+    # 15. Proforma Inv. No. (Editable by Accounts)
+    proforma_invoice_no: Optional[str] = None
+
+    # 16. Tax Inv. No. (Editable by Accounts)
+    tax_invoice_no: Optional[str] = None
+
+    # 17. Reimbursement Note (Editable by Accounts)
+    reimbursement_note: Optional[str] = None
+
+    # 18. Govt Fees
+    govt_fees: float = 0.0
+    formatted_govt_fees: str = "₹0"
+
+    # 19. Incidental Cost
+    incidental_cost: float = 0.0
+    formatted_incidental_cost: str = "₹0"
+
+    # 20. Profits
+    profit_amount: float = 0.0
+    formatted_profit_amount: str = "₹0"
+
+    # 21. Remarks (Editable by Accounts)
+    remarks: Optional[str] = None
+    notes: Optional[str] = None
+
+    # Timestamps & status
+    confirmation_status: str = "CONFIRMED"
+    created_at: datetime
+    updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AccountsEntriesSummary(BaseModel):
+    """Aggregated financial summary across filtered Accounts Entries."""
+    total_orders: int = 0
+    total_amount: float = 0.0
+    formatted_total_amount: str = "₹0"
+    total_advance: float = 0.0
+    formatted_total_advance: str = "₹0"
+    total_pending: float = 0.0
+    formatted_total_pending: str = "₹0"
+    total_govt_fees: float = 0.0
+    formatted_total_govt_fees: str = "₹0"
+    total_incidental_cost: float = 0.0
+    formatted_total_incidental_cost: str = "₹0"
+    total_profits: float = 0.0
+    formatted_total_profits: str = "₹0"
+
+
+class AccountsEntriesResponse(BaseModel):
+    """Paginated list response for Accounts Entries."""
+    items: List[AccountsEntryRead]
+    total_count: int
+    page: int
+    limit: int
+    total_pages: int
+    summary: AccountsEntriesSummary
+
+
+class AccountsEntryUpdate(BaseModel):
+    """Strict allowlist payload for Accounts users.
+    Accounts users may ONLY edit columns 15, 16, 17, and 21 (Remarks).
+    Any other fields will be rejected.
+    """
+    proforma_invoice_no: Optional[str] = Field(None, max_length=100, description="Column 15: Proforma Inv. No.")
+    tax_invoice_no: Optional[str] = Field(None, max_length=100, description="Column 16: Tax Inv. No.")
+    reimbursement_note: Optional[str] = Field(None, max_length=500, description="Column 17: Reimbursement Note")
+    remarks: Optional[str] = Field(None, max_length=1000, description="Column 21: Remarks")
+    notes: Optional[str] = Field(None, max_length=1000, description="Alias for Column 21: Remarks")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class AccountsDashboardResponse(BaseModel):
+    """Payload for the Accounts Dashboard based on authorized Sales records."""
+    date_range: Dict[str, str]
+    kpis: AccountsKpiSummary
+    payment_status_breakdown: List[PaymentStatusBreakdownItem] = Field(default_factory=list)
+    recent_entries: List[AccountsEntryRead] = Field(default_factory=list)
+    collections_trend: List[CollectionsTrendPoint] = Field(default_factory=list)
+    ageing_breakdown: List[AgeingBreakdownItem] = Field(default_factory=list)
+    company_breakdown: List[CompanyFinancialItem] = Field(default_factory=list)
+    expense_breakdown: List[CategoryExpenseItem] = Field(default_factory=list)
+    recent_transactions: List[RecentTransactionItem] = Field(default_factory=list)
+    top_outstanding: List[TopOutstandingItem] = Field(default_factory=list)
+    filter_options: Optional[AccountsFilterOptions] = None
+
+    model_config = ConfigDict(from_attributes=True)
+

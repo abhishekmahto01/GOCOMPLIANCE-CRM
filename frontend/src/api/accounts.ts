@@ -4,6 +4,9 @@
 import { apiClient } from './client';
 import type {
   AccountsDashboardResponse,
+  AccountsEntriesResponse,
+  AccountsEntryItem,
+  AccountsEntryUpdatePayload,
   AccountsExpenseApprovalRequest,
   AccountsExpenseCreateRequest,
   AccountsExpenseListResponse,
@@ -23,6 +26,78 @@ import type {
   PaymentTransactionReverseRequest,
   PaymentTransactionVerifyRequest,
 } from '../types/accounts';
+
+/**
+ * Fetch filtered, paginated Accounts entries showing shared Sales orders across company scope.
+ */
+export async function getAccountsEntriesApi(params?: {
+  page?: number;
+  limit?: number;
+  search?: string;
+  payment_status?: string;
+  from_date?: string;
+  to_date?: string;
+  company_id?: string;
+}): Promise<AccountsEntriesResponse> {
+  const queryParams: Record<string, any> = {};
+  if (params?.page) queryParams.page = params.page;
+  if (params?.limit) queryParams.limit = params.limit;
+  if (params?.search) queryParams.search = params.search;
+  if (params?.payment_status && params.payment_status !== 'ALL') queryParams.payment_status = params.payment_status;
+  if (params?.from_date) queryParams.from_date = params.from_date;
+  if (params?.to_date) queryParams.to_date = params.to_date;
+  if (params?.company_id && params.company_id !== 'ALL') queryParams.company_id = params.company_id;
+
+  const response = await apiClient.get<AccountsEntriesResponse>('/accounts/entries', {
+    params: queryParams,
+  });
+  return response.data;
+}
+
+/**
+ * Update allowed 4 fields (Proforma Inv, Tax Inv, Reimbursement Note, Remarks) on an entry.
+ */
+export async function updateAccountsEntryApi(
+  orderId: string,
+  data: AccountsEntryUpdatePayload
+): Promise<AccountsEntryItem> {
+  const response = await apiClient.patch<AccountsEntryItem>(`/accounts/entries/${orderId}`, data);
+  return response.data;
+}
+
+/**
+ * Export filtered Accounts Entries with all 21 canonical columns to CSV.
+ */
+export async function exportAccountsEntriesCsvApi(params?: {
+  search?: string;
+  payment_status?: string;
+  from_date?: string;
+  to_date?: string;
+  company_id?: string;
+}): Promise<{ blob: Blob; filename: string }> {
+  const queryParams: Record<string, any> = {};
+  if (params?.search) queryParams.search = params.search;
+  if (params?.payment_status && params.payment_status !== 'ALL') queryParams.payment_status = params.payment_status;
+  if (params?.from_date) queryParams.from_date = params.from_date;
+  if (params?.to_date) queryParams.to_date = params.to_date;
+  if (params?.company_id && params.company_id !== 'ALL') queryParams.company_id = params.company_id;
+
+  const response = await apiClient.get('/accounts/entries/export', {
+    params: queryParams,
+    responseType: 'blob',
+  });
+
+  let filename = `accounts_entries_${new Date().toISOString().slice(0, 10)}.csv`;
+  const disposition = response.headers['content-disposition'];
+  if (disposition && disposition.includes('filename=')) {
+    const match = disposition.match(/filename="?([^"]+)"?/);
+    if (match && match[1]) {
+      filename = match[1];
+    }
+  }
+
+  return { blob: response.data, filename };
+}
 
 /**
  * Fetch dynamic filter dropdown options (companies, salespersons, payment statuses, etc.)

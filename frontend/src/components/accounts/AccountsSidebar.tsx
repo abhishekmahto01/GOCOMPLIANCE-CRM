@@ -2,9 +2,6 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
-  CreditCard,
-  Clock,
-  FileText,
   Receipt,
   FileSpreadsheet,
   ArrowLeft,
@@ -36,34 +33,10 @@ const NAV_ITEMS: NavItem[] = [
     moduleCode: 'ACCOUNTS_DASHBOARD',
   },
   {
-    label: 'Payment Register',
-    path: '/accounts/payments',
-    icon: CreditCard,
-    moduleCode: 'ACCOUNTS_PAYMENT_REGISTER',
-  },
-  {
-    label: 'Outstanding & Ageing',
-    path: '/accounts/outstanding',
-    icon: Clock,
-    moduleCode: 'ACCOUNTS_OUTSTANDING',
-  },
-  {
-    label: 'Invoices & Receipts',
-    path: '/accounts/invoices',
-    icon: FileText,
-    moduleCode: 'ACCOUNTS_INVOICES',
-  },
-  {
-    label: 'Expenses & Reimbursements',
-    path: '/accounts/expenses',
-    icon: Receipt,
-    moduleCode: 'ACCOUNTS_EXPENSES',
-  },
-  {
-    label: 'Financial Reports',
-    path: '/accounts/reports',
+    label: 'Accounts Entries',
+    path: '/accounts/entries',
     icon: FileSpreadsheet,
-    moduleCode: 'ACCOUNTS_REPORTS',
+    moduleCode: 'ACCOUNTS_ENTRIES',
   },
 ];
 
@@ -118,7 +91,7 @@ export const AccountsSidebar: React.FC<AccountsSidebarProps> = ({
       </div>
 
       {/* Navigation Links */}
-      <nav className="flex-1 space-y-1.5 py-2 overflow-y-auto">
+      <nav aria-label="Accounts Navigation" className="flex-1 space-y-1.5 py-2 overflow-y-auto">
         {authorizedItems.map((item) => {
           const Icon = item.icon;
           return (

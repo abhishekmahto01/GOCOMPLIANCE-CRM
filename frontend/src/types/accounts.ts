@@ -17,27 +17,131 @@ export interface AccountsFilterOptions {
   receiving_accounts: string[];
 }
 
+export interface PaymentStatusBreakdownItem {
+  status: string;
+  label: string;
+  count: number;
+  amount: number;
+  formatted_amount: string;
+  percentage: number;
+}
+
+export interface AccountsEntryItem {
+  s_no: number;
+  order_id: string;
+  order_number: string;
+  company_id: string;
+  client_id: string;
+  service_id: string;
+  salesperson_user_id: string;
+  assigned_to_user_id?: string | null;
+  application_id?: string | null;
+  order_date: string;
+  formatted_date: string;
+  client_name: string;
+  location?: string | null;
+  contact_no?: string | null;
+  lead_source: string;
+  service_name: string;
+  service_code?: string | null;
+  salesperson_name: string;
+  salesperson_code?: string | null;
+  assigned_to_name?: string | null;
+  assigned_to_code?: string | null;
+  work_status: string;
+  operation_status?: string | null;
+  order_value: number;
+  formatted_order_value: string;
+  amount_received: number;
+  formatted_amount_received: string;
+  balance_amount: number;
+  formatted_balance_amount: string;
+  payment_status: string;
+  proforma_invoice_no?: string | null;
+  tax_invoice_no?: string | null;
+  reimbursement_note?: string | null;
+  govt_fees: number;
+  formatted_govt_fees: string;
+  incidental_cost: number;
+  formatted_incidental_cost: string;
+  profit_amount: number;
+  formatted_profit_amount: string;
+  remarks?: string | null;
+  notes?: string | null;
+  confirmation_status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AccountsEntriesSummary {
+  total_orders: number;
+  total_amount: number;
+  formatted_total_amount: string;
+  total_advance: number;
+  formatted_total_advance: string;
+  total_pending: number;
+  formatted_total_pending: string;
+  total_govt_fees: number;
+  formatted_total_govt_fees: string;
+  total_incidental_cost: number;
+  formatted_total_incidental_cost: string;
+  total_profits: number;
+  formatted_total_profits: string;
+}
+
+export interface AccountsEntriesResponse {
+  items: AccountsEntryItem[];
+  total_count: number;
+  page: number;
+  limit: number;
+  total_pages: number;
+  summary: AccountsEntriesSummary;
+}
+
+export interface AccountsEntryUpdatePayload {
+  proforma_invoice_no?: string | null;
+  tax_invoice_no?: string | null;
+  reimbursement_note?: string | null;
+  remarks?: string | null;
+  notes?: string | null;
+}
+
 export interface AccountsKpiSummary {
-  confirmed_order_value: number;
-  formatted_confirmed_order_value: string;
-  confirmed_order_count: number;
-  verified_collections: number;
-  formatted_verified_collections: string;
-  verified_collections_count: number;
-  unverified_collections: number;
-  formatted_unverified_collections: string;
-  unverified_collections_count: number;
-  current_outstanding: number;
-  formatted_current_outstanding: string;
-  outstanding_orders_count: number;
-  current_overdue: number;
-  formatted_current_overdue: string;
-  overdue_orders_count: number;
-  recorded_direct_costs: number;
-  formatted_recorded_direct_costs: string;
-  estimated_order_margin: number;
-  formatted_estimated_order_margin: string;
-  margin_percentage: number;
+  total_entries?: number;
+  total_amount?: number;
+  formatted_total_amount?: string;
+  advance_amount?: number;
+  formatted_advance_amount?: string;
+  pending_amount?: number;
+  formatted_pending_amount?: string;
+  govt_fees?: number;
+  formatted_govt_fees?: string;
+  incidental_cost?: number;
+  formatted_incidental_cost?: string;
+  estimated_profit?: number;
+  formatted_estimated_profit?: string;
+
+  // Compatibility fields
+  confirmed_order_value?: number;
+  formatted_confirmed_order_value?: string;
+  confirmed_order_count?: number;
+  verified_collections?: number;
+  formatted_verified_collections?: string;
+  verified_collections_count?: number;
+  unverified_collections?: number;
+  formatted_unverified_collections?: string;
+  unverified_collections_count?: number;
+  current_outstanding?: number;
+  formatted_current_outstanding?: string;
+  outstanding_orders_count?: number;
+  current_overdue?: number;
+  formatted_current_overdue?: string;
+  overdue_orders_count?: number;
+  recorded_direct_costs?: number;
+  formatted_recorded_direct_costs?: string;
+  estimated_order_margin?: number;
+  formatted_estimated_order_margin?: string;
+  margin_percentage?: number;
 }
 
 export interface CollectionsTrendPoint {
@@ -102,13 +206,15 @@ export interface TopOutstandingItem {
 export interface AccountsDashboardResponse {
   date_range: Record<string, string>;
   kpis: AccountsKpiSummary;
-  collections_trend: CollectionsTrendPoint[];
-  ageing_breakdown: AgeingBreakdownItem[];
-  company_breakdown: CompanyFinancialItem[];
-  expense_breakdown: CategoryExpenseItem[];
-  recent_transactions: RecentTransactionItem[];
-  top_outstanding: TopOutstandingItem[];
-  filter_options: AccountsFilterOptions;
+  payment_status_breakdown?: PaymentStatusBreakdownItem[];
+  recent_entries?: AccountsEntryItem[];
+  collections_trend?: CollectionsTrendPoint[];
+  ageing_breakdown?: AgeingBreakdownItem[];
+  company_breakdown?: CompanyFinancialItem[];
+  expense_breakdown?: CategoryExpenseItem[];
+  recent_transactions?: RecentTransactionItem[];
+  top_outstanding?: TopOutstandingItem[];
+  filter_options?: AccountsFilterOptions | null;
 }
 
 export interface PaymentTransactionRead {

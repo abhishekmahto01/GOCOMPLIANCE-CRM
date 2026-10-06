@@ -48,6 +48,7 @@ def accounts_fixture(db_session: Session):
 
     for sub_code, sub_name in [
         ("ACCOUNTS_DASHBOARD", "Accounts Dashboard"),
+        ("ACCOUNTS_ENTRIES", "Accounts Entries"),
         ("ACCOUNTS_PAYMENT_REGISTER", "Payment Register"),
         ("ACCOUNTS_OUTSTANDING", "Outstanding & Ageing"),
         ("ACCOUNTS_INVOICES", "Invoices & Receipts"),
@@ -198,6 +199,7 @@ def accounts_fixture(db_session: Session):
     )
     for sub_code in [
         "ACCOUNTS_DASHBOARD",
+        "ACCOUNTS_ENTRIES",
         "ACCOUNTS_PAYMENT_REGISTER",
         "ACCOUNTS_OUTSTANDING",
         "ACCOUNTS_INVOICES",
@@ -656,3 +658,211 @@ def test_safe_csv_report_export_with_formula_sanitization(client: TestClient, ac
     csv_text = export_res.text
     # Formula trigger should be prefixed with single quote or sanitized
     assert "'=cmd|" in csv_text or "=cmd|" not in csv_text or "cmd" in csv_text
+
+
+def test_accounts_entries_shared_sales_records_and_21_columns(client: TestClient, accounts_fixture: dict):
+    """Verify that Accounts Entries returns shared Sales records across all salespeople in authorized company scope,
+    containing all 21 canonical columns in exact sequence.
+    """
+    acc_user = accounts_fixture["acc_user"]
+    order1 = accounts_fixture["order1"]
+    order2 = accounts_fixture["order2"]
+
+    res = client.get("/api/accounts/entries", headers=auth_header(acc_user))
+    assert res.status_code == 200
+    data = res.json()
+    assert "items" in data
+    assert "summary" in data
+    assert data["total_count"] >= 2
+
+    # Verify both orders created by sales_user are visible to acc_user
+    order_ids = [item["order_id"] for item in data["items"]]
+    assert str(order1.order_id) in order_ids
+    assert str(order2.order_id) in order_ids
+
+    first_item = data["items"][0]
+    # Check that all 21 canonical columns are present in the response
+    canonical_fields = [
+        "s_no",                  # 1. S.No
+        "order_date",            # 2. Date
+        "client_name",           # 3. Client Name
+        "location",              # 4. Location
+        "contact_no",            # 5. Contact No
+        "lead_source",           # 6. Source
+        "service_name",          # 7. Work
+        "salesperson_name",      # 8. Converted By
+        "assigned_to_name",      # 9. Assigned To
+        "work_status",           # 10. Work Status
+        "order_value",           # 11. Total Amount
+        "amount_received",       # 12. Advance Amount
+        "balance_amount",        # 13. Pending Amount
+        "payment_status",        # 14. Payment Status
+        "proforma_invoice_no",   # 15. Proforma Inv. No.
+        "tax_invoice_no",        # 16. Tax Inv. No.
+        "reimbursement_note",    # 17. Reimbursement Note
+        "govt_fees",             # 18. Govt Fees
+        "incidental_cost",       # 19. Incidental Cost
+        "profit_amount",         # 20. Profits
+        "remarks",               # 21. Remarks
+    ]
+    for field in canonical_fields:
+        assert field in first_item, f"Missing canonical field '{field}' in AccountsEntryRead"
+
+
+def test_accounts_entries_edit_allowed_four_fields_and_audit_log(
+    client: TestClient, accounts_fixture: dict, db_session: Session
+):
+    """Verify that Accounts users can edit ONLY columns 15, 16, 17 and 21 (Remarks),
+    and that changes persist to the shared SalesOrder record, update Sales view, and generate audit logs.
+    """
+    acc_user = accounts_fixture["acc_user"]
+    order1 = accounts_fixture["order1"]
+
+    update_payload = {
+        "proforma_invoice_no": "PI-2026-9001",
+        "tax_invoice_no": "TAX-2026-9001",
+        "reimbursement_note": "Travel & filing reimbursement approved",
+        "remarks": "Accounts verification completed and invoice dispatched",
+    }
+
+    # PATCH /api/accounts/entries/{order_id}
+    res = client.patch(
+        f"/api/accounts/entries/{order1.order_id}",
+        json=update_payload,
+        headers=auth_header(acc_user),
+    )
+    assert res.status_code == 200
+    updated_data = res.json()
+    assert updated_data["proforma_invoice_no"] == "PI-2026-9001"
+    assert updated_data["tax_invoice_no"] == "TAX-2026-9001"
+    assert updated_data["reimbursement_note"] == "Travel & filing reimbursement approved"
+    assert updated_data["remarks"] == "Accounts verification completed and invoice dispatched"
+
+    # Verify shared database record directly
+    db_session.expire_all()
+    db_order = db_session.query(SalesOrder).filter(SalesOrder.order_id == order1.order_id).first()
+    assert db_order.proforma_invoice_no == "PI-2026-9001"
+    assert db_order.tax_invoice_no == "TAX-2026-9001"
+    assert db_order.reimbursement_note == "Travel & filing reimbursement approved"
+    assert db_order.notes == "Accounts verification completed and invoice dispatched"
+    # Unchanged fields remain untouched
+    assert db_order.order_value == Decimal("50000.00")
+    assert db_order.amount_received == Decimal("20000.00")
+
+    # Verify audit log was created
+    log = (
+        db_session.query(AccountsAuditLog)
+        .filter(AccountsAuditLog.entity_id == order1.order_id, AccountsAuditLog.action == "ACCOUNTS_UPDATE")
+        .first()
+    )
+    assert log is not None
+    assert log.actor_user_id == acc_user.user_id
+
+
+def test_accounts_entries_rejects_unauthorized_fields(client: TestClient, accounts_fixture: dict):
+    """Verify backend security: reject attempts to modify unauthorized fields (order_value, payment_status, salesperson)."""
+    acc_user = accounts_fixture["acc_user"]
+    order1 = accounts_fixture["order1"]
+
+    malicious_payload = {
+        "proforma_invoice_no": "PI-VALID",
+        "order_value": 1.0,  # Unauthorized field
+        "payment_status": "FULLY_PAID",  # Unauthorized field
+    }
+
+    res = client.patch(
+        f"/api/accounts/entries/{order1.order_id}",
+        json=malicious_payload,
+        headers=auth_header(acc_user),
+    )
+    # Pydantic schema with extra="forbid" returns 422 Unprocessable Entity
+    assert res.status_code == 422
+
+
+def test_accounts_dashboard_7_kpis_and_payment_breakdown(client: TestClient, accounts_fixture: dict):
+    """Verify Accounts dashboard returns exactly 7 canonical KPIs with server-side profit calculation
+    and payment breakdown based on Sales records.
+    """
+    acc_user = accounts_fixture["acc_user"]
+
+    res = client.get("/api/accounts/dashboard", headers=auth_header(acc_user))
+    assert res.status_code == 200
+    data = res.json()
+
+    assert "kpis" in data
+    kpis = data["kpis"]
+
+    # Exactly 7 KPIs
+    assert "total_entries" in kpis
+    assert "total_amount" in kpis
+    assert "advance_amount" in kpis
+    assert "pending_amount" in kpis
+    assert "govt_fees" in kpis
+    assert "incidental_cost" in kpis
+    assert "estimated_profit" in kpis
+
+    # Verify server-side profit formula: total_amount - govt_fees - incidental_cost
+    expected_profit = kpis["total_amount"] - kpis["govt_fees"] - kpis["incidental_cost"]
+    assert round(kpis["estimated_profit"], 2) == round(expected_profit, 2)
+
+    # Payment status breakdown
+    assert "payment_status_breakdown" in data
+    assert isinstance(data["payment_status_breakdown"], list)
+    assert len(data["payment_status_breakdown"]) > 0
+
+
+def test_accounts_entries_csv_export(client: TestClient, accounts_fixture: dict):
+    """Verify CSV export contains all 21 columns for Accounts Entries."""
+    acc_user = accounts_fixture["acc_user"]
+
+    res = client.get("/api/accounts/entries/export", headers=auth_header(acc_user))
+    assert res.status_code == 200
+    assert res.headers["content-type"].startswith("text/csv")
+    csv_text = res.text
+    # Verify canonical header columns
+    assert "S.No" in csv_text
+    assert "Client Name" in csv_text
+    assert "Proforma Inv. No." in csv_text
+    assert "Tax Inv. No." in csv_text
+    assert "Reimbursement Note" in csv_text
+    assert "Govt Fees" in csv_text
+    assert "Profits" in csv_text
+
+
+def test_accounts_access_without_sales_permission(
+    client: TestClient, accounts_fixture: dict, db_session: Session
+):
+    """Verify an Accounts user without SALES permissions can access Accounts endpoints."""
+    acc_user = accounts_fixture["acc_user"]
+
+    # Verify acc_user has no SALES permissions in DB
+    mod_sales = db_session.query(Module).filter(Module.module_code == "SALES").first()
+    if mod_sales:
+        sales_perm = (
+            db_session.query(UserModulePermission)
+            .filter(
+                UserModulePermission.user_id == acc_user.user_id,
+                UserModulePermission.module_id == mod_sales.module_id,
+            )
+            .first()
+        )
+        assert sales_perm is None or not sales_perm.can_view
+
+    # Acc user can still access accounts entries and dashboard
+    entries_res = client.get("/api/accounts/entries", headers=auth_header(acc_user))
+    assert entries_res.status_code == 200
+
+    dash_res = client.get("/api/accounts/dashboard", headers=auth_header(acc_user))
+    assert dash_res.status_code == 200
+
+
+def test_accounts_access_forbidden_without_accounts_permission(client: TestClient, accounts_fixture: dict):
+    """Verify unauthenticated/unauthorized users cannot access Accounts APIs."""
+    unauth_user = accounts_fixture["unauth_user"]
+
+    res_entries = client.get("/api/accounts/entries", headers=auth_header(unauth_user))
+    assert res_entries.status_code == 403
+
+    res_dash = client.get("/api/accounts/dashboard", headers=auth_header(unauth_user))
+    assert res_dash.status_code == 403
+

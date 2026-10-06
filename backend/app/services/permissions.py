@@ -228,7 +228,7 @@ PAGE_CATALOG_CONFIG: Dict[str, Dict[str, Any]] = {
             "export": "operation.reports.export",
         },
     },
-    # Accounts Module Pages
+    # Accounts Module Pages (Exactly 2 pages)
     "ACCOUNTS_DASHBOARD": {
         "module_code": "ACCOUNTS",
         "page_name": "Accounts Dashboard",
@@ -240,68 +240,16 @@ PAGE_CATALOG_CONFIG: Dict[str, Dict[str, Any]] = {
             "export": "accounts.dashboard.export",
         },
     },
-    "ACCOUNTS_PAYMENT_REGISTER": {
+    "ACCOUNTS_ENTRIES": {
         "module_code": "ACCOUNTS",
-        "page_name": "Payment Register",
-        "route": "/accounts/payments",
+        "page_name": "Accounts Entries",
+        "route": "/accounts/entries",
         "display_order": 20,
-        "supported_actions": ["read", "write", "update", "approve", "export"],
+        "supported_actions": ["read", "update", "export"],
         "slugs": {
-            "read": "accounts.payments.read",
-            "write": "accounts.payments.create",
-            "update": "accounts.payments.update",
-            "approve": "accounts.payments.verify",
-            "export": "accounts.payments.export",
-        },
-    },
-    "ACCOUNTS_OUTSTANDING": {
-        "module_code": "ACCOUNTS",
-        "page_name": "Outstanding & Follow-ups",
-        "route": "/accounts/outstanding",
-        "display_order": 30,
-        "supported_actions": ["read", "write", "export"],
-        "slugs": {
-            "read": "accounts.outstanding.read",
-            "write": "accounts.outstanding.create",
-            "export": "accounts.outstanding.export",
-        },
-    },
-    "ACCOUNTS_INVOICES": {
-        "module_code": "ACCOUNTS",
-        "page_name": "Invoices & Receipts",
-        "route": "/accounts/invoices",
-        "display_order": 40,
-        "supported_actions": ["read", "write", "update", "export"],
-        "slugs": {
-            "read": "accounts.invoices.read",
-            "write": "accounts.invoices.create",
-            "update": "accounts.invoices.update",
-            "export": "accounts.invoices.export",
-        },
-    },
-    "ACCOUNTS_EXPENSES": {
-        "module_code": "ACCOUNTS",
-        "page_name": "Expenses & Reimbursements",
-        "route": "/accounts/expenses",
-        "display_order": 50,
-        "supported_actions": ["read", "write", "update", "approve", "export"],
-        "slugs": {
-            "read": "accounts.expenses.read",
-            "write": "accounts.expenses.create",
-            "update": "accounts.expenses.update",
-            "approve": "accounts.expenses.approve",
-            "export": "accounts.expenses.export",
-        },
-    },
-    "ACCOUNTS_REPORTS": {
-        "module_code": "ACCOUNTS",
-        "page_name": "Accounts Reports",
-        "route": "/accounts/reports",
-        "display_order": 60,
-        "supported_actions": ["read", "export"],
-        "slugs": {
-            "read": "accounts.reports.read",
-            "export": "accounts.reports.export",
+            "read": "accounts.entries.read",
+            "update": "accounts.entries.update",
+            "export": "accounts.entries.export",
         },
     },
 }
@@ -311,6 +259,13 @@ SLUG_TO_PAGE_ACTION: Dict[str, Tuple[str, str]] = {}
 for p_code, conf in PAGE_CATALOG_CONFIG.items():
     for act, slug_str in conf["slugs"].items():
         SLUG_TO_PAGE_ACTION[slug_str] = (p_code, act)
+
+# Aliases for flexible slug resolution
+SLUG_TO_PAGE_ACTION["accounts.entries.edit"] = ("ACCOUNTS_ENTRIES", "update")
+SLUG_TO_PAGE_ACTION["accounts.entries.write"] = ("ACCOUNTS_ENTRIES", "update")
+SLUG_TO_PAGE_ACTION["accounts.dashboard.view"] = ("ACCOUNTS_DASHBOARD", "read")
+SLUG_TO_PAGE_ACTION["accounts.entries.view"] = ("ACCOUNTS_ENTRIES", "read")
+
 
 
 class PermissionDeniedError(Exception):
@@ -567,6 +522,22 @@ def has_permission(
             if field_name and hasattr(parent_sales_perm, field_name) and bool(getattr(parent_sales_perm, field_name, False)):
                 return True
 
+    # For ACCOUNTS_DASHBOARD and ACCOUNTS_ENTRIES, also inherit permissions from parent ACCOUNTS module
+    if module_code_norm in ("ACCOUNTS_DASHBOARD", "ACCOUNTS_ENTRIES", "ACCOUNTS_PAYMENT_REGISTER", "ACCOUNTS_OUTSTANDING", "ACCOUNTS_INVOICES", "ACCOUNTS_EXPENSES", "ACCOUNTS_REPORTS"):
+        parent_acc_perm = get_user_module_permission(session, user.user_id, "ACCOUNTS")
+        if parent_acc_perm and is_permission_active_and_valid(parent_acc_perm):
+            if action_norm == "view" and parent_acc_perm.can_view:
+                return True
+            if field_name and hasattr(parent_acc_perm, field_name) and bool(getattr(parent_acc_perm, field_name, False)):
+                return True
+
+    # If asking for parent ACCOUNTS module, check if user has access to either child submodule
+    if module_code_norm == "ACCOUNTS" and action_norm == "view":
+        for child_code in ("ACCOUNTS_DASHBOARD", "ACCOUNTS_ENTRIES"):
+            child_perm = get_user_module_permission(session, user.user_id, child_code)
+            if child_perm and is_permission_active_and_valid(child_perm) and child_perm.can_view:
+                return True
+
     return False
 
 
@@ -738,6 +709,14 @@ def get_accessible_modules(
     valid_permissions = [p for p in permissions if is_permission_active_and_valid(p, now_utc)]
     perms_by_module_id = {p.module_id: p for p in valid_permissions}
     accessible_module_ids: Set[uuid.UUID] = set(perms_by_module_id.keys())
+
+    # Propagate parent permissions down to child modules if child has no explicit permission
+    for mod in all_modules:
+        if mod.parent_module_id and mod.module_id not in perms_by_module_id:
+            parent_perm = perms_by_module_id.get(mod.parent_module_id)
+            if parent_perm and parent_perm.can_view:
+                perms_by_module_id[mod.module_id] = parent_perm
+                accessible_module_ids.add(mod.module_id)
 
     parents_to_add: Set[uuid.UUID] = set()
     for mod_id in accessible_module_ids:
@@ -984,9 +963,10 @@ def deactivate_permission(
 # ==============================================================================
 
 def get_permission_catalog(session: Session) -> PermissionCatalogResponse:
-    """Return the structured catalog of Sales and Operation modules and pages with supported actions."""
+    """Return the structured catalog of Sales, Operation, and Accounts modules and pages with supported actions."""
     sales_pages: List[CatalogPageItem] = []
     operation_pages: List[CatalogPageItem] = []
+    accounts_pages: List[CatalogPageItem] = []
 
     for page_code, config in sorted(PAGE_CATALOG_CONFIG.items(), key=lambda item: item[1]["display_order"]):
         page_item = CatalogPageItem(
@@ -1001,6 +981,9 @@ def get_permission_catalog(session: Session) -> PermissionCatalogResponse:
             sales_pages.append(page_item)
         elif config["module_code"] == "OPERATIONS":
             operation_pages.append(page_item)
+        elif config["module_code"] == "ACCOUNTS":
+            if page_code in ("ACCOUNTS_DASHBOARD", "ACCOUNTS_ENTRIES"):
+                accounts_pages.append(page_item)
 
     modules = [
         CatalogModuleItem(
@@ -1012,6 +995,11 @@ def get_permission_catalog(session: Session) -> PermissionCatalogResponse:
             module_code="OPERATIONS",
             module_name="Operation",
             pages=operation_pages,
+        ),
+        CatalogModuleItem(
+            module_code="ACCOUNTS",
+            module_name="Accounts",
+            pages=accounts_pages,
         ),
     ]
     return PermissionCatalogResponse(modules=modules)
@@ -1168,12 +1156,13 @@ def save_user_permissions_bundle(
     ).scalars().all()
     mod_by_code = {m.module_code: m for m in active_modules}
 
-    # Also resolve parent module IDs (SALES, OPERATIONS)
-    parent_codes = {"SALES", "OPERATIONS"}
+    # Also resolve parent module IDs (SALES, OPERATIONS, ACCOUNTS)
+    parent_codes = {"SALES", "OPERATIONS", "ACCOUNTS"}
     parent_mods = {c: mod_by_code.get(c) for c in parent_codes}
 
     sales_has_any_view = False
     operations_has_any_view = False
+    accounts_has_any_view = False
 
     # 3. Validate and apply permissions
     for perm_in in payload.permissions:
@@ -1204,6 +1193,8 @@ def save_user_permissions_bundle(
                 sales_has_any_view = True
             elif page_config["module_code"] == "OPERATIONS":
                 operations_has_any_view = True
+            elif page_config["module_code"] == "ACCOUNTS":
+                accounts_has_any_view = True
 
         target_module = mod_by_code.get(code)
         if not target_module:
@@ -1227,7 +1218,7 @@ def save_user_permissions_bundle(
             is_bootstrap=True,
         )
 
-    # 4. Sync parent module (SALES, OPERATIONS) navigation view
+    # 4. Sync parent module (SALES, OPERATIONS, ACCOUNTS) navigation view
     if parent_mods.get("SALES"):
         grant_or_update_permission(
             session=session,
@@ -1262,6 +1253,25 @@ def save_user_permissions_bundle(
             can_export=False,
             data_scope="SELF",
             status="ACTIVE" if operations_has_any_view else "INACTIVE",
+            granted_by_user_id=actor_user.user_id,
+            is_bootstrap=True,
+        )
+
+    if parent_mods.get("ACCOUNTS"):
+        grant_or_update_permission(
+            session=session,
+            user_id=target_user_id,
+            module_id=parent_mods["ACCOUNTS"].module_id,
+            can_view=accounts_has_any_view,
+            can_create=False,
+            can_edit=False,
+            can_delete=False,
+            can_approve=False,
+            can_assign=False,
+            can_reassign=False,
+            can_export=False,
+            data_scope="COMPANY",
+            status="ACTIVE" if accounts_has_any_view else "INACTIVE",
             granted_by_user_id=actor_user.user_id,
             is_bootstrap=True,
         )

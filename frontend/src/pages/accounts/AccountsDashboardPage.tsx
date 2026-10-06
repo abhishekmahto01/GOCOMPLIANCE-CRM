@@ -1,56 +1,43 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
-  Receipt,
-  CreditCard,
-  Building2,
-  Clock,
-  Sparkles,
-  TrendingUp,
-  AlertTriangle,
   FileSpreadsheet,
-  PlusCircle,
+  Building2,
   Filter,
-  CheckCircle2,
   RefreshCw,
   AlertCircle,
+  TrendingUp,
+  Receipt,
+  CreditCard,
+  Clock,
+  Landmark,
+  Coins,
+  ArrowRight,
+  CheckCircle2,
+  MapPin,
 } from 'lucide-react';
-import {
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-} from 'recharts';
 import { getAccountsDashboardApi } from '../../api/accounts';
 import type { AccountsDashboardResponse } from '../../types/accounts';
 import { Button } from '../../components/ui/button';
 
 export const AccountsDashboardPage: React.FC = () => {
-  const navigate = useNavigate();
   const [data, setData] = useState<AccountsDashboardResponse | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Filters
-  const [preset, setPreset] = useState<string>('this_month');
+  // Date & Company Filters using Sales Entry Date
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
   const [companyId, setCompanyId] = useState<string>('ALL');
-  const [employeeId, setEmployeeId] = useState<string>('ALL');
 
   const fetchDashboard = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
       const res = await getAccountsDashboardApi({
-        preset,
-        from_date: preset === 'custom' && fromDate ? fromDate : undefined,
-        to_date: preset === 'custom' && toDate ? toDate : undefined,
-        company_id: companyId,
-        employee_id: employeeId,
+        from_date: fromDate || undefined,
+        to_date: toDate || undefined,
+        company_id: companyId !== 'ALL' ? companyId : undefined,
       });
       setData(res);
     } catch (err: any) {
@@ -59,7 +46,7 @@ export const AccountsDashboardPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [preset, fromDate, toDate, companyId, employeeId]);
+  }, [fromDate, toDate, companyId]);
 
   useEffect(() => {
     fetchDashboard();
@@ -67,58 +54,40 @@ export const AccountsDashboardPage: React.FC = () => {
 
   const kpis = data?.kpis;
   const filterOptions = data?.filter_options;
+  const paymentBreakdown = data?.payment_status_breakdown || [];
+  const recentEntries = data?.recent_entries || [];
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 pb-12">
+    <div className="max-w-7xl mx-auto space-y-6 pb-12 font-sans">
       {/* Top Banner Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-[#0a2569] via-indigo-900 to-blue-900 text-white shadow-xl relative overflow-hidden">
-        {/* Ambient shapes */}
+        {/* Ambient glow effects */}
         <div className="absolute -right-10 -bottom-10 w-72 h-72 rounded-full bg-white/5 blur-3xl pointer-events-none" />
         <div className="absolute top-0 right-1/4 w-48 h-48 rounded-full bg-indigo-500/10 blur-2xl pointer-events-none" />
 
         <div className="relative z-10 space-y-2">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-xs font-bold text-indigo-200 border border-white/10">
-            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-            <span>Accounts & Financial Control Center</span>
+            <Receipt className="w-3.5 h-3.5 text-amber-300" />
+            <span>Accounts Management</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-            Financial Health & Collections
+            Accounts Dashboard
           </h1>
           <p className="text-xs sm:text-sm text-indigo-200 max-w-2xl leading-relaxed">
-            Real-time audit-safe tracking of confirmed order liabilities, verified collections, debtor ageing, and direct operational outlays.
+            Live financial totals, advance collections, and estimated profits based on authorized Sales records.
           </p>
         </div>
 
-        <div className="relative z-10 flex flex-wrap items-center gap-2.5">
-          <Link to="/accounts/payments">
+        <div className="relative z-10 flex items-center gap-3">
+          <Link to="/accounts/entries">
             <Button
               variant="primary"
-              size="sm"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs shadow-md flex items-center gap-1.5"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>Record Payment</span>
-            </Button>
-          </Link>
-
-          <Link to="/accounts/outstanding">
-            <Button
-              variant="outline"
-              size="sm"
-              className="bg-white/10 hover:bg-white/20 text-white border-white/20 backdrop-blur-md rounded-xl text-xs font-semibold flex items-center gap-1.5"
-            >
-              <Clock className="w-4 h-4" />
-              <span>Debtors Ageing</span>
-            </Button>
-          </Link>
-          <Link to="/accounts/reports">
-            <Button
-              variant="outline"
-              size="sm"
-              className="bg-white/10 hover:bg-white/20 text-white border-white/20 backdrop-blur-md rounded-xl text-xs font-semibold flex items-center gap-1.5"
+              size="lg"
+              className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-2xl text-sm shadow-lg shadow-indigo-950/40 flex items-center gap-2 px-5 py-3 border border-indigo-400/30 transition-all hover:scale-[1.02]"
             >
               <FileSpreadsheet className="w-4 h-4" />
-              <span>Reports</span>
+              <span>View Entries</span>
+              <ArrowRight className="w-4 h-4" />
             </Button>
           </Link>
         </div>
@@ -126,91 +95,77 @@ export const AccountsDashboardPage: React.FC = () => {
 
       {/* Filter Toolbar */}
       <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500 dark:text-slate-400 mr-1">
             <Filter className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-            <span>Scope:</span>
+            <span>Date Range (Sales Date):</span>
           </div>
 
-          {/* Preset Range */}
-          <select
-            aria-label="Filter Preset"
-            value={preset}
-            onChange={(e) => setPreset(e.target.value)}
-            className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="today">Today</option>
-            <option value="this_week">This Week</option>
-            <option value="this_month">This Month</option>
-            <option value="this_quarter">This Quarter</option>
-            <option value="this_year">This Financial Year</option>
-            <option value="all_time">All Time</option>
-            <option value="custom">Custom Date Range</option>
-          </select>
+          {/* From Date */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-slate-500 font-medium">From</span>
+            <input
+              type="date"
+              aria-label="From Date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              className="px-3 py-1.5 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
 
-          {/* Custom Date Pickers */}
-          {preset === 'custom' && (
-            <div className="flex items-center gap-1.5">
-              <input
-                type="date"
-                aria-label="From Date"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-                className="px-2.5 py-1.5 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200"
-              />
-              <span className="text-slate-400 text-xs font-semibold">to</span>
-              <input
-                type="date"
-                aria-label="To Date"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-                className="px-2.5 py-1.5 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200"
-              />
-            </div>
+          {/* To Date */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-slate-500 font-medium">To</span>
+            <input
+              type="date"
+              aria-label="To Date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              className="px-3 py-1.5 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          {(fromDate || toDate) && (
+            <button
+              onClick={() => {
+                setFromDate('');
+                setToDate('');
+              }}
+              className="text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 font-semibold px-2 py-1 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
+            >
+              Reset Dates
+            </button>
           )}
 
           {/* Company Filter */}
           {filterOptions && filterOptions.companies.length > 0 && (
-            <select
-              aria-label="Company Filter"
-              value={companyId}
-              onChange={(e) => setCompanyId(e.target.value)}
-              className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 max-w-[180px] truncate"
-            >
-              <option value="ALL">All Companies</option>
-              {filterOptions.companies.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-          )}
-
-          {/* Salesperson Filter */}
-          {filterOptions && filterOptions.salespersons.length > 0 && (
-            <select
-              aria-label="Salesperson Filter"
-              value={employeeId}
-              onChange={(e) => setEmployeeId(e.target.value)}
-              className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 max-w-[180px] truncate"
-            >
-              <option value="ALL">All Salespersons</option>
-              {filterOptions.salespersons.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center gap-1.5 ml-2">
+              <Building2 className="w-3.5 h-3.5 text-slate-400" />
+              <select
+                aria-label="Company Filter"
+                value={companyId}
+                onChange={(e) => setCompanyId(e.target.value)}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 max-w-[200px] truncate"
+              >
+                <option value="ALL">All Companies</option>
+                {filterOptions.companies.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           )}
         </div>
 
         <button
           onClick={fetchDashboard}
           disabled={isLoading}
-          className="p-2 text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors disabled:opacity-50"
-          title="Refresh Data"
+          className="p-2 text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors disabled:opacity-50 flex items-center gap-1.5 text-xs font-semibold"
+          title="Refresh Dashboard"
         >
           <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+          <span>Refresh</span>
         </button>
       </div>
 
@@ -222,355 +177,299 @@ export const AccountsDashboardPage: React.FC = () => {
         </div>
       )}
 
-      {/* Main KPI Cards Grid */}
+      {/* 7 Canonical Financial KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* KPI 1: Confirmed Order Value */}
-        <div
-          onClick={() => navigate('/accounts/payments')}
-          className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs hover:border-indigo-300 dark:hover:border-indigo-700 transition-all cursor-pointer group"
-        >
+        {/* KPI 1: Total Entries */}
+        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs hover:border-indigo-300 dark:hover:border-indigo-700 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-slate-400 dark:text-slate-500 text-[11px] font-bold uppercase tracking-wider">
-              Confirmed Order Value
+              Total Entries
             </span>
-            <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform">
-              <Receipt className="w-5 h-5" />
+            <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
+              <FileSpreadsheet className="w-5 h-5" />
             </div>
           </div>
           <div className="text-2xl font-black text-slate-900 dark:text-white mt-2">
-            {kpis ? kpis.formatted_confirmed_order_value : '₹0.00'}
+            {kpis ? kpis.total_entries : 0}
           </div>
-          <div className="flex items-center justify-between text-[11px] mt-2 text-slate-500 dark:text-slate-400">
-            <span>{kpis ? `${kpis.confirmed_order_count} orders` : '0 orders'}</span>
-            <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full font-semibold text-slate-500">
-              📅 By Order Date
+          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-2 flex items-center justify-between">
+            <span>Filtered Sales Orders</span>
+            <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full font-semibold">
+              Full Dataset
             </span>
           </div>
         </div>
 
-        {/* KPI 2: Verified Collections */}
-        <div
-          onClick={() => navigate('/accounts/payments')}
-          className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs hover:border-emerald-300 dark:hover:border-emerald-700 transition-all cursor-pointer group"
-        >
+        {/* KPI 2: Total Amount */}
+        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs hover:border-blue-300 dark:hover:border-blue-700 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-slate-400 dark:text-slate-500 text-[11px] font-bold uppercase tracking-wider">
-              Verified Collections
+              Total Amount
             </span>
-            <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform">
+            <div className="p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
+              <Receipt className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="text-2xl font-black text-blue-600 dark:text-blue-400 mt-2">
+            {kpis ? kpis.formatted_total_amount : '₹0.00'}
+          </div>
+          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
+            Aggregate Order Value (Contractual)
+          </div>
+        </div>
+
+        {/* KPI 3: Advance Amount */}
+        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs hover:border-emerald-300 dark:hover:border-emerald-700 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-slate-400 dark:text-slate-500 text-[11px] font-bold uppercase tracking-wider">
+              Advance Amount
+            </span>
+            <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400">
               <CreditCard className="w-5 h-5" />
             </div>
           </div>
           <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-2">
-            {kpis ? kpis.formatted_verified_collections : '₹0.00'}
+            {kpis ? kpis.formatted_advance_amount : '₹0.00'}
           </div>
-          <div className="flex items-center justify-between text-[11px] mt-2 text-slate-500 dark:text-slate-400">
-            <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-0.5">
-              <CheckCircle2 className="w-3 h-3" /> {kpis ? `${kpis.verified_collections_count} receipts` : '0 receipts'}
-            </span>
-            <span className="text-[10px] bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full font-semibold border border-emerald-200 dark:border-emerald-800">
-              💳 By Payment Date
-            </span>
+          <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold mt-2 flex items-center gap-1">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            <span>Total Received / Advance</span>
           </div>
         </div>
 
-        {/* KPI 3: Current Outstanding */}
-        <div
-          onClick={() => navigate('/accounts/outstanding')}
-          className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs hover:border-amber-300 dark:hover:border-amber-700 transition-all cursor-pointer group"
-        >
+        {/* KPI 4: Pending Amount */}
+        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs hover:border-amber-300 dark:hover:border-amber-700 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-slate-400 dark:text-slate-500 text-[11px] font-bold uppercase tracking-wider">
-              Current Outstanding
+              Pending Amount
             </span>
-            <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 group-hover:scale-110 transition-transform">
+            <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400">
               <Clock className="w-5 h-5" />
             </div>
           </div>
           <div className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-2">
-            {kpis ? kpis.formatted_current_outstanding : '₹0.00'}
+            {kpis ? kpis.formatted_pending_amount : '₹0.00'}
           </div>
-          <div className="flex items-center justify-between text-[11px] mt-2 text-slate-500 dark:text-slate-400">
-            <span>{kpis ? `${kpis.outstanding_orders_count} pending orders` : '0 orders'}</span>
-            <span className="text-[10px] bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full font-semibold border border-amber-200 dark:border-amber-800">
-              ⏳ As of Today
-            </span>
+          <div className="text-[11px] text-amber-700 dark:text-amber-300 font-medium mt-2">
+            Outstanding Balance Amount
           </div>
         </div>
 
-        {/* KPI 4: Overdue Receivables */}
-        <div
-          onClick={() => navigate('/accounts/outstanding?ageing_bucket=1_30_DAYS')}
-          className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs hover:border-rose-300 dark:hover:border-rose-700 transition-all cursor-pointer group"
-        >
+        {/* KPI 5: Govt Fees */}
+        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs hover:border-purple-300 dark:hover:border-purple-700 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-slate-400 dark:text-slate-500 text-[11px] font-bold uppercase tracking-wider">
-              Overdue Receivables
+              Govt Fees
             </span>
-            <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 group-hover:scale-110 transition-transform">
-              <AlertTriangle className="w-5 h-5" />
+            <div className="p-2.5 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400">
+              <Landmark className="w-5 h-5" />
             </div>
           </div>
-          <div className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-2">
-            {kpis ? kpis.formatted_current_overdue : '₹0.00'}
+          <div className="text-2xl font-black text-purple-600 dark:text-purple-400 mt-2">
+            {kpis ? kpis.formatted_govt_fees : '₹0.00'}
           </div>
-          <div className="flex items-center justify-between text-[11px] mt-2 text-slate-500 dark:text-slate-400">
-            <span className="text-rose-600 font-semibold">{kpis ? `${kpis.overdue_orders_count} overdue orders` : '0 orders'}</span>
-            <span className="text-[10px] bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 px-2 py-0.5 rounded-full font-semibold border border-rose-200 dark:border-rose-800">
-              🚨 Past Due Date
+          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
+            Statutory & Filing Fees
+          </div>
+        </div>
+
+        {/* KPI 6: Incidental Cost */}
+        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs hover:border-orange-300 dark:hover:border-orange-700 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-slate-400 dark:text-slate-500 text-[11px] font-bold uppercase tracking-wider">
+              Incidental Cost
+            </span>
+            <div className="p-2.5 rounded-xl bg-orange-50 dark:bg-orange-950/60 text-orange-600 dark:text-orange-400">
+              <Coins className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="text-2xl font-black text-orange-600 dark:text-orange-400 mt-2">
+            {kpis ? kpis.formatted_incidental_cost : '₹0.00'}
+          </div>
+          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
+            Direct Operational Costs
+          </div>
+        </div>
+
+        {/* KPI 7: Estimated Profit */}
+        <div className="sm:col-span-2 p-5 rounded-2xl bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-100/50 dark:from-slate-900 dark:via-emerald-950/30 dark:to-slate-900 border border-emerald-200 dark:border-emerald-800 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-emerald-800 dark:text-emerald-300 text-[11px] font-bold uppercase tracking-wider">
+              Estimated Profit
+            </span>
+            <div className="p-2.5 rounded-xl bg-emerald-600 text-white shadow-md">
+              <TrendingUp className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="text-3xl font-black text-emerald-700 dark:text-emerald-400 mt-2">
+            {kpis ? kpis.formatted_estimated_profit : '₹0.00'}
+          </div>
+          <div className="text-xs text-emerald-800/80 dark:text-emerald-300/80 font-medium mt-2 flex items-center justify-between">
+            <span>Server Formula: Total Amount − Govt Fees − Incidental Cost</span>
+            <span className="text-[10px] bg-emerald-200/60 dark:bg-emerald-900/60 px-2 py-0.5 rounded-full font-bold text-emerald-900 dark:text-emerald-200">
+              Estimate
             </span>
           </div>
         </div>
       </div>
 
-      {/* Secondary Metrics Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Unverified Submissions */}
-        <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+      {/* Payment Status Breakdown */}
+      <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
+        <div className="flex items-center justify-between">
           <div>
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Unverified Payments</div>
-            <div className="text-lg font-extrabold text-blue-600 dark:text-blue-400 mt-0.5">
-              {kpis ? kpis.formatted_unverified_collections : '₹0.00'}
-            </div>
-            <div className="text-[11px] text-slate-500">
-              {kpis?.unverified_collections_count || 0} collections awaiting approval
-            </div>
+            <h2 className="text-base font-bold text-slate-900 dark:text-white">Payment Status Breakdown</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Distribution of confirmed orders across collection statuses
+            </p>
           </div>
-          <Link to="/accounts/payments">
-            <Button size="sm" variant="ghost" className="text-xs text-blue-600 hover:bg-blue-50 font-semibold rounded-xl">
-              Verify
+          <Link
+            to="/accounts/entries"
+            className="text-xs font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 flex items-center gap-1"
+          >
+            <span>View All in Entries</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
+          {paymentBreakdown.map((item) => {
+            let bgLight = 'bg-slate-50 border-slate-200 text-slate-800';
+            let badgeBg = 'bg-slate-200 text-slate-700';
+
+            if (item.status === 'FULLY_PAID') {
+              bgLight = 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200';
+              badgeBg = 'bg-emerald-200/80 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200';
+            } else if (item.status === 'PARTIALLY_PAID') {
+              bgLight = 'bg-blue-50/70 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-200';
+              badgeBg = 'bg-blue-200/80 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
+            } else if (item.status === 'PENDING') {
+              bgLight = 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200';
+              badgeBg = 'bg-amber-200/80 text-amber-800 dark:bg-amber-900 dark:text-amber-200';
+            } else if (item.status === 'OVERDUE') {
+              bgLight = 'bg-rose-50/70 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800 text-rose-900 dark:text-rose-200';
+              badgeBg = 'bg-rose-200/80 text-rose-800 dark:bg-rose-900 dark:text-rose-200';
+            }
+
+            return (
+              <div
+                key={item.status}
+                className={`p-4 rounded-2xl border ${bgLight} flex flex-col justify-between space-y-3 transition-transform hover:scale-[1.01]`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs">{item.label}</span>
+                  <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${badgeBg}`}>
+                    {item.percentage.toFixed(1)}%
+                  </span>
+                </div>
+                <div>
+                  <div className="text-xl font-extrabold font-mono">{item.formatted_amount}</div>
+                  <div className="text-[11px] opacity-80 mt-0.5 font-medium">{item.count} orders</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Recent Entries Preview */}
+      <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-bold text-slate-900 dark:text-white">Recent Accounts Entries</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Latest shared sales records in the Accounts module
+            </p>
+          </div>
+          <Link to="/accounts/entries">
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs font-semibold rounded-xl flex items-center gap-1.5"
+            >
+              <span>View All Entries</span>
+              <ArrowRight className="w-3.5 h-3.5" />
             </Button>
           </Link>
         </div>
 
-        {/* Direct Expenses */}
-        <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
-          <div>
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Direct Operational Costs</div>
-            <div className="text-lg font-extrabold text-purple-600 dark:text-purple-400 mt-0.5">
-              {kpis ? kpis.formatted_recorded_direct_costs : '₹0.00'}
-            </div>
-            <div className="text-[11px] text-slate-500">
-              Govt fees, vendor & incidentals
-            </div>
-          </div>
-          <Link to="/accounts/expenses">
-            <Button size="sm" variant="ghost" className="text-xs text-purple-600 hover:bg-purple-50 font-semibold rounded-xl">
-              View
-            </Button>
-          </Link>
-        </div>
-
-        {/* Estimated Order Margin */}
-        <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
-          <div>
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Estimated Order Margin</div>
-            <div className="text-lg font-extrabold text-slate-800 dark:text-slate-100 mt-0.5">
-              {kpis ? kpis.formatted_estimated_order_margin : '₹0.00'}
-            </div>
-            <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
-              {kpis ? `${kpis.margin_percentage.toFixed(1)}% estimated margin` : '0%'}
-            </div>
-          </div>
-          <span className="text-[10px] bg-slate-200/80 dark:bg-slate-800 px-2 py-1 rounded-lg text-slate-600 font-mono">
-            Commercial Est.
-          </span>
-        </div>
-      </div>
-
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Collections Over Time Trend Chart */}
-        <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-2xl p-5 shadow-xs border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-              <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">Verified Collections Over Time</h2>
-            </div>
-            <span className="text-xs font-semibold text-slate-400">
-              {data?.date_range ? `${data.date_range.from_date} to ${data.date_range.to_date}` : ''}
-            </span>
-          </div>
-
-          <div className="h-64 w-full">
-            {data && data.collections_trend.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={data.collections_trend} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorAccountsCollections" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.4} />
-                      <stop offset="95%" stopColor="#4f46e5" stopOpacity={0.0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                  <XAxis dataKey="label" stroke="#94a3b8" fontSize={11} tickLine={false} />
-                  <YAxis
-                    stroke="#94a3b8"
-                    fontSize={11}
-                    tickLine={false}
-                    tickFormatter={(val) => (val >= 100000 ? `${(val / 100000).toFixed(0)}L` : val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val)}
-                  />
-                  <Tooltip
-                    formatter={(val: any) => [`₹${Number(val || 0).toLocaleString('en-IN')}`, 'Verified Collections']}
-                    labelFormatter={(label) => `Date: ${label}`}
-                  />
-
-                  <Area
-                    type="monotone"
-                    dataKey="verified_amount"
-                    stroke="#4f46e5"
-                    strokeWidth={2.5}
-                    fillOpacity={1}
-                    fill="url(#colorAccountsCollections)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs">
-                <Receipt className="w-8 h-8 mb-2 opacity-40" />
-                No collections recorded in this date range.
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Outstanding Ageing Distribution */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 shadow-xs border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-              <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">Receivables Ageing</h2>
-            </div>
-            <Link to="/accounts/outstanding" className="text-xs font-semibold text-indigo-600 hover:underline">
-              View All
-            </Link>
-          </div>
-
-          <div className="space-y-3 my-auto">
-            {data && data.ageing_breakdown.map((item) => (
-              <div key={item.bucket} className="space-y-1">
-                <div className="flex items-center justify-between text-xs font-medium">
-                  <span className="text-slate-600 dark:text-slate-300 font-semibold">{item.label}</span>
-                  <div className="text-right">
-                    <span className="font-bold text-slate-900 dark:text-white">₹{item.amount.toLocaleString('en-IN')}</span>
-                    <span className="text-[10px] text-slate-400 ml-1.5">({item.count} orders)</span>
-                  </div>
-                </div>
-                <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all duration-500"
-                    style={{
-                      width: `${Math.max(item.percentage, item.amount > 0 ? 4 : 0)}%`,
-                      backgroundColor: item.color,
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Tables Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Company Financial Summary */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 shadow-xs border border-slate-200/80 dark:border-slate-800">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Building2 className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-              <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">Company-wise Financials</h2>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider">
-                  <th className="pb-2">Company</th>
-                  <th className="pb-2 text-right">Orders Value</th>
-                  <th className="pb-2 text-right">Collected</th>
-                  <th className="pb-2 text-right">Pending</th>
-                  <th className="pb-2 text-right">Rate</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {data && data.company_breakdown.length > 0 ? (
-                  data.company_breakdown.map((comp) => (
-                    <tr key={comp.company_id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
-                      <td className="py-2.5 font-bold text-slate-800 dark:text-slate-200">{comp.company_name}</td>
-                      <td className="py-2.5 text-right font-mono font-medium text-slate-700 dark:text-slate-300">
-                        ₹{comp.order_value.toLocaleString('en-IN')}
-                      </td>
-                      <td className="py-2.5 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                        ₹{comp.verified_received.toLocaleString('en-IN')}
-                      </td>
-                      <td className="py-2.5 text-right font-mono font-bold text-amber-600 dark:text-amber-400">
-                        ₹{comp.outstanding.toLocaleString('en-IN')}
-                      </td>
-                      <td className="py-2.5 text-right font-semibold">
-                        <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                          {comp.collection_rate.toFixed(0)}%
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider">
+                <th className="pb-3 pl-2">S.No</th>
+                <th className="pb-3">Date</th>
+                <th className="pb-3">Client Name</th>
+                <th className="pb-3">Location</th>
+                <th className="pb-3">Work</th>
+                <th className="pb-3">Converted By</th>
+                <th className="pb-3 text-right">Total Amount</th>
+                <th className="pb-3 text-right">Advance Amount</th>
+                <th className="pb-3 text-right">Pending Amount</th>
+                <th className="pb-3 text-center">Payment Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {recentEntries.length > 0 ? (
+                recentEntries.map((entry) => (
+                  <tr key={entry.order_id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                    <td className="py-3 pl-2 font-mono text-slate-500 font-semibold">{entry.s_no}</td>
+                    <td className="py-3 whitespace-nowrap text-slate-600 dark:text-slate-400 font-medium">
+                      {entry.formatted_date}
+                    </td>
+                    <td className="py-3 font-bold text-slate-800 dark:text-slate-200">
+                      {entry.client_name}
+                    </td>
+                    <td className="py-3 text-slate-600 dark:text-slate-400">
+                      {entry.location ? (
+                        <span className="inline-flex items-center gap-1 font-medium text-slate-700 dark:text-slate-300">
+                          <MapPin className="w-3 h-3 text-indigo-500 shrink-0" />
+                          <span>{entry.location}</span>
                         </span>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={5} className="py-6 text-center text-slate-400">
-                      No company records found.
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
+                    <td className="py-3 text-slate-600 dark:text-slate-400 font-medium">
+                      {entry.service_name}
+                    </td>
+                    <td className="py-3 text-slate-600 dark:text-slate-400">
+                      {entry.salesperson_name}
+                    </td>
+                    <td className="py-3 text-right font-mono font-medium text-slate-800 dark:text-slate-200">
+                      {entry.formatted_order_value}
+                    </td>
+                    <td className="py-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                      {entry.formatted_amount_received}
+                    </td>
+                    <td className="py-3 text-right font-mono font-bold text-amber-600 dark:text-amber-400">
+                      {entry.formatted_balance_amount}
+                    </td>
+                    <td className="py-3 text-center">
+                      <span
+                        className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          entry.payment_status === 'FULLY_PAID'
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                            : entry.payment_status === 'PARTIALLY_PAID'
+                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                            : entry.payment_status === 'OVERDUE'
+                            ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                            : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                        }`}
+                      >
+                        {entry.payment_status.replace('_', ' ')}
+                      </span>
                     </td>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Top Outstanding Debtors Widget */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 shadow-xs border border-slate-200/80 dark:border-slate-800">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400" />
-              <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">Top Outstanding Debtors</h2>
-            </div>
-            <Link to="/accounts/outstanding" className="text-xs font-semibold text-indigo-600 hover:underline">
-              All Debtors &rarr;
-            </Link>
-          </div>
-
-          <div className="space-y-2.5">
-            {data && data.top_outstanding.length > 0 ? (
-              data.top_outstanding.map((debtor) => (
-                <div
-                  key={debtor.sales_order_id}
-                  onClick={() => navigate('/accounts/outstanding')}
-                  className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-800 flex items-center justify-between hover:bg-slate-100/80 transition-colors cursor-pointer"
-                >
-                  <div className="space-y-0.5">
-                    <div className="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                      <span>{debtor.client_name}</span>
-                      <span className="text-[10px] font-mono text-slate-400">({debtor.order_number})</span>
-                    </div>
-                    <div className="text-[11px] text-slate-500">
-                      {debtor.service_name} &bull; Sales: {debtor.salesperson_name}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs font-extrabold text-rose-600 dark:text-rose-400">
-                      {debtor.formatted_pending_amount}
-                    </div>
-                    <div className="text-[10px] font-bold text-slate-400">
-                      {debtor.days_overdue > 0 ? `${debtor.days_overdue} days overdue` : 'Due soon'}
-                    </div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="py-8 text-center text-slate-400 text-xs">
-                No outstanding debtors currently pending.
-              </div>
-            )}
-          </div>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={10} className="py-8 text-center text-slate-400 text-xs">
+                    No sales orders found for the selected filter.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

@@ -206,6 +206,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return true;
         }
         if (norm === 'ADMIN' && codeUpper.startsWith('ADMIN_')) return true;
+        if (
+          norm === 'ACCOUNTS' &&
+          (codeUpper.startsWith('ACCOUNTS_') || codeUpper.startsWith('ACCOUNT_'))
+        ) {
+          return true;
+        }
         return false;
       });
 
@@ -312,7 +318,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const matchesParent =
           (targetCode === 'SALES' && codeUpper.startsWith('SALES_')) ||
           (targetCode === 'OPERATIONS' && (codeUpper.startsWith('OPERATION_') || codeUpper.startsWith('OPERATIONS_'))) ||
-          (targetCode === 'ADMIN' && codeUpper.startsWith('ADMIN_'));
+          (targetCode === 'ADMIN' && codeUpper.startsWith('ADMIN_')) ||
+          (targetCode === 'ACCOUNTS' && (codeUpper.startsWith('ACCOUNTS_') || codeUpper.startsWith('ACCOUNT_')));
         if (!matchesParent) return false;
 
         switch (targetAction) {

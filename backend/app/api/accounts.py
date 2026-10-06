@@ -25,6 +25,9 @@ from app.database.session import get_db
 from app.models.user import User
 from app.schemas.accounts import (
     AccountsDashboardResponse,
+    AccountsEntriesResponse,
+    AccountsEntryRead,
+    AccountsEntryUpdate,
     AccountsExpenseApproval,
     AccountsExpenseCreate,
     AccountsExpenseListResponse,
@@ -89,7 +92,7 @@ def get_accounts_filter_options(
     response_model=AccountsDashboardResponse,
     status_code=status.HTTP_200_OK,
     summary="Get Accounts Financial Dashboard Analytics",
-    description="Retrieve order value, verified collections, direct costs, outstanding, ageing breakdown, and trend data.",
+    description="Retrieve order value, advance amount, pending amount, direct costs, and payment status breakdown.",
 )
 def get_accounts_dashboard(
     company_id: Optional[str] = Query(None, description="Filter by company ID"),
@@ -111,6 +114,129 @@ def get_accounts_dashboard(
             date_from=from_date,
             date_to=to_date,
         )
+    except permissions.PermissionDeniedError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+
+# ============================================================================
+# ACCOUNTS ENTRIES (CANONICAL 21 COLUMNS)
+# ============================================================================
+
+@router.get(
+    "/entries/export",
+    status_code=status.HTTP_200_OK,
+    summary="Export Accounts Entries to Safe CSV",
+    description="Export filtered Accounts Entries with all 21 canonical columns.",
+)
+def export_accounts_entries(
+    search: Optional[str] = Query(None, description="Search term"),
+    company_id: Optional[str] = Query(None, description="Company filter"),
+    payment_status: Optional[str] = Query(None, description="Payment status filter"),
+    from_date: Optional[date] = Query(None, description="Start date"),
+    to_date: Optional[date] = Query(None, description="End date"),
+    current_user: User = Depends(require_fully_activated_user),
+    session: Session = Depends(get_db),
+):
+    if not (
+        check_access(session, current_user, ["ACCOUNTS_ENTRIES", "ACCOUNTS"], "export")
+        or check_access(session, current_user, ["ACCOUNTS_ENTRIES", "ACCOUNTS"], "view")
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to export Accounts Entries")
+
+    try:
+        csv_data = accounts_service.export_accounts_entries_csv(
+            session=session,
+            user=current_user,
+            search=search,
+            payment_status=payment_status,
+            date_from=from_date,
+            date_to=to_date,
+            company_id=company_id,
+        )
+        filename = f"Accounts_Entries_{date.today().strftime('%Y%m%d')}.csv"
+        return Response(
+            content=csv_data,
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except permissions.PermissionDeniedError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+
+@router.get(
+    "/entries",
+    response_model=AccountsEntriesResponse,
+    status_code=status.HTTP_200_OK,
+    summary="List Accounts Entries",
+    description="Retrieve all shared sales orders across company scope with the 21 canonical columns.",
+)
+def list_accounts_entries(
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(50, ge=1, le=200, description="Items per page"),
+    search: Optional[str] = Query(None, description="Search client, work, order no, location, salesperson, or remarks"),
+    company_id: Optional[str] = Query(None, description="Company filter"),
+    payment_status: Optional[str] = Query(None, description="Payment status filter"),
+    from_date: Optional[date] = Query(None, description="Order start date (YYYY-MM-DD)"),
+    to_date: Optional[date] = Query(None, description="Order end date (YYYY-MM-DD)"),
+    current_user: User = Depends(require_fully_activated_user),
+    session: Session = Depends(get_db),
+) -> AccountsEntriesResponse:
+    if not check_access(session, current_user, ["ACCOUNTS_ENTRIES", "ACCOUNTS"], "view"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to Accounts Entries")
+
+    try:
+        return accounts_service.get_accounts_entries(
+            session=session,
+            user=current_user,
+            page=page,
+            limit=limit,
+            search=search,
+            payment_status=payment_status,
+            date_from=from_date,
+            date_to=to_date,
+            company_id=company_id,
+        )
+    except permissions.PermissionDeniedError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+
+@router.patch(
+    "/entries/{order_id}",
+    response_model=AccountsEntryRead,
+    status_code=status.HTTP_200_OK,
+    summary="Update Accounts Entry (Allowed 4 Fields)",
+    description="Accounts users may only edit Proforma Inv. No., Tax Inv. No., Reimbursement Note, and Remarks.",
+)
+@router.put(
+    "/entries/{order_id}",
+    response_model=AccountsEntryRead,
+    status_code=status.HTTP_200_OK,
+    summary="Update Accounts Entry (Allowed 4 Fields)",
+    description="Accounts users may only edit Proforma Inv. No., Tax Inv. No., Reimbursement Note, and Remarks.",
+)
+def update_accounts_entry(
+    order_id: uuid.UUID,
+    data: AccountsEntryUpdate,
+    current_user: User = Depends(require_fully_activated_user),
+    session: Session = Depends(get_db),
+) -> AccountsEntryRead:
+    if not (
+        check_access(session, current_user, ["ACCOUNTS_ENTRIES", "ACCOUNTS"], "edit")
+        or check_access(session, current_user, ["ACCOUNTS_ENTRIES", "ACCOUNTS"], "update")
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to edit Accounts Entries")
+
+    try:
+        return accounts_service.update_accounts_entry(
+            session=session,
+            user=current_user,
+            order_id=order_id,
+            data=data,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except permissions.PermissionDeniedError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
