@@ -369,20 +369,6 @@ export const MyTasksPage: React.FC = () => {
                     </td>
                     <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="inline-flex items-center gap-1.5 justify-end">
-                        {task.sales_order_id && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setConversationOrderId(task.sales_order_id);
-                              setIsConversationOpen(true);
-                            }}
-                            title="Open Shared Task Conversation"
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 text-xs font-bold transition border border-emerald-200/70 dark:border-emerald-800/60"
-                          >
-                            <MessageSquare className="w-3.5 h-3.5" />
-                            <span className="hidden sm:inline">Conversation</span>
-                          </button>
-                        )}
                         <button
                           type="button"
                           onClick={() => openTaskDetail(task.application_id, 'overview')}
