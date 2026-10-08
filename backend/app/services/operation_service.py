@@ -221,6 +221,8 @@ def _to_application_read(app: OperationApplication) -> OperationApplicationRead:
         is_due_soon=is_due_soon,
         order_date=order_date,
         formatted_order_date=formatted_order_date,
+        company_name=app.company.company_name if app.company else (app.sales_order.company.company_name if app.sales_order and app.sales_order.company else None),
+        company_code=app.company.company_code if app.company else (app.sales_order.company.company_code if app.sales_order and app.sales_order.company else None),
         latest_remark=latest_remark,
         created_at=app.created_at,
         updated_at=app.updated_at,
@@ -334,6 +336,7 @@ def _apply_operations_scope(
 def get_operations_dashboard_data(
     session: Session,
     user: User,
+    company_id: Optional[uuid.UUID] = None,
 ) -> OperationsDashboardResponse:
     """Generate live Operations Dashboard analytics for the current user's permitted data scope."""
     context = permissions.resolve_data_scope_context(session, user, "OPERATIONS")
@@ -342,9 +345,11 @@ def get_operations_dashboard_data(
     base_query = (
         select(OperationApplication)
         .options(
+            joinedload(OperationApplication.company),
             joinedload(OperationApplication.client),
             joinedload(OperationApplication.service),
             joinedload(OperationApplication.sales_order).joinedload(SalesOrder.salesperson),
+            joinedload(OperationApplication.sales_order).joinedload(SalesOrder.company),
             joinedload(OperationApplication.assigned_to),
             selectinload(OperationApplication.documents),
             selectinload(OperationApplication.remarks).joinedload(OperationRemark.author).joinedload(User.department),
@@ -352,6 +357,11 @@ def get_operations_dashboard_data(
         )
     )
     base_query = _apply_operations_scope(base_query, user, context)
+    if company_id:
+        if context.scope in ("COMPANY", "DEPARTMENT") and company_id != context.company_id:
+            base_query = base_query.where(OperationApplication.company_id == uuid.uuid4())
+        else:
+            base_query = base_query.where(OperationApplication.company_id == company_id)
     all_apps = session.execute(base_query).scalars().all()
 
     total_applications = len(all_apps)
@@ -496,6 +506,7 @@ def get_operations_tasks(
     sort_order: str = "desc",
     my_tasks_only: bool = False,
     unassigned_only: bool = False,
+    company_id: Optional[uuid.UUID] = None,
 ) -> OperationsTaskListResponse:
     """Retrieve filtered, paginated operations tasks with scoping and summary metrics."""
     context = permissions.resolve_data_scope_context(session, user, "OPERATIONS")
@@ -507,9 +518,11 @@ def get_operations_tasks(
         .join(OperationApplication.client)
         .join(OperationApplication.service)
         .options(
+            joinedload(OperationApplication.company),
             joinedload(OperationApplication.client),
             joinedload(OperationApplication.service),
             joinedload(OperationApplication.sales_order).joinedload(SalesOrder.salesperson),
+            joinedload(OperationApplication.sales_order).joinedload(SalesOrder.company),
             joinedload(OperationApplication.assigned_to),
             joinedload(OperationApplication.assigned_by),
             selectinload(OperationApplication.documents),
@@ -536,6 +549,12 @@ def get_operations_tasks(
         stmt = _apply_operations_scope(stmt, user, context)
 
     # Dynamic filters
+    if company_id:
+        if not my_tasks_only and context.scope in ("COMPANY", "DEPARTMENT") and company_id != context.company_id:
+            stmt = stmt.where(OperationApplication.company_id == uuid.uuid4())
+        else:
+            stmt = stmt.where(OperationApplication.company_id == company_id)
+
     if status:
         stat_upper = status.strip().upper()
         if stat_upper == "OVERDUE":
@@ -638,6 +657,7 @@ def get_my_tasks(
     end_date: Optional[date] = None,
     sort_by: str = "created_at",
     sort_order: str = "desc",
+    company_id: Optional[uuid.UUID] = None,
 ) -> OperationsTaskListResponse:
     """Retrieve tasks assigned to or delegated/reassigned by the currently logged in operations employee."""
     return get_operations_tasks(
@@ -654,6 +674,7 @@ def get_my_tasks(
         sort_by=sort_by,
         sort_order=sort_order,
         my_tasks_only=True,
+        company_id=company_id,
     )
 
 
@@ -665,6 +686,7 @@ def get_unassigned_operations_orders(
     search: Optional[str] = None,
     sort_by: str = "created_at",
     sort_order: str = "desc",
+    company_id: Optional[uuid.UUID] = None,
 ) -> OperationsTaskListResponse:
     """Retrieve unassigned applications awaiting assignment to an operations employee."""
     return get_operations_tasks(
@@ -676,6 +698,7 @@ def get_unassigned_operations_orders(
         sort_by=sort_by,
         sort_order=sort_order,
         unassigned_only=True,
+        company_id=company_id,
     )
 
 
@@ -777,17 +800,17 @@ def is_disallowed_ops_assignee(u: User) -> bool:
 
 def get_eligible_operations_assignees(
     session: Session,
-    user: User,
+    user: Optional[User] = None,
 ) -> List[User]:
-    """Retrieve active employees in the company who are eligible to be assigned operations tasks (strictly excluding Sales, Admin, and Directors)."""
+    """Retrieve active employees eligible to be assigned operations tasks across companies (strictly excluding Sales, Admin, and Directors)."""
     stmt = (
         select(User)
         .options(
+            joinedload(User.company),
             joinedload(User.department),
             joinedload(User.designation),
         )
         .where(
-            User.company_id == user.company_id,
             User.account_status == "ACTIVE",
         )
     )
@@ -826,10 +849,6 @@ def assign_task(
     assignee = session.get(User, assignee_user_id)
     if not assignee or assignee.account_status != "ACTIVE":
         raise ValueError(f"Target assignee with ID '{assignee_user_id}' is not an active employee.")
-
-    # Validate assignee belongs to the same company
-    if assignee.company_id != app.company_id:
-        raise ValueError("Assignee does not belong to the application's company.")
 
     # Validation: target assignee cannot be from Sales, Admin, or Director roles
     if is_disallowed_ops_assignee(assignee):
@@ -917,9 +936,6 @@ def reassign_task(
     new_assignee = session.get(User, new_assignee_user_id)
     if not new_assignee or new_assignee.account_status != "ACTIVE":
         raise ValueError(f"Target assignee with ID '{new_assignee_user_id}' is not an active employee.")
-
-    if new_assignee.company_id != app.company_id:
-        raise ValueError("Assignee does not belong to the application's company.")
 
     # Validation: target assignee cannot be from Sales, Admin, or Director roles
     if is_disallowed_ops_assignee(new_assignee):

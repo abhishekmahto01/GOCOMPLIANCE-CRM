@@ -20,6 +20,7 @@ import { SalesLicenceBarChart } from '../components/sales/SalesLicenceBarChart';
 import { SalesLeadSourceDonut } from '../components/sales/SalesLeadSourceDonut';
 import { SalesTeamTable } from '../components/sales/SalesTeamTable';
 import { RecentSalesOrdersTable } from '../components/sales/RecentSalesOrdersTable';
+import { CompanyFilterTabs } from '../components/common/CompanyFilterTabs';
 
 interface OutletContextType {
   addToast?: (type: 'success' | 'error' | 'info', title: string, message: string) => void;
@@ -37,6 +38,7 @@ export const SalesDashboardPage: React.FC = () => {
       preset: searchParams.get('preset') || 'this_month',
       from_date: searchParams.get('from_date') || undefined,
       to_date: searchParams.get('to_date') || undefined,
+      company_id: searchParams.get('company_id') || undefined,
       employee_id: searchParams.get('employee_id') || undefined,
       service_id: searchParams.get('service_id') || undefined,
       lead_source: searchParams.get('lead_source') || undefined,
@@ -60,6 +62,7 @@ export const SalesDashboardPage: React.FC = () => {
     if (newFilters.preset) params.preset = newFilters.preset;
     if (newFilters.from_date) params.from_date = newFilters.from_date;
     if (newFilters.to_date) params.to_date = newFilters.to_date;
+    if (newFilters.company_id && newFilters.company_id !== 'ALL') params.company_id = newFilters.company_id;
     if (newFilters.employee_id && newFilters.employee_id !== 'ALL') params.employee_id = newFilters.employee_id;
     if (newFilters.service_id && newFilters.service_id !== 'ALL') params.service_id = newFilters.service_id;
     if (newFilters.lead_source && newFilters.lead_source !== 'ALL') params.lead_source = newFilters.lead_source;
@@ -161,6 +164,20 @@ export const SalesDashboardPage: React.FC = () => {
                 : `My Sales (${user?.employee_code || 'Self'})`}
             </span>
           </div>
+        </div>
+      </div>
+
+      {/* Company Selector Tabs for Director/Admin */}
+      <div className="flex items-center justify-between flex-wrap gap-3 p-3 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+            Company Scope:
+          </span>
+          <CompanyFilterTabs
+            selectedCompanyId={filters.company_id || 'ALL'}
+            onCompanyChange={(newCompId) => handleFilterChange({ company_id: newCompId })}
+            size="sm"
+          />
         </div>
       </div>
 

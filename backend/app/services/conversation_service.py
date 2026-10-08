@@ -225,6 +225,7 @@ def get_task_conversation(
     order = (
         session.query(SalesOrder)
         .options(
+            joinedload(SalesOrder.company),
             joinedload(SalesOrder.client),
             joinedload(SalesOrder.service),
             joinedload(SalesOrder.salesperson),
@@ -304,6 +305,8 @@ def get_task_conversation(
 
     salesperson_name = f"{order.salesperson.first_name} {order.salesperson.last_name}" if order.salesperson else "Sales"
     salesperson_code = order.salesperson.employee_code if order.salesperson else None
+    comp_name = order.company.company_name if order.company else "Company"
+    comp_code = order.company.company_code if order.company else None
 
     return ConversationThreadResponse(
         order_id=order.order_id,
@@ -321,6 +324,9 @@ def get_task_conversation(
         work_status=work_status,
         payment_status=order.payment_status,
         gst_invoice_required=getattr(order, "gst_invoice_required", False),
+        company_id=order.company_id,
+        company_name=comp_name,
+        company_code=comp_code,
         can_post=can_post,
         items=[_to_message_read(m, user.user_id) for m in messages],
         total_count=total_count,

@@ -24,6 +24,8 @@ import {
 } from '../../api/operations';
 import { TaskDetailModal } from '../../components/operations/TaskDetailModal';
 import { TaskConversationModal } from '../../components/conversation/TaskConversationModal';
+import { CompanyFilterTabs } from '../../components/common/CompanyFilterTabs';
+import { CompanyBadge } from '../../components/common/CompanyBadge';
 
 export const TaskAssignmentPage: React.FC = () => {
   const context = useOutletContext<{
@@ -36,6 +38,7 @@ export const TaskAssignmentPage: React.FC = () => {
 
   // Filters
   const [search, setSearch] = useState('');
+  const [companyId, setCompanyId] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [priorityFilter, setPriorityFilter] = useState('ALL');
   const [assigneeFilter, setAssigneeFilter] = useState('ALL');
@@ -75,6 +78,7 @@ export const TaskAssignmentPage: React.FC = () => {
       const data = await getOperationsTasksApi({
         page,
         limit,
+        company_id: companyId !== 'ALL' ? companyId : undefined,
         status: statusFilter !== 'ALL' ? statusFilter : undefined,
         priority: priorityFilter !== 'ALL' ? priorityFilter : undefined,
         assigned_to_user_id: assigneeFilter !== 'ALL' ? assigneeFilter : undefined,
@@ -100,7 +104,7 @@ export const TaskAssignmentPage: React.FC = () => {
   useEffect(() => {
     loadTasks();
     loadAssignees();
-  }, [page, statusFilter, priorityFilter, assigneeFilter]);
+  }, [page, companyId, statusFilter, priorityFilter, assigneeFilter]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -245,6 +249,23 @@ export const TaskAssignmentPage: React.FC = () => {
         </div>
       )}
 
+      {/* Company Selector Tabs for Director/Admin/Operations Coordinator */}
+      <div className="flex items-center justify-between flex-wrap gap-3 p-3 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+            Company Scope:
+          </span>
+          <CompanyFilterTabs
+            selectedCompanyId={companyId}
+            onCompanyChange={(newCompId) => {
+              setCompanyId(newCompId);
+              setPage(1);
+            }}
+            size="sm"
+          />
+        </div>
+      </div>
+
       {/* Filter and Search Bar */}
       <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col md:flex-row gap-3 items-center justify-between">
         <form onSubmit={handleSearchSubmit} className="relative flex-1 w-full">
@@ -369,7 +390,14 @@ export const TaskAssignmentPage: React.FC = () => {
                     </td>
                     <td className="py-3.5 px-4 font-mono text-slate-500">{task.sales_order_number || '—'}</td>
                     <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-white">
-                      {task.client_name}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span>{task.client_name}</span>
+                        <CompanyBadge
+                          companyName={task.company_name}
+                          companyCode={task.company_code}
+                          size="xs"
+                        />
+                      </div>
                       {task.client_phone && (
                         <div className="text-[11px] font-normal text-slate-400">{task.client_phone}</div>
                       )}
@@ -556,7 +584,7 @@ export const TaskAssignmentPage: React.FC = () => {
                     .filter((emp) => emp.user_id !== reassigningTask?.assigned_to_user_id)
                     .map((emp) => (
                       <option key={emp.user_id} value={emp.user_id}>
-                        {emp.full_name || emp.name} ({emp.employee_code})
+                        {emp.full_name || emp.name} ({emp.employee_code}){emp.company_name ? ` - ${emp.company_name}` : ''}
                       </option>
                     ))}
                 </select>

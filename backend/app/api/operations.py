@@ -39,6 +39,7 @@ router = APIRouter(prefix="/operations", tags=["Operations Tasks & Workspace"])
     dependencies=[Depends(require_module_permission("OPERATIONS", "view"))],
 )
 def get_operations_dashboard(
+    company_id: Optional[uuid.UUID] = Query(None, description="Filter by company ID"),
     current_user: User = Depends(require_fully_activated_user),
     session: Session = Depends(get_db),
 ) -> OperationsDashboardResponse:
@@ -46,6 +47,7 @@ def get_operations_dashboard(
         return operation_service.get_operations_dashboard_data(
             session=session,
             user=current_user,
+            company_id=company_id,
         )
     except permissions.PermissionDeniedError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
@@ -70,6 +72,7 @@ def list_operations_tasks(
     end_date: Optional[date] = Query(None, description="End date (YYYY-MM-DD)"),
     sort_by: str = Query("created_at", description="Sort field: created_at, application_number, target_due_date, priority, application_status"),
     sort_order: str = Query("desc", description="Sort direction: asc or desc"),
+    company_id: Optional[uuid.UUID] = Query(None, description="Filter by company ID"),
     current_user: User = Depends(require_fully_activated_user),
     session: Session = Depends(get_db),
 ) -> OperationsTaskListResponse:
@@ -87,6 +90,7 @@ def list_operations_tasks(
             end_date=end_date,
             sort_by=sort_by,
             sort_order=sort_order,
+            company_id=company_id,
         )
     except permissions.PermissionDeniedError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
@@ -111,6 +115,7 @@ def list_my_assigned_tasks(
     end_date: Optional[date] = Query(None, description="End date"),
     sort_by: str = Query("created_at", description="Sort field"),
     sort_order: str = Query("desc", description="Sort direction"),
+    company_id: Optional[uuid.UUID] = Query(None, description="Filter by company ID"),
     current_user: User = Depends(require_fully_activated_user),
     session: Session = Depends(get_db),
 ) -> OperationsTaskListResponse:
@@ -128,6 +133,7 @@ def list_my_assigned_tasks(
             end_date=end_date,
             sort_by=sort_by,
             sort_order=sort_order,
+            company_id=company_id,
         )
     except permissions.PermissionDeniedError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
@@ -147,6 +153,7 @@ def list_unassigned_tasks(
     search: Optional[str] = Query(None, description="Search term"),
     sort_by: str = Query("created_at", description="Sort field"),
     sort_order: str = Query("desc", description="Sort direction"),
+    company_id: Optional[uuid.UUID] = Query(None, description="Filter by company ID"),
     current_user: User = Depends(require_fully_activated_user),
     session: Session = Depends(get_db),
 ) -> OperationsTaskListResponse:
@@ -159,6 +166,7 @@ def list_unassigned_tasks(
             search=search,
             sort_by=sort_by,
             sort_order=sort_order,
+            company_id=company_id,
         )
     except permissions.PermissionDeniedError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))

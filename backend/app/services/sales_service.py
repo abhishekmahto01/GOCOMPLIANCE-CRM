@@ -302,10 +302,18 @@ def create_sales_order(
     current_user: User,
 ) -> SalesOrder:
     """Create a new sales order with client matching/deduplication, RBAC scoping, and financial calculations."""
-    company_id = data.company_id or current_user.company_id
-    company = session.get(Company, company_id)
+    if not current_user.company_id:
+        raise ValueError("Employee on-roll company is missing. Please contact your administrator.")
+
+    company = session.get(Company, current_user.company_id)
     if not company or company.status != "ACTIVE":
-        raise ValueError(f"Active company with ID '{company_id}' not found.")
+        raise ValueError("Employee on-roll company is missing or inactive. Please contact your administrator.")
+
+    # Strictly enforce that company comes ONLY from authenticated salesperson's on-roll company
+    if data.company_id and data.company_id != current_user.company_id:
+        raise ValueError("Cannot create sales entry for another company. Entry company is derived strictly from your employee profile.")
+
+    company_id = current_user.company_id
 
     # 1. Client Resolution and Deduplication
     client = None
@@ -893,46 +901,27 @@ def confirm_sales_order(
     order.confirmation_status = "CONFIRMED"
     order.confirmed_at = now_utc
 
-    # Look up assigned target: either specified assignee_user_id or default Mansi Singhal / Operations lead
+    # Look up assigned target: either specified assignee_user_id or configured Operations coordinator for order.company_id
+    from app.services import coordinator_config_service
+
     assigned_target = None
     if assignee_user_id:
         target_user = session.get(User, assignee_user_id)
         if (
             target_user
             and target_user.account_status == "ACTIVE"
-            and target_user.company_id == order.company_id
             and not operation_service.is_disallowed_ops_assignee(target_user)
         ):
             assigned_target = target_user
 
     if not assigned_target:
-        assigned_target = session.execute(
-            select(User)
-            .outerjoin(Department, User.department_id == Department.department_id)
-            .where(
-                User.company_id == order.company_id,
-                User.account_status == "ACTIVE",
-                or_(
-                    User.employee_code == "CG0003",
-                    User.first_name.ilike("%mansi%"),
-                    Department.department_code.in_(["OP", "OPS", "OPERATIONS"]),
-                    Department.department_name.ilike("%operation%"),
-                ),
-            )
-            .order_by(
-                case(
-                    (User.employee_code == "CG0003", 0),
-                    (User.first_name.ilike("%mansi%"), 1),
-                    else_=2,
-                ),
-                User.created_at.asc(),
-            )
-        ).scalars().first()
+        assigned_target = coordinator_config_service.get_coordinator_for_company(session, order.company_id)
 
     default_assigned_to = assigned_target.user_id if assigned_target else None
     default_assigned_by = current_user.user_id if assigned_target else None
     default_assigned_at = now_utc if assigned_target else None
     default_app_status = "ASSIGNED" if assigned_target else "UNASSIGNED"
+    assignment_notes = order.notes if assigned_target else (f"Coordinator setup required. {order.notes or ''}".strip())
 
     app_num = generate_application_number(session, order.order_date)
 
@@ -948,7 +937,7 @@ def confirm_sales_order(
         priority="MEDIUM",
         application_status=default_app_status,
         target_due_date=None,
-        assignment_notes=order.notes,
+        assignment_notes=assignment_notes,
     )
     session.add(new_app)
     session.flush()
@@ -1042,11 +1031,14 @@ def _apply_sales_filters(
     lead_source: Optional[str] = None,
     payment_status: Optional[str] = None,
     include_cancelled: bool = False,
+    company_id: Optional[uuid.UUID] = None,
 ) -> Any:
     """Apply RBAC data scoping and query filters to SalesOrder select query."""
     # 1. Base Scope
     if scope_ctx.scope == "SELF":
         query = query.where(SalesOrder.salesperson_user_id == scope_ctx.user_id)
+        if company_id:
+            query = query.where(SalesOrder.company_id == company_id)
     elif scope_ctx.scope == "TEAM":
         if employee_id:
             if employee_id in scope_ctx.team_user_ids:
@@ -1056,15 +1048,17 @@ def _apply_sales_filters(
                 query = query.where(SalesOrder.salesperson_user_id == uuid.uuid4())
         else:
             query = query.where(SalesOrder.salesperson_user_id.in_(scope_ctx.team_user_ids))
-    elif scope_ctx.scope == "DEPARTMENT":
+        if company_id:
+            query = query.where(SalesOrder.company_id == company_id)
+    elif scope_ctx.scope in ("DEPARTMENT", "COMPANY"):
         query = query.where(SalesOrder.company_id == scope_ctx.company_id)
-        if employee_id:
-            query = query.where(SalesOrder.salesperson_user_id == employee_id)
-    elif scope_ctx.scope == "COMPANY":
-        query = query.where(SalesOrder.company_id == scope_ctx.company_id)
+        if company_id and company_id != scope_ctx.company_id:
+            query = query.where(SalesOrder.company_id == uuid.uuid4())
         if employee_id:
             query = query.where(SalesOrder.salesperson_user_id == employee_id)
     elif scope_ctx.scope == "ALL":
+        if company_id:
+            query = query.where(SalesOrder.company_id == company_id)
         if employee_id:
             query = query.where(SalesOrder.salesperson_user_id == employee_id)
 
@@ -1099,6 +1093,7 @@ def get_sales_dashboard_data(
     service_id: Optional[uuid.UUID] = None,
     lead_source: Optional[str] = None,
     payment_status: Optional[str] = None,
+    company_id: Optional[uuid.UUID] = None,
 ) -> SalesDashboardResponse:
     """Compute and return live Sales Dashboard KPIs, charts, team table, and recent orders."""
     scope_ctx = permissions.resolve_data_scope_context(session, current_user, "SALES_DASHBOARD")
@@ -1126,6 +1121,7 @@ def get_sales_dashboard_data(
         service_id=service_id,
         lead_source=lead_source,
         payment_status=payment_status,
+        company_id=company_id,
     )
     curr_orders = session.execute(base_curr).scalars().all()
 
@@ -1153,6 +1149,7 @@ def get_sales_dashboard_data(
         service_id=service_id,
         lead_source=lead_source,
         payment_status=payment_status,
+        company_id=company_id,
     )
     prev_orders = session.execute(base_prev).scalars().all()
 
@@ -1638,6 +1635,7 @@ def get_sales_register_data(
     to_date: Optional[date] = None,
     sort_by: str = "order_date",
     sort_dir: str = "desc",
+    company_id: Optional[uuid.UUID] = None,
 ) -> SalesRegisterResponse:
     """Retrieve filtered and paginated Sales Register records covering all 20 columns."""
     try:
@@ -1657,6 +1655,13 @@ def get_sales_register_data(
         .join(ServiceMaster, SalesOrder.service_id == ServiceMaster.service_id)
         .join(User, SalesOrder.salesperson_user_id == User.user_id)
         .outerjoin(OperationApplication, SalesOrder.order_id == OperationApplication.sales_order_id)
+        .options(
+            joinedload(SalesOrder.company),
+            joinedload(SalesOrder.client),
+            joinedload(SalesOrder.service),
+            joinedload(SalesOrder.salesperson),
+            joinedload(SalesOrder.application).joinedload(OperationApplication.assigned_to),
+        )
     )
 
     include_cancelled = bool(work_status and work_status.strip().upper() == "CANCELLED")
@@ -1671,6 +1676,7 @@ def get_sales_register_data(
         lead_source=lead_source,
         payment_status=payment_status,
         include_cancelled=include_cancelled,
+        company_id=company_id,
     )
 
     if work_status and work_status != "ALL":
@@ -1773,6 +1779,8 @@ def get_sales_register_data(
                 order_id=o.order_id,
                 order_number=o.order_number,
                 company_id=o.company_id,
+                company_name=o.company.company_name if o.company else None,
+                company_code=o.company.company_code if o.company else None,
                 client_id=o.client_id,
                 service_id=o.service_id,
                 salesperson_user_id=o.salesperson_user_id,
@@ -1948,9 +1956,9 @@ def get_sales_form_options(
 
 def get_eligible_operations_assignees(
     session: Session,
-    company_id: uuid.UUID,
+    company_id: Optional[uuid.UUID] = None,
 ) -> List[SalesEmployeeOption]:
-    """Retrieve active employees in the Operations department/roles for task assignment (strictly excluding Sales, Admin, and Directors)."""
+    """Retrieve active employees in the Operations department/roles for task assignment across companies."""
     from app.services.operation_service import is_disallowed_ops_assignee
 
     stmt = (
@@ -1958,7 +1966,6 @@ def get_eligible_operations_assignees(
         .outerjoin(Department, User.department_id == Department.department_id)
         .outerjoin(Designation, User.designation_id == Designation.designation_id)
         .where(
-            User.company_id == company_id,
             User.account_status == "ACTIVE",
             or_(
                 Department.department_name.ilike("%operation%"),
@@ -2035,14 +2042,12 @@ def assign_sales_order_operations(
     if not app:
         raise ValueError("Could not initialize operations application for this order.")
 
-    # Validate assignee is an active employee in the same company
+    # Validate assignee is an active employee
     from app.services.operation_service import is_disallowed_ops_assignee
 
     assignee = session.get(User, assignee_user_id)
     if not assignee or assignee.account_status != "ACTIVE":
         raise ValueError(f"Target assignee '{assignee_user_id}' is not an active employee.")
-    if assignee.company_id != order.company_id:
-        raise ValueError("Assignee does not belong to the same company as the sales order.")
     if is_disallowed_ops_assignee(assignee):
         raise ValueError("Task cannot be assigned to Sales, Administration, or Director personnel.")
 

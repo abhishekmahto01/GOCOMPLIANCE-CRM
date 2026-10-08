@@ -98,6 +98,9 @@ class ConversationThreadResponse(BaseModel):
     work_status: str
     payment_status: str
     gst_invoice_required: bool
+    company_id: uuid.UUID
+    company_name: str
+    company_code: Optional[str] = None
     can_post: bool
     items: List[ConversationMessageRead]
     total_count: int

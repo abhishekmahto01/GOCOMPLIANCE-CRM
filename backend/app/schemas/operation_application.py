@@ -141,6 +141,8 @@ class OperationApplicationRead(BaseModel):
     is_due_soon: bool = False
     order_date: Optional[date] = None
     formatted_order_date: Optional[str] = None
+    company_name: Optional[str] = None
+    company_code: Optional[str] = None
     latest_remark: Optional[OperationRemarkRead] = None
     created_at: datetime
     updated_at: datetime

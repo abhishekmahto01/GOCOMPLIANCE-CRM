@@ -35,6 +35,9 @@ export interface ConversationThread {
   work_status: string;
   payment_status: string;
   gst_invoice_required: boolean;
+  company_id?: string | null;
+  company_name?: string | null;
+  company_code?: string | null;
   can_post: boolean;
   items: ConversationMessage[];
   total_count: number;

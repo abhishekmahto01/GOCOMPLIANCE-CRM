@@ -39,6 +39,8 @@ import type {
 import { Button } from '../components/ui/button';
 import { Modal } from '../components/ui/modal';
 import { TaskConversationModal } from '../components/conversation/TaskConversationModal';
+import { CompanyFilterTabs } from '../components/common/CompanyFilterTabs';
+import { CompanyBadge } from '../components/common/CompanyBadge';
 
 interface OutletContextType {
   addToast?: (type: 'success' | 'error' | 'info', title: string, message: string) => void;
@@ -134,6 +136,7 @@ export const SalesRegisterPage: React.FC = () => {
 
   // Search & Filter State
   const [search, setSearch] = useState<string>(searchParams.get('search') || '');
+  const [companyId, setCompanyId] = useState<string>(searchParams.get('company_id') || 'ALL');
   const [paymentStatus, setPaymentStatus] = useState<string>(searchParams.get('payment_status') || 'ALL');
   const [workStatus, setWorkStatus] = useState<string>(searchParams.get('work_status') || 'ALL');
   const [employeeId, setEmployeeId] = useState<string>(searchParams.get('employee_id') || 'ALL');
@@ -206,6 +209,7 @@ export const SalesRegisterPage: React.FC = () => {
     (newParams: Record<string, string>) => {
       const p: Record<string, string> = {};
       if (newParams.search) p.search = newParams.search;
+      if (newParams.company_id && newParams.company_id !== 'ALL') p.company_id = newParams.company_id;
       if (newParams.payment_status && newParams.payment_status !== 'ALL') p.payment_status = newParams.payment_status;
       if (newParams.work_status && newParams.work_status !== 'ALL') p.work_status = newParams.work_status;
       if (newParams.employee_id && newParams.employee_id !== 'ALL') p.employee_id = newParams.employee_id;
@@ -218,6 +222,23 @@ export const SalesRegisterPage: React.FC = () => {
     },
     [setSearchParams]
   );
+
+  const handleCompanyChange = (newCompId: string) => {
+    setCompanyId(newCompId);
+    setPage(1);
+    syncUrl({
+      search,
+      company_id: newCompId,
+      payment_status: paymentStatus,
+      work_status: workStatus,
+      employee_id: employeeId,
+      service_id: serviceId,
+      from_date: fromDate,
+      to_date: toDate,
+      page: '1',
+      limit: String(limit),
+    });
+  };
 
   // Load Form Options for Filters & Operations Assignees
   useEffect(() => {
@@ -245,6 +266,7 @@ export const SalesRegisterPage: React.FC = () => {
         page,
         limit,
         search: search.trim() || undefined,
+        company_id: companyId !== 'ALL' ? companyId : undefined,
         payment_status: paymentStatus !== 'ALL' ? paymentStatus : undefined,
         work_status: workStatus !== 'ALL' ? workStatus : undefined,
         employee_id: employeeId !== 'ALL' ? employeeId : undefined,
@@ -262,7 +284,7 @@ export const SalesRegisterPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [page, limit, search, paymentStatus, workStatus, employeeId, serviceId, fromDate, toDate]);
+  }, [page, limit, search, companyId, paymentStatus, workStatus, employeeId, serviceId, fromDate, toDate]);
 
   useEffect(() => {
     loadRegister();
@@ -274,6 +296,7 @@ export const SalesRegisterPage: React.FC = () => {
     setPage(1);
     syncUrl({
       search,
+      company_id: companyId,
       payment_status: paymentStatus,
       work_status: workStatus,
       employee_id: employeeId,
@@ -288,6 +311,7 @@ export const SalesRegisterPage: React.FC = () => {
   // Reset Filters
   const handleResetFilters = () => {
     setSearch('');
+    setCompanyId('ALL');
     setPaymentStatus('ALL');
     setWorkStatus('ALL');
     setEmployeeId('ALL');
@@ -304,6 +328,7 @@ export const SalesRegisterPage: React.FC = () => {
     try {
       const { blob, filename } = await exportSalesRegisterCsvApi({
         search: search.trim() || undefined,
+        company_id: companyId !== 'ALL' ? companyId : undefined,
         payment_status: paymentStatus !== 'ALL' ? paymentStatus : undefined,
         work_status: workStatus !== 'ALL' ? workStatus : undefined,
         employee_id: employeeId !== 'ALL' ? employeeId : undefined,
@@ -634,6 +659,20 @@ export const SalesRegisterPage: React.FC = () => {
 
       {/* Filter & Search Toolbar */}
       <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm space-y-4">
+        {/* Company Selector Tabs */}
+        <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-slate-100 dark:border-slate-800/80">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+              Company Scope:
+            </span>
+            <CompanyFilterTabs
+              selectedCompanyId={companyId}
+              onCompanyChange={handleCompanyChange}
+              size="sm"
+            />
+          </div>
+        </div>
+
         <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
           {/* Global Search */}
           <div className="lg:col-span-2 relative">
@@ -835,8 +874,13 @@ export const SalesRegisterPage: React.FC = () => {
                       </td>
 
                       {/* 3. Client Name */}
-                      <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                      <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
                         <span>{row.client_name}</span>
+                        <CompanyBadge
+                          companyName={row.company_name}
+                          companyCode={row.company_code}
+                          size="xs"
+                        />
                         {row.gst_invoice_required && (
                           <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
                             GST Invoice

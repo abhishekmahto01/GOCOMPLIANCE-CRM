@@ -23,6 +23,7 @@ export interface OperationsFilterParams {
   priority?: string;
   search?: string;
   assigned_to_user_id?: string;
+  company_id?: string;
   start_date?: string;
   end_date?: string;
   sort_by?: string;
@@ -32,8 +33,14 @@ export interface OperationsFilterParams {
 /**
  * Fetch Operations Dashboard aggregated metrics, status breakdown, and executive workload.
  */
-export async function getOperationsDashboardApi(): Promise<OperationsDashboardResponse> {
-  const response = await apiClient.get<OperationsDashboardResponse>('/operations/dashboard');
+export async function getOperationsDashboardApi(params?: { company_id?: string }): Promise<OperationsDashboardResponse> {
+  const queryParams: Record<string, any> = {};
+  if (params?.company_id && params.company_id !== 'ALL') {
+    queryParams.company_id = params.company_id;
+  }
+  const response = await apiClient.get<OperationsDashboardResponse>('/operations/dashboard', {
+    params: queryParams,
+  });
   return response.data;
 }
 
@@ -51,6 +58,9 @@ export async function getOperationsTasksApi(
   if (params?.search) queryParams.search = params.search;
   if (params?.assigned_to_user_id && params.assigned_to_user_id !== 'ALL') {
     queryParams.assigned_to_user_id = params.assigned_to_user_id;
+  }
+  if (params?.company_id && params.company_id !== 'ALL') {
+    queryParams.company_id = params.company_id;
   }
   if (params?.start_date) queryParams.start_date = params.start_date;
   if (params?.end_date) queryParams.end_date = params.end_date;
@@ -78,6 +88,9 @@ export async function getMyOperationsTasksApi(
   if (params?.assigned_to_user_id && params.assigned_to_user_id !== 'ALL') {
     queryParams.assigned_to_user_id = params.assigned_to_user_id;
   }
+  if (params?.company_id && params.company_id !== 'ALL') {
+    queryParams.company_id = params.company_id;
+  }
   if (params?.start_date) queryParams.start_date = params.start_date;
   if (params?.end_date) queryParams.end_date = params.end_date;
   if (params?.sort_by) queryParams.sort_by = params.sort_by;
@@ -93,12 +106,15 @@ export async function getMyOperationsTasksApi(
  * List unassigned applications awaiting assignment.
  */
 export async function getUnassignedOperationsOrdersApi(
-  params?: { page?: number; limit?: number; search?: string; sort_by?: string; sort_order?: string }
+  params?: { page?: number; limit?: number; search?: string; company_id?: string; sort_by?: string; sort_order?: string }
 ): Promise<OperationsTaskListResponse> {
   const queryParams: Record<string, any> = {};
   if (params?.page) queryParams.page = params.page;
   if (params?.limit) queryParams.limit = params.limit;
   if (params?.search) queryParams.search = params.search;
+  if (params?.company_id && params.company_id !== 'ALL') {
+    queryParams.company_id = params.company_id;
+  }
   if (params?.sort_by) queryParams.sort_by = params.sort_by;
   if (params?.sort_order) queryParams.sort_order = params.sort_order;
 

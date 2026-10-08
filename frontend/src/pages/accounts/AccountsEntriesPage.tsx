@@ -28,6 +28,8 @@ import type {
 } from '../../types/accounts';
 import { Button } from '../../components/ui/button';
 import { TaskConversationModal } from '../../components/conversation/TaskConversationModal';
+import { CompanyFilterTabs } from '../../components/common/CompanyFilterTabs';
+import { CompanyBadge } from '../../components/common/CompanyBadge';
 
 interface OutletContextType {
   addToast?: (type: 'success' | 'error' | 'info', title: string, message: string) => void;
@@ -143,6 +145,7 @@ export const AccountsEntriesPage: React.FC = () => {
 
   // Search & Filter State
   const [search, setSearch] = useState<string>(searchParams.get('search') || '');
+  const [companyId, setCompanyId] = useState<string>(searchParams.get('company_id') || 'ALL');
   const [paymentStatus, setPaymentStatus] = useState<string>(searchParams.get('payment_status') || 'ALL');
   const [fromDate, setFromDate] = useState<string>(searchParams.get('from_date') || '');
   const [toDate, setToDate] = useState<string>(searchParams.get('to_date') || '');
@@ -172,6 +175,7 @@ export const AccountsEntriesPage: React.FC = () => {
     (newParams: Record<string, string>) => {
       const p: Record<string, string> = {};
       if (newParams.search) p.search = newParams.search;
+      if (newParams.company_id && newParams.company_id !== 'ALL') p.company_id = newParams.company_id;
       if (newParams.payment_status && newParams.payment_status !== 'ALL') p.payment_status = newParams.payment_status;
       if (newParams.from_date) p.from_date = newParams.from_date;
       if (newParams.to_date) p.to_date = newParams.to_date;
@@ -180,6 +184,19 @@ export const AccountsEntriesPage: React.FC = () => {
     },
     [setSearchParams]
   );
+
+  const handleCompanyChange = (newCompId: string) => {
+    setCompanyId(newCompId);
+    setPage(1);
+    syncUrl({
+      search,
+      company_id: newCompId,
+      payment_status: paymentStatus,
+      from_date: fromDate,
+      to_date: toDate,
+      page: '1',
+    });
+  };
 
   // Fetch Accounts Entries
   const loadEntries = useCallback(async () => {
@@ -190,6 +207,7 @@ export const AccountsEntriesPage: React.FC = () => {
         page,
         limit,
         search: search.trim() || undefined,
+        company_id: companyId !== 'ALL' ? companyId : undefined,
         payment_status: paymentStatus !== 'ALL' ? paymentStatus : undefined,
         from_date: fromDate || undefined,
         to_date: toDate || undefined,
@@ -202,7 +220,7 @@ export const AccountsEntriesPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [page, limit, search, paymentStatus, fromDate, toDate]);
+  }, [page, limit, search, companyId, paymentStatus, fromDate, toDate]);
 
   useEffect(() => {
     loadEntries();
@@ -214,6 +232,7 @@ export const AccountsEntriesPage: React.FC = () => {
     setPage(1);
     syncUrl({
       search,
+      company_id: companyId,
       payment_status: paymentStatus,
       from_date: fromDate,
       to_date: toDate,
@@ -225,6 +244,7 @@ export const AccountsEntriesPage: React.FC = () => {
   // Reset Filters
   const handleResetFilters = () => {
     setSearch('');
+    setCompanyId('ALL');
     setPaymentStatus('ALL');
     setFromDate('');
     setToDate('');
@@ -238,6 +258,7 @@ export const AccountsEntriesPage: React.FC = () => {
     try {
       const { blob, filename } = await exportAccountsEntriesCsvApi({
         search: search.trim() || undefined,
+        company_id: companyId !== 'ALL' ? companyId : undefined,
         payment_status: paymentStatus !== 'ALL' ? paymentStatus : undefined,
         from_date: fromDate || undefined,
         to_date: toDate || undefined,
@@ -468,7 +489,21 @@ export const AccountsEntriesPage: React.FC = () => {
       </div>
 
       {/* Filter & Search Toolbar */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-xs">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-xs space-y-3">
+        {/* Company Selector Tabs */}
+        <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-slate-100 dark:border-slate-800/80">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+              Company Scope:
+            </span>
+            <CompanyFilterTabs
+              selectedCompanyId={companyId}
+              onCompanyChange={handleCompanyChange}
+              size="sm"
+            />
+          </div>
+        </div>
+
         <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           {/* Global Search */}
           <div className="lg:col-span-2 relative">
@@ -684,15 +719,22 @@ export const AccountsEntriesPage: React.FC = () => {
 
                     {/* 3. Client Name (Sticky) */}
                     <td className="py-3 px-3.5 font-semibold text-slate-900 dark:text-white sticky left-[52px] w-[180px] min-w-[180px] max-w-[180px] bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/80 z-20">
-                      <div className="flex items-center gap-1.5 truncate">
-                        <span className="truncate font-semibold" title={row.client_name}>
-                          {row.client_name}
-                        </span>
-                        {row.confirmation_status === 'CONFIRMED' && (
-                          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 shrink-0">
-                            Confirmed
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span className="truncate font-semibold" title={row.client_name}>
+                            {row.client_name}
                           </span>
-                        )}
+                          {row.confirmation_status === 'CONFIRMED' && (
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 shrink-0">
+                              Confirmed
+                            </span>
+                          )}
+                        </div>
+                        <CompanyBadge
+                          companyName={row.company_name}
+                          companyCode={row.company_code}
+                          size="xs"
+                        />
                       </div>
                     </td>
 

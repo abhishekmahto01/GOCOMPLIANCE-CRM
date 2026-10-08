@@ -21,6 +21,7 @@ import {
   Sparkles,
   MapPin,
   MessageSquare,
+  Building2,
 } from 'lucide-react';
 import { getSalesFormOptionsApi, createSalesEntryApi } from '../api/sales';
 import { extractErrorMessage } from '../api/client';
@@ -406,14 +407,31 @@ export const SalesEntryPage: React.FC = () => {
       <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
         {/* Section 1: Client & Engagement Details */}
         <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 md:p-8 shadow-sm space-y-6">
-          <div className="border-b border-slate-100 dark:border-slate-800/80 pb-4">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <User className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-              1. Client & Engagement Details
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Specify conversion date, client identity, lead source, and the sales representative (Converted By).
-            </p>
+          <div className="border-b border-slate-100 dark:border-slate-800/80 pb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <User className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                1. Client & Engagement Details
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Specify conversion date, client identity, lead source, and the sales representative (Converted By).
+              </p>
+            </div>
+
+            {formOptions?.company_name && (
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-50/90 dark:bg-blue-950/50 border border-blue-200/80 dark:border-blue-800/80 text-xs text-blue-900 dark:text-blue-200 self-start sm:self-auto">
+                <Building2 className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                <span>
+                  Originating Company:{' '}
+                  <strong className="font-bold text-slate-900 dark:text-white">
+                    {formOptions.company_name}
+                  </strong>
+                </span>
+                <span className="text-[10.5px] font-medium text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/60 px-1.5 py-0.2 rounded-md">
+                  Read-only
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">

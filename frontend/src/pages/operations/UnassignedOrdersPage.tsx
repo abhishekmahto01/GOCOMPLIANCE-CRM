@@ -23,6 +23,8 @@ import {
   assignOperationTaskApi,
 } from '../../api/operations';
 import { TaskDetailModal } from '../../components/operations/TaskDetailModal';
+import { CompanyFilterTabs } from '../../components/common/CompanyFilterTabs';
+import { CompanyBadge } from '../../components/common/CompanyBadge';
 
 export const UnassignedOrdersPage: React.FC = () => {
   const context = useOutletContext<{
@@ -33,6 +35,7 @@ export const UnassignedOrdersPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [companyId, setCompanyId] = useState('ALL');
   const [page, setPage] = useState(1);
   const limit = 20;
 
@@ -58,6 +61,7 @@ export const UnassignedOrdersPage: React.FC = () => {
       const data = await getUnassignedOperationsOrdersApi({
         page,
         limit,
+        company_id: companyId !== 'ALL' ? companyId : undefined,
         search: search.trim() || undefined,
       });
       setTaskListResponse(data);
@@ -80,7 +84,7 @@ export const UnassignedOrdersPage: React.FC = () => {
   useEffect(() => {
     loadUnassigned();
     loadAssignees();
-  }, [page]);
+  }, [page, companyId]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -147,6 +151,23 @@ export const UnassignedOrdersPage: React.FC = () => {
         </button>
       </div>
 
+      {/* Company Selector Tabs */}
+      <div className="flex items-center justify-between flex-wrap gap-3 p-3 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+            Company Scope:
+          </span>
+          <CompanyFilterTabs
+            selectedCompanyId={companyId}
+            onCompanyChange={(newCompId) => {
+              setCompanyId(newCompId);
+              setPage(1);
+            }}
+            size="sm"
+          />
+        </div>
+      </div>
+
       {/* Search Bar */}
       <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
         <form onSubmit={handleSearch} className="relative w-full">
@@ -208,7 +229,20 @@ export const UnassignedOrdersPage: React.FC = () => {
                     </td>
                     <td className="py-3.5 px-4 font-mono text-slate-500">{task.sales_order_number || '—'}</td>
                     <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-white">
-                      {task.client_name}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span>{task.client_name}</span>
+                        <CompanyBadge
+                          companyName={task.company_name}
+                          companyCode={task.company_code}
+                          size="xs"
+                        />
+                        {task.assignment_notes && task.assignment_notes.includes('Coordinator setup required') && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800" title="Company coordinator mapping missing or inactive">
+                            <AlertCircle className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                            Coordinator setup required
+                          </span>
+                        )}
+                      </div>
                       {task.client_phone && (
                         <div className="text-[11px] font-normal text-slate-400">{task.client_phone}</div>
                       )}
@@ -325,7 +359,7 @@ export const UnassignedOrdersPage: React.FC = () => {
                   <option value="">-- Select Assignee --</option>
                   {eligibleAssignees.map((emp) => (
                     <option key={emp.user_id} value={emp.user_id}>
-                      {emp.full_name || emp.name} ({emp.employee_code})
+                      {emp.full_name || emp.name} ({emp.employee_code}){emp.company_name ? ` - ${emp.company_name}` : ''}
                     </option>
                   ))}
                 </select>

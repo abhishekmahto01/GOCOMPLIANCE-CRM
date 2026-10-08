@@ -17,6 +17,8 @@ import {
 import type { OperationsDashboardResponse } from '../../types/operations';
 import { getOperationsDashboardApi } from '../../api/operations';
 import { TaskDetailModal } from '../../components/operations/TaskDetailModal';
+import { CompanyFilterTabs } from '../../components/common/CompanyFilterTabs';
+import { CompanyBadge } from '../../components/common/CompanyBadge';
 
 export const OperationsDashboardPage: React.FC = () => {
   const context = useOutletContext<{
@@ -26,6 +28,7 @@ export const OperationsDashboardPage: React.FC = () => {
   const [dashboardData, setDashboardData] = useState<OperationsDashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [companyId, setCompanyId] = useState('ALL');
 
   // Selected task modal state
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
@@ -35,7 +38,9 @@ export const OperationsDashboardPage: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await getOperationsDashboardApi();
+      const data = await getOperationsDashboardApi({
+        company_id: companyId !== 'ALL' ? companyId : undefined,
+      });
       setDashboardData(data);
     } catch (err: any) {
       setError(err?.response?.data?.detail || 'Failed to load Operations Dashboard data.');
@@ -46,7 +51,7 @@ export const OperationsDashboardPage: React.FC = () => {
 
   useEffect(() => {
     loadDashboard();
-  }, []);
+  }, [companyId]);
 
   const openTaskDetail = (appId: string) => {
     setSelectedAppId(appId);
@@ -118,6 +123,20 @@ export const OperationsDashboardPage: React.FC = () => {
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-blue-600' : ''}`} />
           <span>Refresh Data</span>
         </button>
+      </div>
+
+      {/* Company Selector Tabs */}
+      <div className="flex items-center justify-between flex-wrap gap-3 p-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+            Company Scope:
+          </span>
+          <CompanyFilterTabs
+            selectedCompanyId={companyId}
+            onCompanyChange={(newCompId) => setCompanyId(newCompId)}
+            size="sm"
+          />
+        </div>
       </div>
 
       {error && (
@@ -284,6 +303,7 @@ export const OperationsDashboardPage: React.FC = () => {
                     <thead>
                       <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 uppercase text-[10px]">
                         <th className="py-2.5 px-3">App #</th>
+                        <th className="py-2.5 px-3">Company</th>
                         <th className="py-2.5 px-3">Client</th>
                         <th className="py-2.5 px-3">Location</th>
                         <th className="py-2.5 px-3">Service</th>
@@ -298,6 +318,9 @@ export const OperationsDashboardPage: React.FC = () => {
                         <tr key={task.application_id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                           <td className="py-2.5 px-3 font-mono font-bold text-blue-600 dark:text-blue-400">
                             {task.application_number}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <CompanyBadge companyName={task.company_name} companyCode={task.company_code} />
                           </td>
                           <td className="py-2.5 px-3 text-slate-800 dark:text-slate-200">{task.client_name}</td>
                           <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
@@ -417,6 +440,7 @@ export const OperationsDashboardPage: React.FC = () => {
                 <thead>
                   <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 uppercase text-[10px]">
                     <th className="py-3 px-3">Application #</th>
+                    <th className="py-3 px-3">Company</th>
                     <th className="py-3 px-3">Order #</th>
                     <th className="py-3 px-3">Client</th>
                     <th className="py-3 px-3">Location</th>
@@ -433,6 +457,9 @@ export const OperationsDashboardPage: React.FC = () => {
                     <tr key={app.application_id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                       <td className="py-3 px-3 font-mono font-bold text-blue-600 dark:text-blue-400">
                         {app.application_number}
+                      </td>
+                      <td className="py-3 px-3">
+                        <CompanyBadge companyName={app.company_name} companyCode={app.company_code} />
                       </td>
                       <td className="py-3 px-3 font-mono text-slate-500">{app.sales_order_number || '—'}</td>
                       <td className="py-3 px-3 font-semibold text-slate-900 dark:text-white">{app.client_name}</td>

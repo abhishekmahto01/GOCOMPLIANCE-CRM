@@ -16,6 +16,7 @@ from app.models.operation_application import (
     OperationApplication,
     OperationRemark,
 )
+from app.models.operations_coordinator_config import OperationsCoordinatorConfig
 from app.models.payment_transaction import PaymentTransaction
 from app.models.permission_audit import PermissionAuditLog
 from app.models.refresh_token import RefreshToken
@@ -42,6 +43,7 @@ __all__ = [
     "Module",
     "OperationApplication",
     "OperationRemark",
+    "OperationsCoordinatorConfig",
     "PaymentTransaction",
     "PermissionAuditLog",
     "RefreshToken",

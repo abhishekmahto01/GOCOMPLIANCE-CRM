@@ -189,6 +189,10 @@ class SalesOrderDetailRead(SalesOrderRead):
     application_number: Optional[str] = None
     operation_status: Optional[str] = None
 
+    # Company details
+    company_name: Optional[str] = None
+    company_code: Optional[str] = None
+
     model_config = ConfigDict(from_attributes=True)
 
 

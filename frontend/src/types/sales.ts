@@ -128,6 +128,7 @@ export interface SalesDashboardFilterParams {
   service_id?: string;
   lead_source?: string;
   payment_status?: string;
+  company_id?: string;
 }
 
 /**
@@ -188,6 +189,8 @@ export interface SalesRegisterItem {
   order_id: string;
   order_number: string;
   company_id: string;
+  company_name?: string | null;
+  company_code?: string | null;
   client_id: string;
   service_id: string;
   salesperson_user_id: string;
@@ -234,6 +237,7 @@ export interface SalesRegisterFilterParams {
   employee_id?: string;
   service_id?: string;
   lead_source?: string;
+  company_id?: string;
   from_date?: string;
   to_date?: string;
   sort_by?: string;

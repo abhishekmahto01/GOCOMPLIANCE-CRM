@@ -31,6 +31,8 @@ export interface AccountsEntryItem {
   order_id: string;
   order_number: string;
   company_id: string;
+  company_name?: string | null;
+  company_code?: string | null;
   client_id: string;
   service_id: string;
   salesperson_user_id: string;

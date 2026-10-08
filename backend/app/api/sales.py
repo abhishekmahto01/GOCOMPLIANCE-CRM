@@ -44,6 +44,7 @@ def get_sales_dashboard(
     service_id: Optional[uuid.UUID] = Query(None, description="Filter by service ID"),
     lead_source: Optional[str] = Query(None, description="Filter by lead source (WEBSITE, REFERRAL, DIRECT, OTHERS)"),
     payment_status: Optional[str] = Query(None, description="Filter by payment status (FULLY_PAID, PARTIALLY_PAID, PENDING, OVERDUE)"),
+    company_id: Optional[uuid.UUID] = Query(None, description="Filter by company ID"),
     current_user: User = Depends(get_current_active_user),
     session: Session = Depends(get_db),
 ) -> SalesDashboardResponse:
@@ -57,6 +58,7 @@ def get_sales_dashboard(
         service_id=service_id,
         lead_source=lead_source,
         payment_status=payment_status,
+        company_id=company_id,
     )
 
 
@@ -75,6 +77,7 @@ def export_sales_dashboard(
     service_id: Optional[uuid.UUID] = Query(None, description="Filter by service"),
     lead_source: Optional[str] = Query(None, description="Filter by lead source"),
     payment_status: Optional[str] = Query(None, description="Filter by payment status"),
+    company_id: Optional[uuid.UUID] = Query(None, description="Filter by company ID"),
     current_user: User = Depends(get_current_active_user),
     session: Session = Depends(get_db),
 ):
@@ -134,6 +137,7 @@ def get_sales_register(
     to_date: Optional[date] = Query(None, description="End date (YYYY-MM-DD)"),
     sort_by: str = Query("order_date", description="Sort column"),
     sort_dir: str = Query("desc", description="Sort direction (asc/desc)"),
+    company_id: Optional[uuid.UUID] = Query(None, description="Filter by company ID"),
     current_user: User = Depends(get_current_active_user),
     session: Session = Depends(get_db),
 ) -> SalesRegisterResponse:
@@ -153,6 +157,7 @@ def get_sales_register(
         to_date=to_date,
         sort_by=sort_by,
         sort_dir=sort_dir,
+        company_id=company_id,
     )
 
 

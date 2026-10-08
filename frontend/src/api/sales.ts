@@ -29,6 +29,7 @@ export async function getSalesDashboardApi(
   if (params?.service_id && params.service_id !== 'ALL') queryParams.service_id = params.service_id;
   if (params?.lead_source && params.lead_source !== 'ALL') queryParams.lead_source = params.lead_source;
   if (params?.payment_status && params.payment_status !== 'ALL') queryParams.payment_status = params.payment_status;
+  if (params?.company_id && params.company_id !== 'ALL') queryParams.company_id = params.company_id;
 
   const response = await apiClient.get<SalesDashboardResponse>('/sales/dashboard', {
     params: queryParams,
@@ -50,6 +51,7 @@ export async function exportSalesDashboardCsvApi(
   if (params?.service_id && params.service_id !== 'ALL') queryParams.service_id = params.service_id;
   if (params?.lead_source && params.lead_source !== 'ALL') queryParams.lead_source = params.lead_source;
   if (params?.payment_status && params.payment_status !== 'ALL') queryParams.payment_status = params.payment_status;
+  if (params?.company_id && params.company_id !== 'ALL') queryParams.company_id = params.company_id;
 
   const response = await apiClient.get('/sales/dashboard/export', {
     params: queryParams,
@@ -91,6 +93,7 @@ export async function getSalesRegisterApi(
   if (params?.employee_id && params.employee_id !== 'ALL') queryParams.employee_id = params.employee_id;
   if (params?.service_id && params.service_id !== 'ALL') queryParams.service_id = params.service_id;
   if (params?.lead_source && params.lead_source !== 'ALL') queryParams.lead_source = params.lead_source;
+  if (params?.company_id && params.company_id !== 'ALL') queryParams.company_id = params.company_id;
   if (params?.from_date) queryParams.from_date = params.from_date;
   if (params?.to_date) queryParams.to_date = params.to_date;
   if (params?.sort_by) queryParams.sort_by = params.sort_by;
@@ -115,6 +118,7 @@ export async function exportSalesRegisterCsvApi(
   if (params?.employee_id && params.employee_id !== 'ALL') queryParams.employee_id = params.employee_id;
   if (params?.service_id && params.service_id !== 'ALL') queryParams.service_id = params.service_id;
   if (params?.lead_source && params.lead_source !== 'ALL') queryParams.lead_source = params.lead_source;
+  if (params?.company_id && params.company_id !== 'ALL') queryParams.company_id = params.company_id;
   if (params?.from_date) queryParams.from_date = params.from_date;
   if (params?.to_date) queryParams.to_date = params.to_date;
 

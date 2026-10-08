@@ -14,6 +14,7 @@ from app.models.department import Department
 from app.models.designation import Designation
 from app.models.module import Module
 from app.models.operation_application import OperationApplication
+from app.models.operations_coordinator_config import OperationsCoordinatorConfig
 from app.models.sales_order import SalesOrder
 from app.models.service import ServiceMaster, ServiceRequiredDocument
 from app.models.user import User
@@ -323,6 +324,13 @@ def sales_fixture(db_session: Session):
             can_export=False,
             data_scope="SELF",
             status="ACTIVE",
+        )
+    )
+
+    db_session.add(
+        OperationsCoordinatorConfig(
+            company_id=company.company_id,
+            coordinator_user_id=mansi.user_id,
         )
     )
 

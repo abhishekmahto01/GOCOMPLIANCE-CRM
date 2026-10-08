@@ -11,6 +11,7 @@ import {
   Hash,
   Save,
   Trash2,
+  Settings2,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -31,6 +32,7 @@ import { Input } from '../components/ui/input';
 import { Modal } from '../components/ui/modal';
 import { ConfirmationModal } from '../components/common/ConfirmationModal';
 import { ToastContainer, type ToastMessage } from '../components/ui/toast';
+import { OperationsCoordinatorModal } from '../components/admin/OperationsCoordinatorModal';
 
 export const CompanyMasterPage: React.FC = () => {
   const { hasPermission, isSuperAdmin } = useAuth();
@@ -51,6 +53,9 @@ export const CompanyMasterPage: React.FC = () => {
   // Filters
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+
+  // Operations Coordinator Modal State
+  const [isCoordinatorModalOpen, setIsCoordinatorModalOpen] = useState<boolean>(false);
 
   // Add Company Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
@@ -285,6 +290,18 @@ export const CompanyMasterPage: React.FC = () => {
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
           </Button>
+
+          {canEdit && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsCoordinatorModalOpen(true)}
+              className="flex items-center gap-1.5 border-purple-200 text-purple-700 hover:bg-purple-50 dark:border-purple-800 dark:text-purple-300 dark:hover:bg-purple-950/50"
+            >
+              <Settings2 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+              <span>Operations Coordinators</span>
+            </Button>
+          )}
 
           {canCreate && (
             <Button
@@ -798,6 +815,15 @@ export const CompanyMasterPage: React.FC = () => {
           </div>
         )}
       </ConfirmationModal>
+
+      {/* Operations Coordinator Settings Modal */}
+      <OperationsCoordinatorModal
+        isOpen={isCoordinatorModalOpen}
+        onClose={() => setIsCoordinatorModalOpen(false)}
+        onSaved={() => {
+          addToast('success', 'Coordinator Settings Updated', 'Default Operations coordinators saved successfully.');
+        }}
+      />
 
       {/* Interactive Toast Notifications */}
       <ToastContainer toasts={toasts} onDismiss={removeToast} />

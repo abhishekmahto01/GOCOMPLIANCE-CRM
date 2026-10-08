@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
   FileSpreadsheet,
-  Building2,
   Filter,
   RefreshCw,
   AlertCircle,
@@ -19,6 +18,8 @@ import {
 import { getAccountsDashboardApi } from '../../api/accounts';
 import type { AccountsDashboardResponse } from '../../types/accounts';
 import { Button } from '../../components/ui/button';
+import { CompanyFilterTabs } from '../../components/common/CompanyFilterTabs';
+import { CompanyBadge } from '../../components/common/CompanyBadge';
 
 export const AccountsDashboardPage: React.FC = () => {
   const [data, setData] = useState<AccountsDashboardResponse | null>(null);
@@ -53,7 +54,6 @@ export const AccountsDashboardPage: React.FC = () => {
   }, [fetchDashboard]);
 
   const kpis = data?.kpis;
-  const filterOptions = data?.filter_options;
   const paymentBreakdown = data?.payment_status_breakdown || [];
   const recentEntries = data?.recent_entries || [];
 
@@ -137,25 +137,15 @@ export const AccountsDashboardPage: React.FC = () => {
             </button>
           )}
 
-          {/* Company Filter */}
-          {filterOptions && filterOptions.companies.length > 0 && (
-            <div className="flex items-center gap-1.5 ml-2">
-              <Building2 className="w-3.5 h-3.5 text-slate-400" />
-              <select
-                aria-label="Company Filter"
-                value={companyId}
-                onChange={(e) => setCompanyId(e.target.value)}
-                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 max-w-[200px] truncate"
-              >
-                <option value="ALL">All Companies</option>
-                {filterOptions.companies.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+          {/* Company Filter Tabs */}
+          <div className="flex items-center gap-2 ml-auto sm:ml-2">
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Company:</span>
+            <CompanyFilterTabs
+              selectedCompanyId={companyId}
+              onCompanyChange={(newCompId) => setCompanyId(newCompId)}
+              size="sm"
+            />
+          </div>
         </div>
 
         <button
@@ -397,6 +387,7 @@ export const AccountsDashboardPage: React.FC = () => {
             <thead>
               <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider">
                 <th className="pb-3 pl-2">S.No</th>
+                <th className="pb-3">Company</th>
                 <th className="pb-3">Date</th>
                 <th className="pb-3">Client Name</th>
                 <th className="pb-3">Location</th>
@@ -413,6 +404,9 @@ export const AccountsDashboardPage: React.FC = () => {
                 recentEntries.map((entry) => (
                   <tr key={entry.order_id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="py-3 pl-2 font-mono text-slate-500 font-semibold">{entry.s_no}</td>
+                    <td className="py-3">
+                      <CompanyBadge companyName={entry.company_name} companyCode={entry.company_code} />
+                    </td>
                     <td className="py-3 whitespace-nowrap text-slate-600 dark:text-slate-400 font-medium">
                       {entry.formatted_date}
                     </td>
@@ -463,7 +457,7 @@ export const AccountsDashboardPage: React.FC = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={10} className="py-8 text-center text-slate-400 text-xs">
+                  <td colSpan={11} className="py-8 text-center text-slate-400 text-xs">
                     No sales orders found for the selected filter.
                   </td>
                 </tr>

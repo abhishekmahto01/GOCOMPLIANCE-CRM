@@ -359,6 +359,12 @@ export const TaskConversationModal: React.FC<TaskConversationModalProps> = ({
                   <h3 id="conversation-modal-title" className="text-sm sm:text-base font-bold text-slate-900 dark:text-white tracking-tight">
                     Shared Task Conversation
                   </h3>
+                  {thread?.company_name && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wide uppercase bg-blue-50 text-blue-800 border border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800" title={`Originating Company: ${thread.company_name}`}>
+                      <Building2 className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                      {thread.company_code || thread.company_name}
+                    </span>
+                  )}
                   {thread?.gst_invoice_required && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800">
                       <Receipt className="w-3 h-3 text-emerald-600" />
@@ -368,6 +374,12 @@ export const TaskConversationModal: React.FC<TaskConversationModalProps> = ({
                 </div>
                 <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-500 dark:text-slate-400">
                   <span>Cross-department timeline (Sales, Ops, Accounts)</span>
+                  {thread?.company_name && (
+                    <>
+                      <span>•</span>
+                      <span className="font-medium text-slate-600 dark:text-slate-300">{thread.company_name}</span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

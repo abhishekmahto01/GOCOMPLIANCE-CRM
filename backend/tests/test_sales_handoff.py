@@ -17,6 +17,7 @@ from app.models.operation_application import (
     ApplicationDocument,
     OperationApplication,
 )
+from app.models.operations_coordinator_config import OperationsCoordinatorConfig
 from app.models.sales_order import SalesOrder
 from app.models.service import ServiceMaster, ServiceRequiredDocument
 from app.models.user import User
@@ -179,6 +180,12 @@ def test_setup_entities(db_session: Session):
         status="ACTIVE",
     )
     db_session.add(client)
+
+    coord_config = OperationsCoordinatorConfig(
+        company_id=company.company_id,
+        coordinator_user_id=ops_manager.user_id,
+    )
+    db_session.add(coord_config)
     db_session.flush()
 
     return {
