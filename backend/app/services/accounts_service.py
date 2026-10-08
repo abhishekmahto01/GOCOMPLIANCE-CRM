@@ -20,6 +20,7 @@ from app.models.operation_application import ApplicationActivityLog, OperationAp
 from app.models.payment_transaction import PaymentTransaction
 from app.models.sales_order import SalesOrder
 from app.models.service import ServiceMaster
+from app.models.task_conversation import TaskConversationMessage
 from app.models.user import User
 from app.schemas.accounts import (
     AccountsDashboardResponse,
@@ -2123,7 +2124,28 @@ def update_accounts_entry(
     remarks_input = data.remarks if data.remarks is not None else data.notes
     if remarks_input is not None:
         val = remarks_input.strip() if remarks_input else None
-        if val != order.notes:
+        if val and val != order.notes:
+            order.notes = val
+            changed = True
+            # Also record in shared TaskConversationMessage
+            author_name = f"{user.first_name} {user.last_name}".strip() or "Accounts"
+            author_code = user.employee_code
+            dept_name = user.department.department_name if user.department else "Accounts"
+            role_name = user.designation.designation_name if user.designation else None
+
+            conv_msg = TaskConversationMessage(
+                sales_order_id=order.order_id,
+                author_user_id=user.user_id,
+                message_type="COMMENT",
+                message_text=val,
+                author_name=author_name,
+                author_employee_code=author_code,
+                author_department_name=dept_name,
+                author_role_name=role_name,
+                created_at=datetime.now(timezone.utc),
+            )
+            session.add(conv_msg)
+        elif val != order.notes:
             order.notes = val
             changed = True
         new_values["notes"] = val

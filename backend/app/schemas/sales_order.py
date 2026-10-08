@@ -180,6 +180,9 @@ class SalesOrderDetailRead(SalesOrderRead):
     # 20. Profits (inherited as profit_amount)
     # 21. Remarks (inherited as notes)
     remarks: Optional[str] = None
+    latest_remark_text: Optional[str] = None
+    latest_remark_author: Optional[str] = None
+    latest_remark_date: Optional[str] = None
 
     # Operations link
     application_id: Optional[uuid.UUID] = None

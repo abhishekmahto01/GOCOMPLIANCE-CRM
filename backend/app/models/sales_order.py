@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from app.models.operation_application import OperationApplication
     from app.models.payment_transaction import PaymentTransaction
     from app.models.service import ServiceMaster
+    from app.models.task_conversation import TaskConversationMessage
     from app.models.user import User
 
 
@@ -322,6 +323,13 @@ class SalesOrder(Base):
     accounts_expenses: Mapped[List["AccountsExpense"]] = relationship(
         "AccountsExpense",
         back_populates="sales_order",
+    )
+
+    conversation_messages: Mapped[List["TaskConversationMessage"]] = relationship(
+        "TaskConversationMessage",
+        back_populates="sales_order",
+        cascade="all, delete-orphan",
+        order_by="TaskConversationMessage.created_at.asc()",
     )
 
     def __repr__(self) -> str:

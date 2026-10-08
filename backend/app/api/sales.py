@@ -6,10 +6,11 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_active_user, require_module_permission
+from app.api.deps import get_current_active_user, require_fully_activated_user, require_module_permission
 from app.database.session import get_db
 from app.models.sales_order import SalesOrder
 from app.models.user import User
+from app.schemas.conversation import ConversationMessageCreate
 from app.schemas.sales_dashboard import SalesDashboardResponse
 from app.schemas.sales_order import (
     SalesEmployeeOption,
@@ -22,7 +23,7 @@ from app.schemas.sales_order import (
     SalesOrderUpdate,
     SalesRegisterResponse,
 )
-from app.services import operation_service, permissions, sales_service
+from app.services import conversation_service, operation_service, permissions, sales_service
 
 router = APIRouter(prefix="/sales", tags=["Sales Dashboard, Register & Orders"])
 
@@ -602,3 +603,64 @@ def assign_order_operations(
     except Exception as e:
         session.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.get(
+    "/orders/{order_id}/conversation",
+    summary="Get Sales Order Conversation Thread",
+    description="Retrieve the shared chronological conversation thread for a Sales Order.",
+)
+def get_order_conversation(
+    order_id: uuid.UUID,
+    limit: int = Query(50, ge=1, le=100),
+    before_id: Optional[uuid.UUID] = Query(None),
+    offset: int = Query(0, ge=0),
+    current_user: User = Depends(require_fully_activated_user),
+    session: Session = Depends(get_db),
+):
+    try:
+        return conversation_service.get_task_conversation(
+            session=session,
+            user=current_user,
+            order_id=order_id,
+            limit=limit,
+            before_id=before_id,
+            offset=offset,
+        )
+    except conversation_service.ConversationNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except permissions.PermissionDeniedError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+
+@router.post(
+    "/orders/{order_id}/conversation",
+    status_code=status.HTTP_201_CREATED,
+    summary="Post Remark to Sales Order Conversation",
+    description="Post a new remark to the shared task conversation.",
+)
+def post_order_conversation(
+    order_id: uuid.UUID,
+    payload: ConversationMessageCreate,
+    current_user: User = Depends(require_fully_activated_user),
+    session: Session = Depends(get_db),
+):
+    try:
+        msg = conversation_service.post_conversation_message(
+            session=session,
+            user=current_user,
+            order_id=order_id,
+            message_text=payload.message_text,
+            idempotency_key=payload.idempotency_key,
+        )
+        session.commit()
+        return msg
+    except conversation_service.ConversationNotFoundError as e:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except permissions.PermissionDeniedError as e:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except ValueError as e:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

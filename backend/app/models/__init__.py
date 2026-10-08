@@ -21,6 +21,7 @@ from app.models.permission_audit import PermissionAuditLog
 from app.models.refresh_token import RefreshToken
 from app.models.sales_order import SalesOrder
 from app.models.service import ServiceMaster, ServiceRequiredDocument
+from app.models.task_conversation import TaskConversationMessage
 from app.models.user import User
 from app.models.user_module_permission import UserModulePermission
 
@@ -47,6 +48,7 @@ __all__ = [
     "SalesOrder",
     "ServiceMaster",
     "ServiceRequiredDocument",
+    "TaskConversationMessage",
     "User",
     "UserModulePermission",
 ]

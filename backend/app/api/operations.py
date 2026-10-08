@@ -8,7 +8,9 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, require_fully_activated_user, require_module_permission
 from app.database.session import get_db
+from app.models.operation_application import OperationApplication
 from app.models.user import User
+from app.schemas.conversation import ConversationMessageCreate
 from app.schemas.operation_application import (
     ApplicationDocRead,
     ApplicationDocUpdate,
@@ -23,7 +25,7 @@ from app.schemas.operation_application import (
     TaskReassignRequest,
 )
 from app.schemas.sales_order import SalesEmployeeOption
-from app.services import operation_service, permissions
+from app.services import conversation_service, operation_service, permissions
 
 router = APIRouter(prefix="/operations", tags=["Operations Tasks & Workspace"])
 
@@ -443,4 +445,71 @@ def list_operation_remarks(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except permissions.PermissionDeniedError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+
+@router.get(
+    "/tasks/{application_id}/conversation",
+    summary="Get Task Conversation Thread via Application ID",
+    description="Retrieve the shared chronological conversation thread by Operations application ID.",
+)
+def get_task_conversation_by_application(
+    application_id: uuid.UUID,
+    limit: int = Query(50, ge=1, le=100),
+    before_id: Optional[uuid.UUID] = Query(None),
+    offset: int = Query(0, ge=0),
+    current_user: User = Depends(require_fully_activated_user),
+    session: Session = Depends(get_db),
+):
+    app = session.get(OperationApplication, application_id)
+    if not app:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Task with ID '{application_id}' not found.")
+    try:
+        return conversation_service.get_task_conversation(
+            session=session,
+            user=current_user,
+            order_id=app.sales_order_id,
+            limit=limit,
+            before_id=before_id,
+            offset=offset,
+        )
+    except conversation_service.ConversationNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except permissions.PermissionDeniedError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+
+@router.post(
+    "/tasks/{application_id}/conversation",
+    status_code=status.HTTP_201_CREATED,
+    summary="Post Message to Task Conversation via Application ID",
+    description="Post a new append-only remark to the shared task conversation by Operations application ID.",
+)
+def post_task_conversation_by_application(
+    application_id: uuid.UUID,
+    payload: ConversationMessageCreate,
+    current_user: User = Depends(require_fully_activated_user),
+    session: Session = Depends(get_db),
+):
+    app = session.get(OperationApplication, application_id)
+    if not app:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Task with ID '{application_id}' not found.")
+    try:
+        msg = conversation_service.post_conversation_message(
+            session=session,
+            user=current_user,
+            order_id=app.sales_order_id,
+            message_text=payload.message_text,
+            idempotency_key=payload.idempotency_key,
+        )
+        session.commit()
+        return msg
+    except conversation_service.ConversationNotFoundError as e:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except permissions.PermissionDeniedError as e:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except ValueError as e:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 

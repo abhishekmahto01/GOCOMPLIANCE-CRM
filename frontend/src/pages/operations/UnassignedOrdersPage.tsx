@@ -11,6 +11,7 @@ import {
   ChevronRight,
   UserPlus,
   MapPin,
+  MessageSquare,
 } from 'lucide-react';
 import type {
   AssigneeOption,
@@ -23,6 +24,7 @@ import {
   assignOperationTaskApi,
 } from '../../api/operations';
 import { TaskDetailModal } from '../../components/operations/TaskDetailModal';
+import { TaskConversationModal } from '../../components/conversation/TaskConversationModal';
 
 export const UnassignedOrdersPage: React.FC = () => {
   const context = useOutletContext<{
@@ -50,6 +52,10 @@ export const UnassignedOrdersPage: React.FC = () => {
   // Selected task modal state
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+
+  // Shared Task Conversation modal state
+  const [conversationOrderId, setConversationOrderId] = useState<string | null>(null);
+  const [isConversationOpen, setIsConversationOpen] = useState(false);
 
   const loadUnassigned = async () => {
     try {
@@ -231,7 +237,21 @@ export const UnassignedOrdersPage: React.FC = () => {
                     </td>
                     <td className="py-3.5 px-4 text-slate-500">{task.formatted_order_date || '—'}</td>
                     <td className="py-3.5 px-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {task.sales_order_id && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setConversationOrderId(task.sales_order_id);
+                              setIsConversationOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 text-xs font-bold transition border border-emerald-200/70 dark:border-emerald-800/60"
+                            title="Open Shared Task Conversation"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Conversation</span>
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => {
@@ -401,6 +421,17 @@ export const UnassignedOrdersPage: React.FC = () => {
         }}
         onRefresh={loadUnassigned}
         onShowToast={context?.addToast}
+      />
+
+      {/* Shared Task Conversation Modal */}
+      <TaskConversationModal
+        isOpen={isConversationOpen}
+        onClose={() => {
+          setIsConversationOpen(false);
+          setConversationOrderId(null);
+        }}
+        orderId={conversationOrderId}
+        onMessagePosted={loadUnassigned}
       />
     </div>
   );

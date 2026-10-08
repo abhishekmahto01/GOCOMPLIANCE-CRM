@@ -752,9 +752,9 @@ describe('Operations Workspace & Connected Workflow', () => {
     const remarkPreview = screen.getByText('Awaiting NOC clearance from state medical board.');
     await user.click(remarkPreview);
 
-    // Should open modal directly with Operations Remarks History active
+    // Should open modal directly with Conversation / Remarks History active
     await waitFor(() => {
-      expect(screen.getByText('Operations Remarks History')).toBeInTheDocument();
+      expect(screen.getByText(/Shared Task Conversation|Operations Remarks History/i)).toBeInTheDocument();
     });
   });
 

@@ -9,10 +9,12 @@ import {
   ChevronLeft,
   ChevronRight,
   MapPin,
+  MessageSquare,
 } from 'lucide-react';
 import type { OperationsTaskListResponse } from '../../types/operations';
 import { getMyOperationsTasksApi } from '../../api/operations';
 import { TaskDetailModal } from '../../components/operations/TaskDetailModal';
+import { TaskConversationModal } from '../../components/conversation/TaskConversationModal';
 
 export const MyTasksPage: React.FC = () => {
   const context = useOutletContext<{
@@ -34,6 +36,10 @@ export const MyTasksPage: React.FC = () => {
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [modalInitialTab, setModalInitialTab] = useState<'overview' | 'remarks'>('overview');
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+
+  // Shared Task Conversation modal state
+  const [conversationOrderId, setConversationOrderId] = useState<string | null>(null);
+  const [isConversationOpen, setIsConversationOpen] = useState(false);
 
   const loadTasks = async () => {
     try {
@@ -319,7 +325,12 @@ export const MyTasksPage: React.FC = () => {
                       className="py-3.5 px-4 max-w-[280px]"
                       onClick={(e) => {
                         e.stopPropagation();
-                        openTaskDetail(task.application_id, 'remarks');
+                        if (task.sales_order_id) {
+                          setConversationOrderId(task.sales_order_id);
+                          setIsConversationOpen(true);
+                        } else {
+                          openTaskDetail(task.application_id, 'remarks');
+                        }
                       }}
                     >
                       {task.latest_remark ? (
@@ -340,18 +351,47 @@ export const MyTasksPage: React.FC = () => {
                           </div>
                         </div>
                       ) : (
-                        <span className="text-slate-400 dark:text-slate-500 italic text-[11px]">No update yet</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (task.sales_order_id) {
+                              setConversationOrderId(task.sales_order_id);
+                              setIsConversationOpen(true);
+                            }
+                          }}
+                          className="text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 italic text-[11px] flex items-center gap-1"
+                        >
+                          <MessageSquare className="w-3 h-3" />
+                          <span>No update yet</span>
+                        </button>
                       )}
                     </td>
                     <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        onClick={() => openTaskDetail(task.application_id, 'overview')}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-950 dark:text-blue-300 text-xs font-bold transition"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        <span>Open Task</span>
-                      </button>
+                      <div className="inline-flex items-center gap-1.5 justify-end">
+                        {task.sales_order_id && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setConversationOrderId(task.sales_order_id);
+                              setIsConversationOpen(true);
+                            }}
+                            title="Open Shared Task Conversation"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 text-xs font-bold transition border border-emerald-200/70 dark:border-emerald-800/60"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Conversation</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => openTaskDetail(task.application_id, 'overview')}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-950 dark:text-blue-300 text-xs font-bold transition"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Open Task</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -400,6 +440,17 @@ export const MyTasksPage: React.FC = () => {
         }}
         onRefresh={loadTasks}
         onShowToast={context?.addToast}
+      />
+
+      {/* Shared Task Conversation Modal */}
+      <TaskConversationModal
+        isOpen={isConversationOpen}
+        onClose={() => {
+          setIsConversationOpen(false);
+          setConversationOrderId(null);
+        }}
+        orderId={conversationOrderId}
+        onMessagePosted={loadTasks}
       />
     </div>
   );

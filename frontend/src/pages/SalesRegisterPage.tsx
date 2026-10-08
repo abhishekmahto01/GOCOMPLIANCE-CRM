@@ -19,6 +19,7 @@ import {
   Save,
   Trash2,
   MapPin,
+  MessageSquare,
 } from 'lucide-react';
 import {
   getSalesRegisterApi,
@@ -37,6 +38,7 @@ import type {
 } from '../types/sales';
 import { Button } from '../components/ui/button';
 import { Modal } from '../components/ui/modal';
+import { TaskConversationModal } from '../components/conversation/TaskConversationModal';
 
 interface OutletContextType {
   addToast?: (type: 'success' | 'error' | 'info', title: string, message: string) => void;
@@ -188,6 +190,16 @@ export const SalesRegisterPage: React.FC = () => {
   const [deletingOrder, setDeletingOrder] = useState<SalesRegisterItem | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Shared Task Conversation Modal State
+  const [conversationOrderId, setConversationOrderId] = useState<string | null>(null);
+  const [isConversationOpen, setIsConversationOpen] = useState<boolean>(false);
+
+  const handleOpenConversation = (orderId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setConversationOrderId(orderId);
+    setIsConversationOpen(true);
+  };
 
   // Sync state with URL params
   const syncUrl = useCallback(
@@ -956,14 +968,47 @@ export const SalesRegisterPage: React.FC = () => {
                         {formatInr(row.profit_amount)}
                       </td>
 
-                      {/* 21. Remarks (shows — when not populated) */}
-                      <td className="py-3 px-4 text-slate-500 dark:text-slate-400 max-w-xs truncate" title={row.notes || row.remarks || ''}>
-                        {row.notes || row.remarks || '—'}
+                      {/* 21. Remarks */}
+                      <td
+                        className="py-2.5 px-3 max-w-[200px] cursor-pointer group/rem"
+                        onClick={(e) => handleOpenConversation(row.order_id, e)}
+                        title={row.notes || row.remarks || 'Click to view conversation thread'}
+                      >
+                        {row.notes || row.remarks ? (
+                          <div className="p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/80 hover:bg-blue-50 dark:hover:bg-blue-950/40 border border-slate-200/60 dark:border-slate-700/60 transition flex flex-col gap-0.5">
+                            <span className="text-xs text-slate-700 dark:text-slate-300 truncate font-medium">
+                              {row.notes || row.remarks}
+                            </span>
+                            <span className="text-[10px] text-blue-600 dark:text-blue-400 font-bold inline-flex items-center gap-1">
+                              <MessageSquare className="w-2.5 h-2.5" />
+                              View Thread
+                            </span>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={(e) => handleOpenConversation(row.order_id, e)}
+                            className="text-[11px] text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 inline-flex items-center gap-1 font-medium transition"
+                          >
+                            <MessageSquare className="w-3 h-3" />
+                            <span>—</span>
+                          </button>
+                        )}
                       </td>
 
-                      {/* 22. Actions Column with Sticky Edit & Delete Buttons */}
+                      {/* 22. Actions Column with Conversation, Edit & Delete Buttons */}
                       <td className="py-2 px-3 text-center sticky right-0 bg-white dark:bg-slate-900 group-hover:bg-blue-50/40 dark:group-hover:bg-slate-900 z-10 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.06)] border-l border-slate-200 dark:border-slate-800">
                         <div className="flex items-center gap-1.5 justify-center">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => handleOpenConversation(row.order_id, e)}
+                            leftIcon={<MessageSquare className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />}
+                            className="hover:border-blue-500 hover:text-blue-600 dark:hover:border-blue-400 dark:hover:text-blue-400 font-semibold text-xs shadow-none py-1 px-2"
+                            title="Open shared task conversation thread"
+                          >
+                            Conversation
+                          </Button>
                           <Button
                             variant="outline"
                             size="sm"
@@ -1799,6 +1844,17 @@ export const SalesRegisterPage: React.FC = () => {
           </div>
         </Modal>
       )}
+
+      {/* Shared Task Conversation Modal */}
+      <TaskConversationModal
+        isOpen={isConversationOpen}
+        onClose={() => {
+          setIsConversationOpen(false);
+          setConversationOrderId(null);
+        }}
+        orderId={conversationOrderId}
+        onMessagePosted={loadRegister}
+      />
     </div>
   );
 };

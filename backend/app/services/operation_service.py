@@ -20,6 +20,7 @@ from app.models.operation_application import (
     OperationRemark,
 )
 from app.models.sales_order import SalesOrder
+from app.models.task_conversation import TaskConversationMessage
 from app.models.user import User
 from app.models.user_module_permission import UserModulePermission
 from app.schemas.operation_application import (
@@ -37,7 +38,7 @@ from app.schemas.operation_application import (
     OperationsTaskListResponse,
     OperationsTaskSummary,
 )
-from app.services import permissions
+from app.services import conversation_service, permissions
 
 # Allowed forward status transitions map
 VALID_STATUS_TRANSITIONS: Dict[str, List[str]] = {
@@ -875,6 +876,25 @@ def assign_task(
         created_at=now_utc,
     )
     session.add(activity)
+
+    # Record system event in unified conversation
+    conversation_service.record_system_event(
+        session=session,
+        order_id=app.sales_order_id,
+        event_type="ASSIGNMENT_CHANGE",
+        message_text=f"Task assigned to {assignee.first_name} {assignee.last_name} ({assignee.employee_code}) by {assigned_by.first_name} {assigned_by.last_name} ({assigned_by.employee_code}). Priority: {priority}",
+        actor=assigned_by,
+        event_metadata={
+            "action": "TASK_ASSIGNED",
+            "assignee_id": str(assignee.user_id),
+            "assignee_name": f"{assignee.first_name} {assignee.last_name}",
+            "assignee_code": assignee.employee_code,
+            "priority": priority,
+            "notes": notes,
+        },
+        created_at=now_utc,
+    )
+
     session.flush()
 
     return app
@@ -948,6 +968,30 @@ def reassign_task(
         created_at=now_utc,
     )
     session.add(activity)
+
+    # Get previous assignee name
+    prev_user = session.get(User, prev_assignee_id) if prev_assignee_id else None
+    prev_label = f"{prev_user.first_name} {prev_user.last_name} ({prev_user.employee_code})" if prev_user else "Unassigned"
+
+    # Record system event in unified conversation
+    conversation_service.record_system_event(
+        session=session,
+        order_id=app.sales_order_id,
+        event_type="REASSIGNMENT",
+        message_text=f"Task reassigned from {prev_label} to {new_assignee.first_name} {new_assignee.last_name} ({new_assignee.employee_code}) by {reassigned_by.first_name} {reassigned_by.last_name} ({reassigned_by.employee_code}). Reason: {reason}",
+        actor=reassigned_by,
+        event_metadata={
+            "action": "TASK_REASSIGNED",
+            "previous_assignee_id": str(prev_assignee_id) if prev_assignee_id else None,
+            "previous_assignee_name": f"{prev_user.first_name} {prev_user.last_name}" if prev_user else None,
+            "new_assignee_id": str(new_assignee.user_id),
+            "new_assignee_name": f"{new_assignee.first_name} {new_assignee.last_name}",
+            "new_assignee_code": new_assignee.employee_code,
+            "reason": reason,
+        },
+        created_at=now_utc,
+    )
+
     session.flush()
 
     return app
@@ -991,6 +1035,23 @@ def update_application_status(
         created_at=now_utc,
     )
     session.add(activity)
+
+    # Record system event in unified conversation
+    conversation_service.record_system_event(
+        session=session,
+        order_id=app.sales_order_id,
+        event_type="STATUS_CHANGE",
+        message_text=f"Task status changed from {old_status} to {new_status} by {actor.first_name} {actor.last_name} ({actor.employee_code})." + (f" Note: {comment}" if comment else ""),
+        actor=actor,
+        event_metadata={
+            "action": "STATUS_CHANGE",
+            "old_status": old_status,
+            "new_status": new_status,
+            "comment": comment,
+        },
+        created_at=now_utc,
+    )
+
     session.flush()
 
     return app
@@ -1112,6 +1173,30 @@ def add_operation_remark(
         created_at=now_utc,
     )
     session.add(remark)
+
+    # Record into shared TaskConversationMessage and update sales_order.notes
+    if app.sales_order_id:
+        author_name = f"{author.first_name} {author.last_name}".strip() or "Employee"
+        author_code = author.employee_code
+        dept_name = author.department.department_name if author.department else "Operations"
+        role_name = author.designation.designation_name if author.designation else None
+
+        conv_msg = TaskConversationMessage(
+            sales_order_id=app.sales_order_id,
+            author_user_id=author.user_id,
+            message_type="COMMENT",
+            message_text=text_content,
+            author_name=author_name,
+            author_employee_code=author_code,
+            author_department_name=dept_name,
+            author_role_name=role_name,
+            created_at=now_utc,
+        )
+        session.add(conv_msg)
+
+        if app.sales_order:
+            app.sales_order.notes = text_content
+            app.sales_order.updated_at = now_utc
 
     # Activity log
     activity = ApplicationActivityLog(

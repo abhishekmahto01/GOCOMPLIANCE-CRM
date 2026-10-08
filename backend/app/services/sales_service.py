@@ -51,7 +51,7 @@ from app.schemas.sales_order import (
     SalesRegisterSummary,
     SalesServiceOption,
 )
-from app.services import operation_service, permissions
+from app.services import conversation_service, operation_service, permissions
 
 
 class SalesOrderNotFoundError(Exception):
@@ -451,6 +451,15 @@ def create_sales_order(
     )
     session.add(order)
     session.flush()
+
+    # Initial remark becomes the first conversation message
+    if data.notes and data.notes.strip():
+        conversation_service.post_conversation_message(
+            session=session,
+            user=current_user,
+            order_id=order.order_id,
+            message_text=data.notes.strip(),
+        )
 
     if data.auto_confirm:
         confirm_sales_order(session, order.order_id, current_user, assignee_user_id=data.assignee_user_id)
@@ -986,6 +995,28 @@ def confirm_sales_order(
         ),
     )
     session.add(activity)
+
+    # Record system event in unified conversation thread
+    conv_event_text = (
+        f"Order '{order.order_number}' confirmed and assigned to {assigned_target.first_name} {assigned_target.last_name} ({assigned_target.employee_code}) by {current_user.first_name} {current_user.last_name}."
+        if assigned_target
+        else f"Order '{order.order_number}' confirmed and handed over to Operations by {current_user.first_name} {current_user.last_name}."
+    )
+    conversation_service.record_system_event(
+        session=session,
+        order_id=order.order_id,
+        event_type="ASSIGNMENT_CHANGE" if assigned_target else "STATUS_CHANGE",
+        message_text=conv_event_text,
+        actor=current_user,
+        event_metadata={
+            "action": "ORDER_CONFIRMED",
+            "assignee_id": str(assigned_target.user_id) if assigned_target else None,
+            "assignee_name": f"{assigned_target.first_name} {assigned_target.last_name}" if assigned_target else None,
+            "assignee_code": assigned_target.employee_code if assigned_target else None,
+        },
+        created_at=now_utc,
+    )
+
     session.flush()
 
     return SalesOrderConfirmResponse(
@@ -1763,6 +1794,9 @@ def get_sales_register_data(
                 reimbursement_note=o.reimbursement_note,
                 notes=o.notes,
                 remarks=o.notes,
+                latest_remark_text=o.notes,
+                latest_remark_author=sp_name,
+                latest_remark_date=o.updated_at.strftime("%d %b %Y") if o.updated_at else None,
                 gst_invoice_required=getattr(o, "gst_invoice_required", False),
                 created_at=o.created_at,
                 updated_at=o.updated_at,

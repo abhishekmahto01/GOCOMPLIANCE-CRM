@@ -20,6 +20,7 @@ import {
   Info,
   Sparkles,
   MapPin,
+  MessageSquare,
 } from 'lucide-react';
 import { getSalesFormOptionsApi, createSalesEntryApi } from '../api/sales';
 import { extractErrorMessage } from '../api/client';
@@ -63,6 +64,7 @@ const salesEntrySchema = z
       .min(0, 'Incidental cost cannot be negative')
       .default(0),
     gst_invoice_required: z.boolean().default(false),
+    notes: z.string().trim().max(2000).optional().nullable(),
   })
   .refine((data) => data.amount_received <= data.order_value, {
     message: 'Advance amount cannot exceed total amount',
@@ -205,6 +207,7 @@ export const SalesEntryPage: React.FC = () => {
         govt_fees: Number(values.govt_fees || 0),
         incidental_cost: Number(values.incidental_cost || 0),
         gst_invoice_required: Boolean(values.gst_invoice_required),
+        notes: values.notes?.trim() || undefined,
         auto_confirm: autoConfirm,
       };
 
@@ -243,6 +246,7 @@ export const SalesEntryPage: React.FC = () => {
       govt_fees: 0,
       incidental_cost: 0,
       gst_invoice_required: false,
+      notes: '',
     });
     setSubmitError(null);
   };
@@ -620,6 +624,27 @@ export const SalesEntryPage: React.FC = () => {
                   </p>
                 </div>
               </div>
+            </div>
+
+            {/* Initial Conversation Remark / Client Notes */}
+            <div className="md:col-span-2 lg:col-span-3">
+              <label htmlFor="notes" className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <MessageSquare className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                  Initial Remark / Conversation Note
+                </span>
+                <span className="text-[11px] font-normal text-slate-400">Optional (creates 1st thread message)</span>
+              </label>
+              <textarea
+                id="notes"
+                rows={2}
+                placeholder="Add handover instructions, client requirements, or special urgency note..."
+                {...register('notes')}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition placeholder:text-slate-400"
+              />
+              <p className="mt-1 text-[11px] text-slate-400">
+                This remark will start the shared task conversation thread visible to Operations and Accounts.
+              </p>
             </div>
           </div>
         </div>

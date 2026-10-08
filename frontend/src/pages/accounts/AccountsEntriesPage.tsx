@@ -14,6 +14,7 @@ import {
   MapPin,
   RefreshCw,
   Check,
+  MessageSquare,
 } from 'lucide-react';
 import {
   getAccountsEntriesApi,
@@ -26,6 +27,7 @@ import type {
   AccountsEntryUpdatePayload,
 } from '../../types/accounts';
 import { Button } from '../../components/ui/button';
+import { TaskConversationModal } from '../../components/conversation/TaskConversationModal';
 
 interface OutletContextType {
   addToast?: (type: 'success' | 'error' | 'info', title: string, message: string) => void;
@@ -158,6 +160,10 @@ export const AccountsEntriesPage: React.FC = () => {
   const [activeValue, setActiveValue] = useState<string>('');
   const [savingCells, setSavingCells] = useState<Record<string, boolean>>({});
   const [lastSavedCell, setLastSavedCell] = useState<string | null>(null);
+
+  // Shared Task Conversation Modal State
+  const [conversationOrderId, setConversationOrderId] = useState<string | null>(null);
+  const [isConversationOpen, setIsConversationOpen] = useState<boolean>(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -988,16 +994,30 @@ export const AccountsEntriesPage: React.FC = () => {
 
                     {/* 22. Action Column */}
                     <td className="py-2.5 px-3 text-center sticky right-0 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/80 z-20 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.06)] border-l border-slate-200 dark:border-slate-800">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => handleStartCellEdit(row.order_id, 'proforma_invoice_no', row.proforma_invoice_no, e)}
-                        className="p-1.5 h-7 w-7 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-lg"
-                        title="Click to direct edit entry fields"
-                      >
-                        <Edit className="w-3.5 h-3.5" />
-                      </Button>
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConversationOrderId(row.order_id);
+                            setIsConversationOpen(true);
+                          }}
+                          className="p-1.5 h-7 w-7 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 rounded-lg inline-flex items-center justify-center transition"
+                          title="Open Shared Task Conversation"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5" />
+                        </button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => handleStartCellEdit(row.order_id, 'proforma_invoice_no', row.proforma_invoice_no, e)}
+                          className="p-1.5 h-7 w-7 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-lg"
+                          title="Click to direct edit entry fields"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1065,6 +1085,17 @@ export const AccountsEntriesPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Shared Task Conversation Modal */}
+      <TaskConversationModal
+        isOpen={isConversationOpen}
+        onClose={() => {
+          setIsConversationOpen(false);
+          setConversationOrderId(null);
+        }}
+        orderId={conversationOrderId}
+        onMessagePosted={loadEntries}
+      />
     </div>
   );
 };

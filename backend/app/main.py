@@ -6,6 +6,7 @@ from app.api import (
     admin_permissions,
     auth,
     companies,
+    conversations,
     departments,
     designations,
     employees,
@@ -84,6 +85,9 @@ app.include_router(
 app.include_router(
     accounts.router,
     prefix=settings.API_PREFIX,
+)
+app.include_router(
+    conversations.router,
 )
 
 
