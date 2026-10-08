@@ -209,7 +209,7 @@ def _to_message_read(msg: TaskConversationMessage, current_user_id: Optional[uui
         event_metadata=parsed_metadata,
         created_at=msg.created_at,
         formatted_created_at=format_ist_datetime(msg.created_at),
-        is_mine=bool(current_user_id and msg.author_user_id == current_user_id),
+        is_mine=bool(current_user_id and msg.author_user_id and str(msg.author_user_id) == str(current_user_id)),
     )
 
 

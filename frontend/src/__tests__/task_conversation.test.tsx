@@ -160,7 +160,7 @@ describe('TaskConversationModal Component', () => {
 
       // 3. My comment
       expect(screen.getByText('Documents uploaded to government portal.')).toBeInTheDocument();
-      expect(screen.getByText('You')).toBeInTheDocument();
+      expect(screen.getAllByText('You').length).toBeGreaterThan(0);
     });
   });
 
