@@ -29,19 +29,30 @@ router = APIRouter(prefix="/admin/lookup", tags=["Admin Lookups"])
     status_code=status.HTTP_200_OK,
     summary="Lookup Companies",
     description="Retrieve active companies accessible within the current user's data scope for form dropdowns.",
-    dependencies=[Depends(require_module_permission("ADMIN_EMPLOYEES", "view"))],
 )
 def lookup_companies(
     current_user: User = Depends(get_current_active_user),
     session: Session = Depends(get_db),
 ) -> List[CompanyLookupRead]:
     """Return active companies, scoped by user's permission data scope."""
-    scope_ctx = permissions.resolve_data_scope_context(session, current_user, "ADMIN_EMPLOYEES")
-    
+    has_all_scope = permissions.is_super_admin_user(session, current_user)
+    if not has_all_scope:
+        for mod in ("ADMIN_EMPLOYEES", "ADMIN", "SALES", "SALES_DASHBOARD", "SALES_MY_ORDERS", "OPERATIONS", "ACCOUNTS"):
+            try:
+                scope_ctx = permissions.resolve_data_scope_context(session, current_user, mod)
+                if scope_ctx and scope_ctx.scope == "ALL":
+                    has_all_scope = True
+                    break
+            except permissions.PermissionDeniedError:
+                continue
+
     stmt = select(Company).where(Company.status == "ACTIVE")
-    if scope_ctx.scope in ("COMPANY", "DEPARTMENT", "TEAM", "SELF"):
-        stmt = stmt.where(Company.company_id == current_user.company_id)
-    
+    if not has_all_scope:
+        if current_user.company_id:
+            stmt = stmt.where(Company.company_id == current_user.company_id)
+        else:
+            stmt = stmt.where(Company.company_id == uuid.uuid4())
+
     stmt = stmt.order_by(Company.company_name.asc())
     companies = session.execute(stmt).scalars().all()
     return [CompanyLookupRead.model_validate(c) for c in companies]

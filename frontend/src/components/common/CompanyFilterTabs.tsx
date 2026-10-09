@@ -66,7 +66,39 @@ export const CompanyFilterTabs: React.FC<CompanyFilterTabsProps> = ({
     );
   }
 
-  // If user only has 1 company visible and is not super admin/ALL scope, we still render nicely or let them see the badge
+  // If showAllOption is disabled or only 1 company is visible, show read-only / single company label
+  if (!showAllOption || visibleCompanies.length <= 1) {
+    const singleComp = visibleCompanies[0];
+    return (
+      <div
+        role="region"
+        aria-label="Assigned Company"
+        className={`inline-flex items-center p-1 bg-slate-100/90 dark:bg-slate-800/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-inner flex-wrap gap-1 ${className}`}
+      >
+        <div
+          className={`inline-flex items-center font-medium rounded-xl bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 font-semibold shadow-sm border border-slate-200/90 dark:border-slate-700 cursor-default ${sizeClasses}`}
+          title={singleComp ? singleComp.company_name : 'Assigned Company'}
+        >
+          <Building2 className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate max-w-[200px]">{singleComp ? singleComp.company_name : 'Assigned Company'}</span>
+          {singleComp?.company_code && (
+            <span className="hidden sm:inline-block text-[10.5px] font-mono text-slate-400 dark:text-slate-500 uppercase">
+              ({singleComp.company_code})
+            </span>
+          )}
+          <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+            Assigned
+          </span>
+          {counts && singleComp && counts[singleComp.company_id] !== undefined && (
+            <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10.5px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+              {counts[singleComp.company_id]}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       role="tablist"

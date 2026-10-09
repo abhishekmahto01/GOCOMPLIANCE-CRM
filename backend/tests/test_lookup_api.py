@@ -75,12 +75,12 @@ def test_lookup_endpoints_require_view_permission(
     active_user: User,
     mock_db_session: MagicMock,
 ) -> None:
-    """Verify lookup endpoints return 403 Forbidden when user lacks ADMIN_EMPLOYEES view permission."""
+    """Verify lookup endpoints like departments return 403 Forbidden when user lacks ADMIN_EMPLOYEES view permission."""
     app.dependency_overrides[get_current_active_user] = lambda: active_user
     app.dependency_overrides[get_db] = lambda: mock_db_session
 
     with patch("app.services.permissions.has_permission", return_value=False):
-        res = client.get("/api/admin/lookup/companies")
+        res = client.get("/api/admin/lookup/departments")
         assert res.status_code == status.HTTP_403_FORBIDDEN
 
     app.dependency_overrides.clear()

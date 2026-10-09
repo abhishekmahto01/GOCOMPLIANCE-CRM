@@ -92,6 +92,7 @@ def export_sales_dashboard(
         service_id=service_id,
         lead_source=lead_source,
         payment_status=payment_status,
+        company_id=company_id,
     )
     headers = {
         "Content-Disposition": f'attachment; filename="{filename}"',
@@ -177,6 +178,7 @@ def export_sales_register(
     lead_source: Optional[str] = Query(None, description="Filter by lead source"),
     from_date: Optional[date] = Query(None, description="Start date"),
     to_date: Optional[date] = Query(None, description="End date"),
+    company_id: Optional[uuid.UUID] = Query(None, description="Filter by company ID"),
     current_user: User = Depends(get_current_active_user),
     session: Session = Depends(get_db),
 ):
@@ -192,6 +194,7 @@ def export_sales_register(
         lead_source=lead_source,
         from_date=from_date,
         to_date=to_date,
+        company_id=company_id,
     )
     headers = {
         "Content-Disposition": f'attachment; filename="{filename}"',
@@ -215,6 +218,7 @@ def list_sales_orders(
     service_id: Optional[uuid.UUID] = Query(None),
     payment_status: Optional[str] = Query(None),
     confirmation_status: Optional[str] = Query(None),
+    company_id: Optional[uuid.UUID] = Query(None),
     current_user: User = Depends(get_current_active_user),
     session: Session = Depends(get_db),
 ) -> List[SalesOrderDetailRead]:
@@ -229,6 +233,7 @@ def list_sales_orders(
         employee_id=employee_id,
         service_id=service_id,
         payment_status=payment_status,
+        company_id=company_id,
     )
     if confirmation_status:
         query = query.filter(SalesOrder.confirmation_status == confirmation_status.upper())
@@ -338,11 +343,16 @@ def create_order(
             else "Unassigned"
         )
 
+        comp_name = order.company.company_name if order.company else None
+        comp_code = order.company.company_code if order.company else None
+
         return SalesOrderDetailRead(
             s_no=1,
             order_id=order.order_id,
             order_number=order.order_number,
             company_id=order.company_id,
+            company_name=comp_name,
+            company_code=comp_code,
             client_id=order.client_id,
             service_id=order.service_id,
             salesperson_user_id=order.salesperson_user_id,

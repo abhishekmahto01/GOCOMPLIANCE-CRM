@@ -270,8 +270,8 @@ class SalesFormOptionsResponse(BaseModel):
     )
     default_salesperson_id: Optional[uuid.UUID] = None
     can_select_salesperson: bool = True
-    company_id: uuid.UUID
-    company_name: str
+    company_id: Optional[uuid.UUID] = None
+    company_name: Optional[str] = None
 
 
 class SalesOrderAssignRequest(BaseModel):

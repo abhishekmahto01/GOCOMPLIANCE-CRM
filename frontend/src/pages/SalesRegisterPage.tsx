@@ -41,6 +41,7 @@ import { Modal } from '../components/ui/modal';
 import { TaskConversationModal } from '../components/conversation/TaskConversationModal';
 import { CompanyFilterTabs } from '../components/common/CompanyFilterTabs';
 import { CompanyBadge } from '../components/common/CompanyBadge';
+import { useAuth } from '../context/AuthContext';
 
 interface OutletContextType {
   addToast?: (type: 'success' | 'error' | 'info', title: string, message: string) => void;
@@ -131,12 +132,20 @@ function renderWorkStatusBadge(status: string) {
 }
 
 export const SalesRegisterPage: React.FC = () => {
+  const { user, isSuperAdmin, getEffectiveScope } = useAuth();
   const outletCtx = useOutletContext<OutletContextType>();
   const [searchParams, setSearchParams] = useSearchParams();
 
+  const canFilterAllCompanies = isSuperAdmin || getEffectiveScope('SALES_REGISTER') === 'ALL' || getEffectiveScope('SALES_DASHBOARD') === 'ALL' || getEffectiveScope('SALES') === 'ALL';
+
   // Search & Filter State
   const [search, setSearch] = useState<string>(searchParams.get('search') || '');
-  const [companyId, setCompanyId] = useState<string>(searchParams.get('company_id') || 'ALL');
+  const [companyId, setCompanyId] = useState<string>(() => {
+    const fromParam = searchParams.get('company_id');
+    if (fromParam) return fromParam;
+    if (!canFilterAllCompanies && user?.company_id) return user.company_id;
+    return 'ALL';
+  });
   const [paymentStatus, setPaymentStatus] = useState<string>(searchParams.get('payment_status') || 'ALL');
   const [workStatus, setWorkStatus] = useState<string>(searchParams.get('work_status') || 'ALL');
   const [employeeId, setEmployeeId] = useState<string>(searchParams.get('employee_id') || 'ALL');
@@ -668,6 +677,7 @@ export const SalesRegisterPage: React.FC = () => {
             <CompanyFilterTabs
               selectedCompanyId={companyId}
               onCompanyChange={handleCompanyChange}
+              showAllOption={canFilterAllCompanies}
               size="sm"
             />
           </div>

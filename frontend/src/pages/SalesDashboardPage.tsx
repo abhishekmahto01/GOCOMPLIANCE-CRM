@@ -27,10 +27,12 @@ interface OutletContextType {
 }
 
 export const SalesDashboardPage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, isSuperAdmin, getEffectiveScope } = useAuth();
   const navigate = useNavigate();
   const outletCtx = useOutletContext<OutletContextType>();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  const canFilterAllCompanies = isSuperAdmin || getEffectiveScope('SALES_DASHBOARD') === 'ALL' || getEffectiveScope('SALES') === 'ALL';
 
   // Filters State from URL or defaults
   const [filters, setFilters] = useState<SalesDashboardFilterParams>(() => {
@@ -174,8 +176,9 @@ export const SalesDashboardPage: React.FC = () => {
             Company Scope:
           </span>
           <CompanyFilterTabs
-            selectedCompanyId={filters.company_id || 'ALL'}
+            selectedCompanyId={filters.company_id || (canFilterAllCompanies ? 'ALL' : (user?.company_id || 'ALL'))}
             onCompanyChange={(newCompId) => handleFilterChange({ company_id: newCompId })}
+            showAllOption={canFilterAllCompanies}
             size="sm"
           />
         </div>

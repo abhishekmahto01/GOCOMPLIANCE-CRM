@@ -302,18 +302,52 @@ def create_sales_order(
     current_user: User,
 ) -> SalesOrder:
     """Create a new sales order with client matching/deduplication, RBAC scoping, and financial calculations."""
-    if not current_user.company_id:
-        raise ValueError("Employee on-roll company is missing. Please contact your administrator.")
+    is_super = permissions.is_super_admin_user(session, current_user)
+    is_all_scope = is_super
+    scope_ctx = None
+    if not is_all_scope:
+        for mod in ("SALES_CONFIRMED_ORDER", "SALES", "SALES_ALL_ORDERS", "SALES_MY_ORDERS"):
+            try:
+                sc = permissions.resolve_data_scope_context(session, current_user, mod)
+                if sc and sc.scope == "ALL":
+                    is_all_scope = True
+                    scope_ctx = sc
+                    break
+                elif sc and scope_ctx is None:
+                    scope_ctx = sc
+            except permissions.PermissionDeniedError:
+                continue
 
-    company = session.get(Company, current_user.company_id)
-    if not company or company.status != "ACTIVE":
-        raise ValueError("Employee on-roll company is missing or inactive. Please contact your administrator.")
+    if is_all_scope:
+        # Privileged user (Super Admin / Director with ALL scope)
+        if data.company_id:
+            company = session.get(Company, data.company_id)
+            if not company or company.status != "ACTIVE":
+                raise ValueError(f"Active company with ID '{data.company_id}' not found.")
+            company_id = data.company_id
+        else:
+            if current_user.company_id:
+                company = session.get(Company, current_user.company_id)
+                if company and company.status == "ACTIVE":
+                    company_id = current_user.company_id
+                else:
+                    raise ValueError("Company ID must be specified for sales order creation.")
+            else:
+                raise ValueError("Company ID must be specified for sales order creation.")
+    else:
+        # Ordinary salesperson / single-company employee
+        if not current_user.company_id:
+            raise ValueError("Employee on-roll company is missing or inactive. Please contact your administrator.")
 
-    # Strictly enforce that company comes ONLY from authenticated salesperson's on-roll company
-    if data.company_id and data.company_id != current_user.company_id:
-        raise ValueError("Cannot create sales entry for another company. Entry company is derived strictly from your employee profile.")
+        company = session.get(Company, current_user.company_id)
+        if not company or company.status != "ACTIVE":
+            raise ValueError("Employee on-roll company is missing or inactive. Please contact your administrator.")
 
-    company_id = current_user.company_id
+        # Reject explicitly supplied different company_id
+        if data.company_id and data.company_id != current_user.company_id:
+            raise ValueError("Cannot create sales entry for another company. Entry company is derived strictly from your employee profile.")
+
+        company_id = current_user.company_id
 
     # 1. Client Resolution and Deduplication
     client = None
@@ -372,13 +406,8 @@ def create_sales_order(
         raise ValueError(f"Active service with ID '{data.service_id}' not found.")
 
     # 3. Salesperson Resolution and Data Scope Check
-    try:
-        scope_ctx = permissions.resolve_data_scope_context(session, current_user, "SALES_CONFIRMED_ORDER")
-    except permissions.PermissionDeniedError:
-        scope_ctx = None
-
     salesperson: Optional[User] = None
-    if scope_ctx and scope_ctx.scope == "SELF":
+    if not is_all_scope and scope_ctx and scope_ctx.scope == "SELF":
         salesperson_id = current_user.user_id
     elif data.salesperson_user_id:
         target_sp = session.get(User, data.salesperson_user_id)
@@ -390,7 +419,7 @@ def create_sales_order(
             )
         if target_sp.company_id != company_id:
             raise ValueError("Selected salesperson does not belong to specified company.")
-        if scope_ctx and scope_ctx.scope == "TEAM" and target_sp.user_id not in scope_ctx.team_user_ids:
+        if not is_all_scope and scope_ctx and scope_ctx.scope == "TEAM" and target_sp.user_id not in scope_ctx.team_user_ids:
             raise ValueError("Selected salesperson is not within your permitted team.")
         salesperson_id = target_sp.user_id
         salesperson = target_sp
@@ -405,6 +434,8 @@ def create_sales_order(
             raise ValueError(
                 f"Selected employee '{salesperson.first_name} {salesperson.last_name}' does not belong to the Sales department. Converted By must be an active Sales employee."
             )
+        if salesperson.company_id != company_id:
+            raise ValueError("Selected salesperson does not belong to specified company.")
 
     # 4. Financial Calculations & Validations
     val = Decimal(str(data.order_value))
@@ -1546,6 +1577,7 @@ def export_sales_orders_csv(
     service_id: Optional[uuid.UUID] = None,
     lead_source: Optional[str] = None,
     payment_status: Optional[str] = None,
+    company_id: Optional[uuid.UUID] = None,
 ) -> Tuple[str, str]:
     """Generate CSV string of filtered sales orders within permitted data scope.
 
@@ -1571,6 +1603,7 @@ def export_sales_orders_csv(
         service_id=service_id,
         lead_source=lead_source,
         payment_status=payment_status,
+        company_id=company_id,
     ).order_by(SalesOrder.order_date.desc(), SalesOrder.created_at.desc())
 
     orders = session.execute(query).scalars().all()
@@ -1938,8 +1971,10 @@ def get_sales_form_options(
     ops_assignees = get_eligible_operations_assignees(session, current_user.company_id)
 
     lead_sources = ["WEBSITE", "REFERRAL", "DIRECT", "JUSTDIAL", "INDIAMART", "OTHERS"]
-    comp = session.get(Company, current_user.company_id)
-    comp_name = comp.company_name if comp else "GoCompliance CRM"
+    comp = session.get(Company, current_user.company_id) if current_user.company_id else None
+    comp_name = comp.company_name if comp else (
+        "Gocompliances" if current_user.company_id else "GoCompliance CRM"
+    )
 
     return SalesFormOptionsResponse(
         services=service_opts,
@@ -2135,6 +2170,7 @@ def export_sales_register_csv(
     lead_source: Optional[str] = None,
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
+    company_id: Optional[uuid.UUID] = None,
 ) -> Tuple[str, str]:
     """Generate CSV of Sales Register matching all 20 columns in the director's order."""
     reg_response = get_sales_register_data(
@@ -2150,6 +2186,7 @@ def export_sales_register_csv(
         lead_source=lead_source,
         from_date=from_date,
         to_date=to_date,
+        company_id=company_id,
     )
 
     output = io.StringIO()
