@@ -308,11 +308,10 @@ def test_no_admin_privilege_leakage(client: TestClient, impersonation_test_data,
     )
     imp_token = resp.json()["access_token"]
 
-    # Attempting to access Super Admin restricted endpoints must fail with 403
-    admin_action_resp = client.post(
-        "/api/auth/impersonate",
+    # Attempting to access Super Admin restricted endpoints (like delete employee) must fail with 403
+    admin_action_resp = client.delete(
+        f"/api/admin/employees/{admin.user_id}",
         headers={"Authorization": f"Bearer {imp_token}"},
-        json={"employee_code": "EP0001"},
     )
     assert admin_action_resp.status_code == status.HTTP_403_FORBIDDEN
 
@@ -396,27 +395,48 @@ def test_logout_terminates_impersonation(client: TestClient, impersonation_test_
     assert me_resp.status_code == status.HTTP_401_UNAUTHORIZED
 
 
-def test_nested_impersonation_blocked(client: TestClient, impersonation_test_data, monkeypatch):
-    """Test attempting to impersonate another employee while already impersonating is rejected."""
+def test_switching_impersonation_allowed_and_regular_user_blocked(client: TestClient, impersonation_test_data, monkeypatch):
+    """Test switching impersonation directly to another employee is permitted for Super Admin sessions, while regular users are blocked."""
     monkeypatch.setattr(settings, "ENABLE_ADMIN_IMPERSONATION", True)
     admin = impersonation_test_data["admin"]
+    sales_emp = impersonation_test_data["sales_emp"]
     admin_token = create_access_token(user_id=admin.user_id, token_version=admin.token_version)
+    sales_emp_token = create_access_token(user_id=sales_emp.user_id, token_version=sales_emp.token_version)
 
-    # 1. Start impersonation of CG0004
+    # 1. Non-admin regular user cannot initiate impersonation
+    non_admin_resp = client.post(
+        "/api/auth/impersonate",
+        headers={"Authorization": f"Bearer {sales_emp_token}"},
+        json={"employee_code": "EP0001"},
+    )
+    assert non_admin_resp.status_code == status.HTTP_403_FORBIDDEN
+
+    # 2. Start impersonation of CG0004
     start_resp = client.post(
         "/api/auth/impersonate",
         headers={"Authorization": f"Bearer {admin_token}"},
         json={"employee_code": "CG0004"},
     )
+    assert start_resp.status_code == status.HTTP_200_OK
     imp_token = start_resp.json()["access_token"]
 
-    # 2. Attempt nested impersonation of EP0001 using the impersonated token
-    nested_resp = client.post(
+    # 3. Switching directly to EP0001 using the impersonated token works seamlessly
+    switch_resp = client.post(
         "/api/auth/impersonate",
         headers={"Authorization": f"Bearer {imp_token}"},
         json={"employee_code": "EP0001"},
     )
-    assert nested_resp.status_code == status.HTTP_403_FORBIDDEN
+    assert switch_resp.status_code == status.HTTP_200_OK
+    new_imp_token = switch_resp.json()["access_token"]
+
+    # 4. Status reflects EP0001 as target and CG0001 as actor
+    status_resp = client.get(
+        "/api/auth/impersonate/status",
+        headers={"Authorization": f"Bearer {new_imp_token}"},
+    )
+    assert status_resp.status_code == status.HTTP_200_OK
+    assert status_resp.json()["impersonation"]["target_employee_code"] == "EP0001"
+    assert status_resp.json()["impersonation"]["actor_employee_code"] == "CG0001"
 
 
 def test_token_refresh_during_impersonation_preserves_impersonation_claims(

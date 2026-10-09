@@ -140,7 +140,7 @@ def logout(
 def start_impersonate(
     data: ImpersonateStartRequest,
     request: Request,
-    current_user: User = Depends(require_super_admin),
+    current_user: User = Depends(get_current_active_user),
     session: Session = Depends(get_db),
 ) -> ImpersonationTokenResponse:
     """Switch active context to target employee for Super Admin."""

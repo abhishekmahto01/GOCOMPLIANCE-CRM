@@ -53,15 +53,8 @@ export const ImpersonationUrlHandler: React.FC = () => {
       return;
     }
 
-    // If authenticated user is already impersonating, block nested impersonation
-    if (isImpersonating) {
-      setErrorMessage('Nested impersonation is not permitted. Please return to Admin first.');
-      setPendingTargetCode(null);
-      return;
-    }
-
-    // If authenticated user is not a Super Admin, reject
-    if (!isSuperAdmin) {
+    // If user is neither Super Admin nor already in an impersonation session, reject
+    if (!isSuperAdmin && !isImpersonating) {
       setErrorMessage('Only Super Admin users are authorized to initiate employee impersonation.');
       setPendingTargetCode(null);
       return;

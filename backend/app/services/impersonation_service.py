@@ -54,12 +54,32 @@ def start_impersonation(
             detail="Admin impersonation feature is currently disabled on the server.",
         )
 
-    # 2. Prevent nested impersonation
+    # 2. Allow switching active impersonation context seamlessly
     if getattr(admin_user, "_is_impersonated", False):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Nested impersonation is not permitted. Return to Admin first.",
-        )
+        originating_admin_id = getattr(admin_user, "_actor_admin_id", None)
+        if originating_admin_id:
+            orig_admin = session.get(User, originating_admin_id)
+            if orig_admin and permissions.is_super_admin_user(session, orig_admin) and orig_admin.account_status == "ACTIVE":
+                old_session_id = getattr(admin_user, "_impersonation_session_id", None)
+                if old_session_id:
+                    old_session = session.get(ImpersonationSession, old_session_id)
+                    if old_session and old_session.is_active:
+                        now = datetime.now(timezone.utc)
+                        old_session.is_active = False
+                        old_session.ended_at = now
+                        old_session.ended_reason = "SWITCH_IMPERSONATION"
+                        session.flush()
+                admin_user = orig_admin
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Originating Super Admin account is no longer active.",
+                )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Nested impersonation is not permitted. Return to Admin first.",
+            )
 
     # 3. Super Admin authorization check
     if not permissions.is_super_admin_user(session, admin_user):
