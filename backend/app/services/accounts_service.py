@@ -42,6 +42,7 @@ from app.schemas.accounts import (
     AccountsInvoiceUpdate,
     AccountsKpiSummary,
     AccountsReimbursementSettle,
+    AccountsTaskSummary,
     AgeingBreakdownItem,
     CategoryExpenseItem,
     CollectionsTrendPoint,
@@ -1769,6 +1770,20 @@ def get_accounts_dashboard_data(
         for o in orders
     )
 
+    # Accounts Task Lifecycle counts
+    # A task is COMPLETED when the Tax Invoice has been issued/recorded (tax_invoice_no is non-empty)
+    # A task is PENDING when actionable/not completed (tax_invoice_no is null or empty)
+    # Cancelled records are already excluded from `orders`
+    total_tasks = total_entries
+    completed_tasks = sum(1 for o in orders if o.tax_invoice_no and str(o.tax_invoice_no).strip())
+    pending_tasks = total_tasks - completed_tasks
+
+    task_summary = AccountsTaskSummary(
+        total_tasks=total_tasks,
+        completed_tasks=completed_tasks,
+        pending_tasks=pending_tasks,
+    )
+
     kpis = AccountsKpiSummary(
         total_entries=total_entries,
         total_amount=tot_amt,
@@ -1831,6 +1846,7 @@ def get_accounts_dashboard_data(
     return AccountsDashboardResponse(
         date_range=date_range_dict,
         kpis=kpis,
+        task_summary=task_summary,
         payment_status_breakdown=payment_breakdown,
         recent_entries=recent_entries,
         filter_options=filter_opts,
@@ -1914,6 +1930,7 @@ def _to_accounts_entry_read(order: SalesOrder, s_no: int = 1) -> AccountsEntryRe
         formatted_profit_amount=format_inr(p_val),
         remarks=order.notes,
         notes=order.notes,
+        task_status="COMPLETED" if (order.tax_invoice_no and str(order.tax_invoice_no).strip()) else "PENDING",
         gst_invoice_required=getattr(order, "gst_invoice_required", True),
         company_name=order.company.company_name if order.company else None,
         company_code=order.company.company_code if order.company else None,
@@ -1930,6 +1947,7 @@ def get_accounts_entries(
     limit: int = 50,
     search: Optional[str] = None,
     payment_status: Optional[str] = None,
+    task_status: Optional[str] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     company_id: Optional[str] = None,
@@ -1974,6 +1992,21 @@ def get_accounts_entries(
 
     if payment_status and payment_status != "ALL":
         query = query.where(SalesOrder.payment_status == payment_status.upper())
+
+    if task_status and task_status != "ALL":
+        t_status = task_status.upper().strip()
+        if t_status == "COMPLETED":
+            query = query.where(
+                SalesOrder.tax_invoice_no.isnot(None),
+                SalesOrder.tax_invoice_no != "",
+            )
+        elif t_status in ("PENDING", "IN_PROGRESS", "ACTIONABLE"):
+            query = query.where(
+                or_(
+                    SalesOrder.tax_invoice_no.is_(None),
+                    SalesOrder.tax_invoice_no == "",
+                )
+            )
 
     if search and search.strip():
         term = f"%{search.strip()}%"
@@ -2225,6 +2258,7 @@ def export_accounts_entries_csv(
     user: User,
     search: Optional[str] = None,
     payment_status: Optional[str] = None,
+    task_status: Optional[str] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     company_id: Optional[str] = None,
@@ -2237,6 +2271,7 @@ def export_accounts_entries_csv(
         limit=10000,
         search=search,
         payment_status=payment_status,
+        task_status=task_status,
         date_from=date_from,
         date_to=date_to,
         company_id=company_id,

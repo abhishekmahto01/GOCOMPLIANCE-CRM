@@ -147,10 +147,19 @@ export const AccountsEntriesPage: React.FC = () => {
   const [search, setSearch] = useState<string>(searchParams.get('search') || '');
   const [companyId, setCompanyId] = useState<string>(searchParams.get('company_id') || 'ALL');
   const [paymentStatus, setPaymentStatus] = useState<string>(searchParams.get('payment_status') || 'ALL');
+  const [taskStatus, setTaskStatus] = useState<string>(searchParams.get('task_status') || 'ALL');
   const [fromDate, setFromDate] = useState<string>(searchParams.get('from_date') || '');
   const [toDate, setToDate] = useState<string>(searchParams.get('to_date') || '');
   const [page, setPage] = useState<number>(Number(searchParams.get('page')) || 1);
   const [limit] = useState<number>(50);
+
+  // Sync state if URL searchParams change
+  useEffect(() => {
+    const urlTaskStatus = searchParams.get('task_status') || 'ALL';
+    if (urlTaskStatus !== taskStatus) {
+      setTaskStatus(urlTaskStatus);
+    }
+  }, [searchParams]);
 
   // Data & State
   const [entriesData, setEntriesData] = useState<AccountsEntriesResponse | null>(null);
@@ -177,6 +186,7 @@ export const AccountsEntriesPage: React.FC = () => {
       if (newParams.search) p.search = newParams.search;
       if (newParams.company_id && newParams.company_id !== 'ALL') p.company_id = newParams.company_id;
       if (newParams.payment_status && newParams.payment_status !== 'ALL') p.payment_status = newParams.payment_status;
+      if (newParams.task_status && newParams.task_status !== 'ALL') p.task_status = newParams.task_status;
       if (newParams.from_date) p.from_date = newParams.from_date;
       if (newParams.to_date) p.to_date = newParams.to_date;
       if (newParams.page && newParams.page !== '1') p.page = newParams.page;
@@ -192,6 +202,21 @@ export const AccountsEntriesPage: React.FC = () => {
       search,
       company_id: newCompId,
       payment_status: paymentStatus,
+      task_status: taskStatus,
+      from_date: fromDate,
+      to_date: toDate,
+      page: '1',
+    });
+  };
+
+  const handleTaskStatusChange = (newStatus: string) => {
+    setTaskStatus(newStatus);
+    setPage(1);
+    syncUrl({
+      search,
+      company_id: companyId,
+      payment_status: paymentStatus,
+      task_status: newStatus,
       from_date: fromDate,
       to_date: toDate,
       page: '1',
@@ -209,6 +234,7 @@ export const AccountsEntriesPage: React.FC = () => {
         search: search.trim() || undefined,
         company_id: companyId !== 'ALL' ? companyId : undefined,
         payment_status: paymentStatus !== 'ALL' ? paymentStatus : undefined,
+        task_status: taskStatus !== 'ALL' ? taskStatus : undefined,
         from_date: fromDate || undefined,
         to_date: toDate || undefined,
       });
@@ -220,7 +246,7 @@ export const AccountsEntriesPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [page, limit, search, companyId, paymentStatus, fromDate, toDate]);
+  }, [page, limit, search, companyId, paymentStatus, taskStatus, fromDate, toDate]);
 
   useEffect(() => {
     loadEntries();
@@ -234,6 +260,7 @@ export const AccountsEntriesPage: React.FC = () => {
       search,
       company_id: companyId,
       payment_status: paymentStatus,
+      task_status: taskStatus,
       from_date: fromDate,
       to_date: toDate,
       page: '1',
@@ -246,6 +273,7 @@ export const AccountsEntriesPage: React.FC = () => {
     setSearch('');
     setCompanyId('ALL');
     setPaymentStatus('ALL');
+    setTaskStatus('ALL');
     setFromDate('');
     setToDate('');
     setPage(1);
@@ -260,6 +288,7 @@ export const AccountsEntriesPage: React.FC = () => {
         search: search.trim() || undefined,
         company_id: companyId !== 'ALL' ? companyId : undefined,
         payment_status: paymentStatus !== 'ALL' ? paymentStatus : undefined,
+        task_status: taskStatus !== 'ALL' ? taskStatus : undefined,
         from_date: fromDate || undefined,
         to_date: toDate || undefined,
       });
@@ -490,7 +519,7 @@ export const AccountsEntriesPage: React.FC = () => {
 
       {/* Filter & Search Toolbar */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-xs space-y-3">
-        {/* Company Selector Tabs */}
+        {/* Company Selector Tabs & Task Status Tabs */}
         <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-slate-100 dark:border-slate-800/80">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
@@ -501,6 +530,50 @@ export const AccountsEntriesPage: React.FC = () => {
               onCompanyChange={handleCompanyChange}
               size="sm"
             />
+          </div>
+
+          {/* Task Status Quick Filter */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mr-1">
+              Task Status:
+            </span>
+            <div className="inline-flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
+              <button
+                type="button"
+                onClick={() => handleTaskStatusChange('ALL')}
+                className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors ${
+                  taskStatus === 'ALL'
+                    ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                All Tasks
+              </button>
+              <button
+                type="button"
+                onClick={() => handleTaskStatusChange('COMPLETED')}
+                className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors flex items-center gap-1 ${
+                  taskStatus === 'COMPLETED'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <CheckCircle2 className="w-3 h-3" />
+                <span>Completed</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleTaskStatusChange('PENDING')}
+                className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors flex items-center gap-1 ${
+                  taskStatus === 'PENDING'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <Clock className="w-3 h-3" />
+                <span>Pending</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -526,7 +599,9 @@ export const AccountsEntriesPage: React.FC = () => {
                 setPage(1);
                 syncUrl({
                   search,
+                  company_id: companyId,
                   payment_status: e.target.value,
+                  task_status: taskStatus,
                   from_date: fromDate,
                   to_date: toDate,
                   page: '1',
@@ -552,7 +627,9 @@ export const AccountsEntriesPage: React.FC = () => {
                 setPage(1);
                 syncUrl({
                   search,
+                  company_id: companyId,
                   payment_status: paymentStatus,
+                  task_status: taskStatus,
                   from_date: e.target.value,
                   to_date: toDate,
                   page: '1',
@@ -573,7 +650,9 @@ export const AccountsEntriesPage: React.FC = () => {
                 setPage(1);
                 syncUrl({
                   search,
+                  company_id: companyId,
                   payment_status: paymentStatus,
+                  task_status: taskStatus,
                   from_date: fromDate,
                   to_date: e.target.value,
                   page: '1',
@@ -594,7 +673,7 @@ export const AccountsEntriesPage: React.FC = () => {
             >
               Filter
             </Button>
-            {(search || paymentStatus !== 'ALL' || fromDate || toDate) && (
+            {(search || paymentStatus !== 'ALL' || taskStatus !== 'ALL' || fromDate || toDate) && (
               <Button
                 type="button"
                 variant="ghost"
@@ -608,6 +687,40 @@ export const AccountsEntriesPage: React.FC = () => {
             )}
           </div>
         </form>
+
+        {/* Active Task Filter Badge */}
+        {taskStatus !== 'ALL' && (
+          <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-xs">
+            <span className="text-slate-500 dark:text-slate-400 font-medium">Active Task Filter:</span>
+            <span
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-bold text-xs ${
+                taskStatus === 'COMPLETED'
+                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
+                  : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
+              }`}
+            >
+              {taskStatus === 'COMPLETED' ? (
+                <>
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Completed Tasks (Tax Invoice Issued)</span>
+                </>
+              ) : (
+                <>
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>Pending Tasks (Invoice Pending / In Progress)</span>
+                </>
+              )}
+              <button
+                type="button"
+                onClick={() => handleTaskStatusChange('ALL')}
+                className="ml-1 hover:opacity-75 font-black text-sm leading-none"
+                title="Clear task status filter"
+              >
+                ×
+              </button>
+            </span>
+          </div>
+        )}
       </div>
 
       {/* 21-Column Accounts Table Container */}

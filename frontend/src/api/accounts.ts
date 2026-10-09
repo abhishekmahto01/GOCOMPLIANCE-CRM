@@ -35,6 +35,7 @@ export async function getAccountsEntriesApi(params?: {
   limit?: number;
   search?: string;
   payment_status?: string;
+  task_status?: string;
   from_date?: string;
   to_date?: string;
   company_id?: string;
@@ -44,6 +45,7 @@ export async function getAccountsEntriesApi(params?: {
   if (params?.limit) queryParams.limit = params.limit;
   if (params?.search) queryParams.search = params.search;
   if (params?.payment_status && params.payment_status !== 'ALL') queryParams.payment_status = params.payment_status;
+  if (params?.task_status && params.task_status !== 'ALL') queryParams.task_status = params.task_status;
   if (params?.from_date) queryParams.from_date = params.from_date;
   if (params?.to_date) queryParams.to_date = params.to_date;
   if (params?.company_id && params.company_id !== 'ALL') queryParams.company_id = params.company_id;
@@ -71,6 +73,7 @@ export async function updateAccountsEntryApi(
 export async function exportAccountsEntriesCsvApi(params?: {
   search?: string;
   payment_status?: string;
+  task_status?: string;
   from_date?: string;
   to_date?: string;
   company_id?: string;
@@ -78,6 +81,7 @@ export async function exportAccountsEntriesCsvApi(params?: {
   const queryParams: Record<string, any> = {};
   if (params?.search) queryParams.search = params.search;
   if (params?.payment_status && params.payment_status !== 'ALL') queryParams.payment_status = params.payment_status;
+  if (params?.task_status && params.task_status !== 'ALL') queryParams.task_status = params.task_status;
   if (params?.from_date) queryParams.from_date = params.from_date;
   if (params?.to_date) queryParams.to_date = params.to_date;
   if (params?.company_id && params.company_id !== 'ALL') queryParams.company_id = params.company_id;

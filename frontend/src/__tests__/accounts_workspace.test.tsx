@@ -59,6 +59,11 @@ const mockDashboardData: AccountsDashboardResponse = {
     from_date: '2026-09-01',
     to_date: '2026-09-30',
   },
+  task_summary: {
+    total_tasks: 10,
+    completed_tasks: 6,
+    pending_tasks: 4,
+  },
   kpis: {
     total_entries: 10,
     total_amount: 500000.0,
@@ -317,5 +322,65 @@ describe('Accounts Module Navigation & Page Tests', () => {
     // Check entry data
     expect(screen.getByText('PI-2026-001')).toBeInTheDocument();
     expect(screen.getByText('TI-2026-001')).toBeInTheDocument();
+  });
+
+  it('5. Renders 3 task summary cards (Total Tasks, Completed Tasks, Pending Tasks) with counts and interactive links', async () => {
+    vi.spyOn(authApi, 'getCurrentUserApi').mockResolvedValue(superAdminUser);
+    vi.spyOn(authApi, 'getAccessibleModulesApi').mockResolvedValue(mockAccessibleModules);
+    vi.spyOn(accountsApi, 'getAccountsDashboardApi').mockResolvedValue(mockDashboardData);
+
+    renderWithAccountsRouter('/accounts/dashboard');
+
+    await screen.findByRole('heading', { name: /Accounts Dashboard/i });
+
+    // Verify task summary cards exist
+    expect(screen.getByText(/Total Tasks/i)).toBeInTheDocument();
+    expect(screen.getByText(/Completed Tasks/i)).toBeInTheDocument();
+    expect(screen.getByText(/Pending Tasks/i)).toBeInTheDocument();
+
+    // Verify interactive links & counts (waiting for async dashboard data load)
+    const totalLink = screen.getByLabelText(/Filter Total Tasks/i);
+    const completedLink = screen.getByLabelText(/Filter Completed Tasks/i);
+    const pendingLink = screen.getByLabelText(/Filter Pending Tasks/i);
+
+    expect(await within(totalLink).findByText('10')).toBeInTheDocument();
+    expect(await within(completedLink).findByText('6')).toBeInTheDocument();
+    expect(await within(pendingLink).findByText('4')).toBeInTheDocument();
+
+    expect(totalLink.getAttribute('href')).toContain('/accounts/entries');
+    expect(completedLink.getAttribute('href')).toContain('task_status=COMPLETED');
+    expect(pendingLink.getAttribute('href')).toContain('task_status=PENDING');
+  });
+
+  it('6. Accounts Entries page supports task_status filtering and tab selection', async () => {
+    vi.spyOn(authApi, 'getCurrentUserApi').mockResolvedValue(superAdminUser);
+    vi.spyOn(authApi, 'getAccessibleModulesApi').mockResolvedValue(mockAccessibleModules);
+    const getEntriesSpy = vi.spyOn(accountsApi, 'getAccountsEntriesApi').mockResolvedValue(mockEntriesData);
+
+    renderWithAccountsRouter('/accounts/entries?task_status=COMPLETED');
+
+    await screen.findByText('Apex Corp');
+
+    // Verify initial call had task_status: 'COMPLETED'
+    expect(getEntriesSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        task_status: 'COMPLETED',
+      })
+    );
+
+    // Verify active filter indicator is displayed
+    expect(screen.getByText(/Active Task Filter:/i)).toBeInTheDocument();
+    expect(screen.getByText(/Completed Tasks \(Tax Invoice Issued\)/i)).toBeInTheDocument();
+
+    // Click 'Pending' task status tab
+    const pendingBtn = screen.getByRole('button', { name: /Pending/i });
+    await userEvent.click(pendingBtn);
+
+    expect(getEntriesSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        task_status: 'PENDING',
+        page: 1,
+      })
+    );
   });
 });

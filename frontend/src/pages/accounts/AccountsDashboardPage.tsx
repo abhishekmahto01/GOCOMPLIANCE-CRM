@@ -13,6 +13,7 @@ import {
   Coins,
   ArrowRight,
   CheckCircle2,
+  ListTodo,
   MapPin,
 } from 'lucide-react';
 import { getAccountsDashboardApi } from '../../api/accounts';
@@ -53,7 +54,26 @@ export const AccountsDashboardPage: React.FC = () => {
     fetchDashboard();
   }, [fetchDashboard]);
 
+  const buildEntriesUrl = (taskStatus?: string) => {
+    const params = new URLSearchParams();
+    if (taskStatus && taskStatus !== 'ALL') {
+      params.set('task_status', taskStatus);
+    }
+    if (companyId && companyId !== 'ALL') {
+      params.set('company_id', companyId);
+    }
+    if (fromDate) {
+      params.set('from_date', fromDate);
+    }
+    if (toDate) {
+      params.set('to_date', toDate);
+    }
+    const qs = params.toString();
+    return `/accounts/entries${qs ? `?${qs}` : ''}`;
+  };
+
   const kpis = data?.kpis;
+  const taskSummary = data?.task_summary;
   const paymentBreakdown = data?.payment_status_breakdown || [];
   const recentEntries = data?.recent_entries || [];
 
@@ -74,7 +94,7 @@ export const AccountsDashboardPage: React.FC = () => {
             Accounts Dashboard
           </h1>
           <p className="text-xs sm:text-sm text-indigo-200 max-w-2xl leading-relaxed">
-            Live financial totals, advance collections, and estimated profits based on authorized Sales records.
+            Live task lifecycle metrics, financial totals, advance collections, and estimated profits based on authorized Sales records.
           </p>
         </div>
 
@@ -166,6 +186,114 @@ export const AccountsDashboardPage: React.FC = () => {
           <span>{error}</span>
         </div>
       )}
+
+      {/* 3 Interactive Accounts Task Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Total Tasks Card */}
+        <Link
+          to={buildEntriesUrl('ALL')}
+          aria-label="Filter Total Tasks"
+          className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs hover:border-indigo-400 dark:hover:border-indigo-600 transition-all hover:scale-[1.01] group cursor-pointer relative overflow-hidden flex flex-col justify-between"
+        >
+          <div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                  <ListTodo className="w-5 h-5" />
+                </div>
+                <span className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">
+                  Total Tasks
+                </span>
+              </div>
+              <span className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <span>View all</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </span>
+            </div>
+            <div className="mt-3 flex items-baseline justify-between">
+              <div className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+                {taskSummary ? taskSummary.total_tasks : (kpis ? kpis.total_entries : 0)}
+              </div>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                Authorized Scope
+              </span>
+            </div>
+          </div>
+          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
+            All actionable Accounts workflows in current scope
+          </div>
+        </Link>
+
+        {/* Completed Tasks Card */}
+        <Link
+          to={buildEntriesUrl('COMPLETED')}
+          aria-label="Filter Completed Tasks"
+          className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs hover:border-emerald-400 dark:hover:border-emerald-600 transition-all hover:scale-[1.01] group cursor-pointer relative overflow-hidden flex flex-col justify-between"
+        >
+          <div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <span className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">
+                  Completed Tasks
+                </span>
+              </div>
+              <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <span>Filter list</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </span>
+            </div>
+            <div className="mt-3 flex items-baseline justify-between">
+              <div className="text-3xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight">
+                {taskSummary ? taskSummary.completed_tasks : 0}
+              </div>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                Tax Invoice Issued
+              </span>
+            </div>
+          </div>
+          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
+            Tasks with completed Accounts workflow
+          </div>
+        </Link>
+
+        {/* Pending Tasks Card */}
+        <Link
+          to={buildEntriesUrl('PENDING')}
+          aria-label="Filter Pending Tasks"
+          className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs hover:border-amber-400 dark:hover:border-amber-600 transition-all hover:scale-[1.01] group cursor-pointer relative overflow-hidden flex flex-col justify-between"
+        >
+          <div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 group-hover:bg-amber-600 group-hover:text-white transition-colors">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <span className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">
+                  Pending Tasks
+                </span>
+              </div>
+              <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <span>Filter list</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </span>
+            </div>
+            <div className="mt-3 flex items-baseline justify-between">
+              <div className="text-3xl font-black text-amber-600 dark:text-amber-400 tracking-tight">
+                {taskSummary ? taskSummary.pending_tasks : 0}
+              </div>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                Action Required
+              </span>
+            </div>
+          </div>
+          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
+            Pending / in-progress Tax Invoicing & closure
+          </div>
+        </Link>
+      </div>
 
       {/* 7 Canonical Financial KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

@@ -868,3 +868,305 @@ def test_accounts_access_forbidden_without_accounts_permission(client: TestClien
     res_dash = client.get("/api/accounts/dashboard", headers=auth_header(unauth_user))
     assert res_dash.status_code == 403
 
+
+# =============================================================================
+# TASK SUMMARY CARDS & TASK STATUS LIFECYCLE TESTS
+# =============================================================================
+
+def test_accounts_dashboard_task_summary_counts_and_equality(
+    client: TestClient, accounts_fixture: dict, db_session: Session
+):
+    """Verify:
+    1. Total Tasks = Completed Tasks + Pending Tasks.
+    2. Completed Tasks = orders with tax_invoice_no present & non-empty.
+    3. Pending Tasks = orders without tax_invoice_no (even if fully paid or operations completed).
+    4. Cancelled orders and non-GST orders are excluded from all 3 counts.
+    """
+    acc_user = accounts_fixture["acc_user"]
+    company_a = accounts_fixture["company_a"]
+    client_obj = accounts_fixture["client"]
+    service = accounts_fixture["service"]
+    sales_user = accounts_fixture["sales_user"]
+
+    # Create additional orders with varied statuses:
+    # 1. Order Completed in Accounts (has tax_invoice_no)
+    completed_order = SalesOrder(
+        order_number="SO-TASK-COMPLETED",
+        company_id=company_a.company_id,
+        client_id=client_obj.client_id,
+        service_id=service.service_id,
+        salesperson_user_id=sales_user.user_id,
+        order_date=date.today(),
+        order_value=Decimal("80000.00"),
+        amount_received=Decimal("40000.00"),
+        balance_amount=Decimal("40000.00"),
+        payment_status="PARTIALLY_PAID",
+        confirmation_status="CONFIRMED",
+        gst_invoice_required=True,
+        tax_invoice_no="TAX-INV-2026-0099",
+    )
+    # 2. Order with Payment Status FULLY_PAID but NO tax_invoice_no (MUST be Pending in Accounts)
+    fully_paid_no_inv = SalesOrder(
+        order_number="SO-TASK-FULLY-PAID-NO-INV",
+        company_id=company_a.company_id,
+        client_id=client_obj.client_id,
+        service_id=service.service_id,
+        salesperson_user_id=sales_user.user_id,
+        order_date=date.today(),
+        order_value=Decimal("60000.00"),
+        amount_received=Decimal("60000.00"),
+        balance_amount=Decimal("0.00"),
+        payment_status="FULLY_PAID",
+        confirmation_status="CONFIRMED",
+        gst_invoice_required=True,
+        tax_invoice_no=None,  # No Tax Invoice -> Accounts task is PENDING
+    )
+    # 3. Cancelled Order (MUST be excluded)
+    cancelled_order = SalesOrder(
+        order_number="SO-TASK-CANCELLED",
+        company_id=company_a.company_id,
+        client_id=client_obj.client_id,
+        service_id=service.service_id,
+        salesperson_user_id=sales_user.user_id,
+        order_date=date.today(),
+        order_value=Decimal("50000.00"),
+        amount_received=Decimal("0.00"),
+        balance_amount=Decimal("50000.00"),
+        payment_status="PENDING",
+        confirmation_status="CANCELLED",  # CANCELLED
+        gst_invoice_required=True,
+    )
+    # 4. Non-GST Order (MUST be excluded from Accounts tasks)
+    non_gst_order = SalesOrder(
+        order_number="SO-TASK-NON-GST",
+        company_id=company_a.company_id,
+        client_id=client_obj.client_id,
+        service_id=service.service_id,
+        salesperson_user_id=sales_user.user_id,
+        order_date=date.today(),
+        order_value=Decimal("30000.00"),
+        amount_received=Decimal("0.00"),
+        balance_amount=Decimal("30000.00"),
+        payment_status="PENDING",
+        confirmation_status="CONFIRMED",
+        gst_invoice_required=False,  # Not requiring GST invoice
+    )
+    db_session.add_all([completed_order, fully_paid_no_inv, cancelled_order, non_gst_order])
+    db_session.commit()
+
+    res = client.get("/api/accounts/dashboard", headers=auth_header(acc_user))
+    assert res.status_code == 200
+    data = res.json()
+
+    assert "task_summary" in data
+    ts = data["task_summary"]
+    assert "total_tasks" in ts
+    assert "completed_tasks" in ts
+    assert "pending_tasks" in ts
+
+    # Check Total = Completed + Pending
+    assert ts["total_tasks"] == ts["completed_tasks"] + ts["pending_tasks"]
+
+    # We started with order1 (no tax_inv), order2 (no tax_inv), plus completed_order (has tax_inv), fully_paid_no_inv (no tax_inv)
+    # Total = 4 (order1, order2, completed_order, fully_paid_no_inv). Cancelled and Non-GST excluded.
+    assert ts["total_tasks"] == 4
+    assert ts["completed_tasks"] == 1
+    assert ts["pending_tasks"] == 3
+
+
+def test_accounts_task_counts_no_duplicate_from_payments_and_invoices(
+    client: TestClient, accounts_fixture: dict, db_session: Session
+):
+    """Verify that multiple payments or multiple invoices for an order do NOT inflate task counts."""
+    acc_user = accounts_fixture["acc_user"]
+    company_a = accounts_fixture["company_a"]
+    order1 = accounts_fixture["order1"]
+
+    # Add 3 payment transactions to order1
+    for i in range(3):
+        pay = PaymentTransaction(
+            company_id=company_a.company_id,
+            sales_order_id=order1.order_id,
+            payment_number=f"PAY-DUP-{i+1}",
+            amount=5000.0,
+            payment_date=date.today(),
+            payment_mode="BANK_TRANSFER",
+            submitted_by_user_id=acc_user.user_id,
+            verification_status="VERIFIED",
+        )
+        db_session.add(pay)
+
+    # Add 2 invoice records to order1
+    for inv_type, inv_num in [("PROFORMA", "PI-DUP-1"), ("TAX_INVOICE", "TAX-DUP-1")]:
+        inv = AccountsInvoice(
+            company_id=company_a.company_id,
+            sales_order_id=order1.order_id,
+            invoice_type=inv_type,
+            invoice_number=inv_num,
+            invoice_date=date.today(),
+            amount=50000.0,
+            status="ISSUED",
+            created_by_user_id=acc_user.user_id,
+        )
+        db_session.add(inv)
+
+    db_session.commit()
+
+    res = client.get("/api/accounts/dashboard", headers=auth_header(acc_user))
+    assert res.status_code == 200
+    data = res.json()
+    ts = data["task_summary"]
+
+    # Initial orders were order1 and order2 -> Total tasks must be exactly 2, not multiplied by 3 payments or 2 invoices
+    assert ts["total_tasks"] == 2
+    assert ts["total_tasks"] == ts["completed_tasks"] + ts["pending_tasks"]
+
+
+def test_accounts_entries_task_status_filtering(
+    client: TestClient, accounts_fixture: dict, db_session: Session
+):
+    """Verify task_status query parameter filters Accounts entries correctly."""
+    acc_user = accounts_fixture["acc_user"]
+    company_a = accounts_fixture["company_a"]
+    client_obj = accounts_fixture["client"]
+    service = accounts_fixture["service"]
+    sales_user = accounts_fixture["sales_user"]
+
+    # Add an order with Tax Invoice
+    order_with_tax = SalesOrder(
+        order_number="SO-FILTER-TAX",
+        company_id=company_a.company_id,
+        client_id=client_obj.client_id,
+        service_id=service.service_id,
+        salesperson_user_id=sales_user.user_id,
+        order_date=date.today(),
+        order_value=Decimal("70000.00"),
+        amount_received=Decimal("70000.00"),
+        balance_amount=Decimal("0.00"),
+        payment_status="FULLY_PAID",
+        confirmation_status="CONFIRMED",
+        gst_invoice_required=True,
+        tax_invoice_no="TAX-INV-777",
+    )
+    db_session.add(order_with_tax)
+    db_session.commit()
+
+    # 1. Filter task_status=COMPLETED
+    res_completed = client.get("/api/accounts/entries?task_status=COMPLETED", headers=auth_header(acc_user))
+    assert res_completed.status_code == 200
+    comp_items = res_completed.json()["items"]
+    assert len(comp_items) == 1
+    assert comp_items[0]["order_number"] == "SO-FILTER-TAX"
+    assert comp_items[0]["task_status"] == "COMPLETED"
+
+    # 2. Filter task_status=PENDING
+    res_pending = client.get("/api/accounts/entries?task_status=PENDING", headers=auth_header(acc_user))
+    assert res_pending.status_code == 200
+    pend_items = res_pending.json()["items"]
+    # order1 and order2 have no tax invoice
+    assert len(pend_items) == 2
+    for item in pend_items:
+        assert item["task_status"] == "PENDING"
+        assert not item["tax_invoice_no"]
+
+    # 3. Filter task_status=ALL
+    res_all = client.get("/api/accounts/entries?task_status=ALL", headers=auth_header(acc_user))
+    assert res_all.status_code == 200
+    assert len(res_all.json()["items"]) == 3
+
+    # 4. CSV Export with task_status=COMPLETED
+    res_csv = client.get("/api/accounts/entries/export?task_status=COMPLETED", headers=auth_header(acc_user))
+    assert res_csv.status_code == 200
+    assert "TAX-INV-777" in res_csv.text
+
+
+def test_accounts_task_summary_scoping_admin_vs_ordinary_accounts_user(
+    client: TestClient, accounts_fixture: dict, db_session: Session
+):
+    """Verify scoping: Super Admin / Director sees all companies, whereas ordinary Accounts user is restricted to assigned company."""
+    super_admin = accounts_fixture["super_admin"]
+    acc_user = accounts_fixture["acc_user"]
+    client_obj = accounts_fixture["client"]
+    service = accounts_fixture["service"]
+    sales_user = accounts_fixture["sales_user"]
+
+    # Create Company B and an order in Company B
+    comp_b = Company(
+        company_code="COMP_B_ACC",
+        company_name="Company B Accounts",
+        employee_code_prefix="BB",
+        status="ACTIVE",
+    )
+    db_session.add(comp_b)
+    db_session.flush()
+
+    order_comp_b = SalesOrder(
+        order_number="SO-COMP-B-001",
+        company_id=comp_b.company_id,
+        client_id=client_obj.client_id,
+        service_id=service.service_id,
+        salesperson_user_id=sales_user.user_id,
+        order_date=date.today(),
+        order_value=Decimal("50000.00"),
+        amount_received=Decimal("0.00"),
+        balance_amount=Decimal("50000.00"),
+        payment_status="PENDING",
+        confirmation_status="CONFIRMED",
+        gst_invoice_required=True,
+    )
+    db_session.add(order_comp_b)
+    db_session.commit()
+
+    # Ordinary Accounts user (Company A scope) sees only Company A tasks (2 tasks)
+    res_acc = client.get("/api/accounts/dashboard", headers=auth_header(acc_user))
+    assert res_acc.status_code == 200
+    assert res_acc.json()["task_summary"]["total_tasks"] == 2
+
+    # Super Admin sees all companies (2 in Company A + 1 in Company B = 3 tasks)
+    res_admin = client.get("/api/accounts/dashboard", headers=auth_header(super_admin))
+    assert res_admin.status_code == 200
+    assert res_admin.json()["task_summary"]["total_tasks"] == 3
+
+    # Super Admin filtering by Company B
+    res_admin_b = client.get(
+        f"/api/accounts/dashboard?company_id={comp_b.company_id}",
+        headers=auth_header(super_admin),
+    )
+    assert res_admin_b.status_code == 200
+    assert res_admin_b.json()["task_summary"]["total_tasks"] == 1
+
+
+def test_accounts_task_status_summary_refresh_on_tax_invoice_update(
+    client: TestClient, accounts_fixture: dict
+):
+    """Verify task summary updates dynamically when an Accounts user sets tax_invoice_no on a pending order."""
+    acc_user = accounts_fixture["acc_user"]
+    order1 = accounts_fixture["order1"]
+
+    # 1. Initial dashboard
+    res_init = client.get("/api/accounts/dashboard", headers=auth_header(acc_user))
+    assert res_init.status_code == 200
+    init_ts = res_init.json()["task_summary"]
+    init_total = init_ts["total_tasks"]
+    init_completed = init_ts["completed_tasks"]
+    init_pending = init_ts["pending_tasks"]
+    assert init_pending > 0
+
+    # 2. Update order1 with tax_invoice_no
+    res_update = client.patch(
+        f"/api/accounts/entries/{order1.order_id}",
+        json={"tax_invoice_no": "TAX-INV-COMPLETED-NOW"},
+        headers=auth_header(acc_user),
+    )
+    assert res_update.status_code == 200
+    assert res_update.json()["task_status"] == "COMPLETED"
+
+    # 3. Re-query dashboard: completed increased by 1, pending decreased by 1, total unchanged
+    res_after = client.get("/api/accounts/dashboard", headers=auth_header(acc_user))
+    assert res_after.status_code == 200
+    after_ts = res_after.json()["task_summary"]
+    assert after_ts["total_tasks"] == init_total
+    assert after_ts["completed_tasks"] == init_completed + 1
+    assert after_ts["pending_tasks"] == init_pending - 1
+    assert after_ts["total_tasks"] == after_ts["completed_tasks"] + after_ts["pending_tasks"]
+

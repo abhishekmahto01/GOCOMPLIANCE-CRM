@@ -564,6 +564,18 @@ class TopOutstandingItem(BaseModel):
 
 
 # -----------------------------------------------------------------------------
+# Accounts Task Summary
+# -----------------------------------------------------------------------------
+class AccountsTaskSummary(BaseModel):
+    """Aggregated Accounts task status counts for dashboard cards."""
+    total_tasks: int = 0
+    completed_tasks: int = 0
+    pending_tasks: int = 0
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# -----------------------------------------------------------------------------
 # Accounts Entries (21 Columns)
 # -----------------------------------------------------------------------------
 class AccountsEntryRead(BaseModel):
@@ -653,6 +665,9 @@ class AccountsEntryRead(BaseModel):
     remarks: Optional[str] = None
     notes: Optional[str] = None
 
+    # Accounts Task Status & Lifecycle
+    task_status: str = "PENDING"
+
     # Timestamps & status
     gst_invoice_required: bool = True
     company_name: Optional[str] = None
@@ -709,6 +724,7 @@ class AccountsDashboardResponse(BaseModel):
     """Payload for the Accounts Dashboard based on authorized Sales records."""
     date_range: Dict[str, str]
     kpis: AccountsKpiSummary
+    task_summary: AccountsTaskSummary = Field(default_factory=AccountsTaskSummary)
     payment_status_breakdown: List[PaymentStatusBreakdownItem] = Field(default_factory=list)
     recent_entries: List[AccountsEntryRead] = Field(default_factory=list)
     collections_trend: List[CollectionsTrendPoint] = Field(default_factory=list)

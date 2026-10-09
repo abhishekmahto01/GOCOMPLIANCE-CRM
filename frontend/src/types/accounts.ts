@@ -70,10 +70,17 @@ export interface AccountsEntryItem {
   formatted_profit_amount: string;
   remarks?: string | null;
   notes?: string | null;
+  task_status?: 'COMPLETED' | 'PENDING' | string;
   gst_invoice_required?: boolean;
   confirmation_status: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface AccountsTaskSummary {
+  total_tasks: number;
+  completed_tasks: number;
+  pending_tasks: number;
 }
 
 export interface AccountsEntriesSummary {
@@ -209,6 +216,7 @@ export interface TopOutstandingItem {
 export interface AccountsDashboardResponse {
   date_range: Record<string, string>;
   kpis: AccountsKpiSummary;
+  task_summary?: AccountsTaskSummary;
   payment_status_breakdown?: PaymentStatusBreakdownItem[];
   recent_entries?: AccountsEntryItem[];
   collections_trend?: CollectionsTrendPoint[];
