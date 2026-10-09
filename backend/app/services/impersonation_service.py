@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 import uuid
 
 from fastapi import HTTPException, status
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -72,6 +72,28 @@ def start_impersonation(
     clean_code = employee_code.strip().upper()
     stmt = select(User).where(User.employee_code == clean_code)
     target_user = session.execute(stmt).scalar_one_or_none()
+
+    if not target_user:
+        # Fallback 1: Support legacy / updated company prefix mapping (CG <-> GC)
+        alt_code = None
+        if clean_code.startswith("CG"):
+            alt_code = "GC" + clean_code[2:]
+        elif clean_code.startswith("GC"):
+            alt_code = "CG" + clean_code[2:]
+        elif clean_code.isdigit():
+            alt_code = f"GC{int(clean_code):04d}"
+
+        if alt_code:
+            stmt = select(User).where(User.employee_code == alt_code)
+            target_user = session.execute(stmt).scalar_one_or_none()
+
+    if not target_user and clean_code.isdigit():
+        stmt = select(User).where(User.employee_code == f"CG{int(clean_code):04d}")
+        target_user = session.execute(stmt).scalar_one_or_none()
+
+    if not target_user and "@" in clean_code:
+        stmt = select(User).where(func.lower(User.official_email) == clean_code.lower())
+        target_user = session.execute(stmt).scalar_one_or_none()
 
     if not target_user:
         raise HTTPException(

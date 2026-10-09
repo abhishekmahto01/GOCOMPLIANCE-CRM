@@ -474,9 +474,7 @@ def is_super_admin_user(session: Optional[Session], user: Optional[User]) -> boo
     role_type = getattr(user, "role_type", None)
     if isinstance(role_type, str) and role_type.strip().upper() == "SUPER_ADMIN":
         return True
-    emp_code = getattr(user, "employee_code", None)
-    if isinstance(emp_code, str) and emp_code.strip().upper() == "CG0001":
-        return True
+
     desig_obj = getattr(user, "designation", None)
     if desig_obj is not None:
         desig_name = getattr(desig_obj, "designation_name", None)
@@ -487,20 +485,32 @@ def is_super_admin_user(session: Optional[Session], user: Optional[User]) -> boo
         desig_code = getattr(desig_obj, "designation_code", None)
         if isinstance(desig_code, str) and desig_code.upper() == "SUPER_ADMIN":
             return True
+
     first_name = getattr(user, "first_name", None)
     last_name = getattr(user, "last_name", None)
     if isinstance(first_name, str) and isinstance(last_name, str):
         if first_name.strip().lower() == "super" and last_name.strip().lower() == "admin":
             return True
+
     official_email = getattr(user, "official_email", None)
     if isinstance(official_email, str):
         em = official_email.strip().lower()
         if em in (
             "research.rnd.gc@gmail.com",
+            "admin@gocompliances.in",
             "admin@gocompliances.com",
+            "superadmin@gocompliances.in",
             "superadmin@gocompliances.com",
-        ) or em.startswith("superadmin@"):
+        ) or em.startswith("superadmin@") or em.startswith("admin@"):
             return True
+
+    emp_code = getattr(user, "employee_code", None)
+    if isinstance(emp_code, str) and emp_code.strip().upper() in ("CG0001", "GC0001"):
+        if isinstance(first_name, str) and first_name.strip().lower() in ("super", "admin"):
+            return True
+        if isinstance(official_email, str) and any(kw in official_email.lower() for kw in ("admin", "research", "super")):
+            return True
+
     return False
 
 

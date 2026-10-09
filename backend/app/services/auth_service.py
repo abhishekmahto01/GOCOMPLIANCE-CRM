@@ -59,6 +59,27 @@ def authenticate_user(
     user = session.execute(stmt).scalar_one_or_none()
 
     if not user:
+        # Fallback for CG <-> GC prefix transition and numeric employee codes
+        alt_id = None
+        if clean_id.upper().startswith("CG"):
+            alt_id = "GC" + clean_id.upper()[2:]
+        elif clean_id.upper().startswith("GC"):
+            alt_id = "CG" + clean_id.upper()[2:]
+        elif clean_id.isdigit():
+            alt_id = f"GC{int(clean_id):04d}"
+
+        if alt_id:
+            stmt = select(User).where(
+                (func.lower(User.official_email) == alt_id.lower())
+                | (func.upper(User.employee_code) == alt_id.upper())
+            )
+            user = session.execute(stmt).scalar_one_or_none()
+
+    if not user and clean_id.isdigit():
+        stmt = select(User).where(func.upper(User.employee_code) == f"CG{int(clean_id):04d}")
+        user = session.execute(stmt).scalar_one_or_none()
+
+    if not user:
         # Constant-time dummy verification to avoid timing side-channels
         verify_password("dummy", DUMMY_HASH)
         raise HTTPException(
