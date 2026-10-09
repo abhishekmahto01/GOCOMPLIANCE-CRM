@@ -1156,6 +1156,17 @@ def save_user_permissions_bundle(
     ).scalars().all()
     mod_by_code = {m.module_code: m for m in active_modules}
 
+    # Auto-seed if any required catalog module or parent module is missing from database
+    needed_codes = set(PAGE_CATALOG_CONFIG.keys()) | {"SALES", "OPERATIONS", "ACCOUNTS"}
+    missing_codes = needed_codes - set(mod_by_code.keys())
+    if missing_codes:
+        from app.scripts.seed_modules import seed_modules
+        seed_modules(session)
+        active_modules = session.execute(
+            select(Module).where(Module.status == "ACTIVE")
+        ).scalars().all()
+        mod_by_code = {m.module_code: m for m in active_modules}
+
     # Also resolve parent module IDs (SALES, OPERATIONS, ACCOUNTS)
     parent_codes = {"SALES", "OPERATIONS", "ACCOUNTS"}
     parent_mods = {c: mod_by_code.get(c) for c in parent_codes}
