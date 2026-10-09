@@ -104,6 +104,7 @@ class CompanyUpdate(BaseModel):
 
     company_name: Optional[str] = Field(None, min_length=2, max_length=150)
     legal_name: Optional[str] = Field(None, max_length=200)
+    employee_code_prefix: Optional[str] = Field(None, min_length=2, max_length=5)
     status: Optional[str] = None
 
     @field_validator("company_name", mode="before")
@@ -120,6 +121,18 @@ class CompanyUpdate(BaseModel):
         if isinstance(v, str):
             v = v.strip()
             return v if v else None
+        return v
+
+    @field_validator("employee_code_prefix", mode="before")
+    @classmethod
+    def normalize_employee_code_prefix(cls, v: Optional[str]) -> Optional[str]:
+        if isinstance(v, str):
+            v = v.strip().upper()
+            if not re.match(r"^[A-Z]{2,5}$", v):
+                raise ValueError(
+                    "employee_code_prefix must consist of 2 to 5 uppercase letters (A-Z)"
+                )
+            return v
         return v
 
     @field_validator("status", mode="before")

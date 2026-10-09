@@ -77,6 +77,7 @@ export const CompanyMasterPage: React.FC = () => {
   const [editForm, setEditForm] = useState<CompanyUpdatePayload>({
     company_name: '',
     legal_name: '',
+    employee_code_prefix: '',
     status: 'ACTIVE',
   });
   const [editFormErrors, setEditFormErrors] = useState<Record<string, string>>({});
@@ -137,6 +138,7 @@ export const CompanyMasterPage: React.FC = () => {
     setEditForm({
       company_name: comp.company_name,
       legal_name: comp.legal_name || '',
+      employee_code_prefix: comp.employee_code_prefix,
       status: comp.status,
     });
     setEditFormErrors({});
@@ -200,15 +202,26 @@ export const CompanyMasterPage: React.FC = () => {
     e.preventDefault();
     if (!selectedCompany) return;
 
+    const errors: Record<string, string> = {};
     if (!editForm.company_name?.trim()) {
-      setEditFormErrors({ company_name: 'Company display name is required.' });
+      errors.company_name = 'Company display name is required.';
+    }
+    if (!editForm.employee_code_prefix?.trim()) {
+      errors.employee_code_prefix = 'Employee code prefix is required.';
+    } else if (!/^[A-Za-z]{2,5}$/.test(editForm.employee_code_prefix.trim())) {
+      errors.employee_code_prefix = 'Prefix must consist of 2 to 5 letters (e.g. GC, EP).';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setEditFormErrors(errors);
       return;
     }
 
     setIsSubmittingEdit(true);
     try {
       const payload: CompanyUpdatePayload = {
-        company_name: editForm.company_name.trim(),
+        company_name: (editForm.company_name || '').trim(),
+        employee_code_prefix: (editForm.employee_code_prefix || '').trim().toUpperCase(),
         legal_name: editForm.legal_name?.trim() || null,
         status: editForm.status,
       };
@@ -217,7 +230,7 @@ export const CompanyMasterPage: React.FC = () => {
       addToast(
         'success',
         'Company Updated',
-        `Company "${updated.company_name}" was successfully updated.`
+        `Company "${updated.company_name}" (${updated.employee_code_prefix}) was successfully updated.`
       );
       setIsEditModalOpen(false);
       setSelectedCompany(null);
@@ -703,31 +716,57 @@ export const CompanyMasterPage: React.FC = () => {
               </div>
               <div>
                 <span className="text-slate-400 block text-[10px] uppercase font-bold">
-                  Prefix
+                  Current Next Employee #
                 </span>
                 <span className="font-mono font-bold text-blue-600 dark:text-blue-400">
-                  {selectedCompany.employee_code_prefix}-XXXX
+                  #{String(selectedCompany.next_employee_number).padStart(4, '0')}
                 </span>
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Company Display Name <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={editForm.company_name}
-                onChange={(e) =>
-                  setEditForm((prev) => ({ ...prev, company_name: e.target.value }))
-                }
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-              />
-              {editFormErrors.company_name && (
-                <p className="text-xs text-rose-600 mt-1">
-                  {editFormErrors.company_name}
-                </p>
-              )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Company Display Name <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editForm.company_name}
+                  onChange={(e) =>
+                    setEditForm((prev) => ({ ...prev, company_name: e.target.value }))
+                  }
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                />
+                {editFormErrors.company_name && (
+                  <p className="text-xs text-rose-600 mt-1">
+                    {editFormErrors.company_name}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Employee Code Prefix <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  maxLength={5}
+                  placeholder="e.g. GC"
+                  value={editForm.employee_code_prefix || ''}
+                  onChange={(e) =>
+                    setEditForm((prev) => ({
+                      ...prev,
+                      employee_code_prefix: e.target.value.toUpperCase(),
+                    }))
+                  }
+                  className="w-full px-3 py-2 font-mono uppercase bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                />
+                {editFormErrors.employee_code_prefix && (
+                  <p className="text-xs text-rose-600 mt-1">
+                    {editFormErrors.employee_code_prefix}
+                  </p>
+                )}
+              </div>
             </div>
 
             <div>

@@ -24,5 +24,6 @@ export interface CompanyCreatePayload {
 export interface CompanyUpdatePayload {
   company_name?: string;
   legal_name?: string | null;
+  employee_code_prefix?: string;
   status?: CompanyStatus;
 }

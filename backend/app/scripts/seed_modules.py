@@ -100,6 +100,16 @@ INITIAL_MODULES: List[Dict[str, Optional[object]]] = [
         "is_navigation": True,
         "status": "ACTIVE",
     },
+    {
+        "module_code": "ADMIN_LICENSES",
+        "module_name": "License Master",
+        "parent_code": "ADMIN",
+        "route": "/admin/licenses",
+        "description": "Statutory licenses and service catalog configuration",
+        "display_order": 60,
+        "is_navigation": True,
+        "status": "ACTIVE",
+    },
     # Sub-Modules (Pages) under SALES
     {
         "module_code": "SALES_DASHBOARD",

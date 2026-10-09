@@ -114,7 +114,7 @@ def update_company(
     target_company: Company,
     update_data: CompanyUpdate,
 ) -> Company:
-    """Update an existing company's display name, legal name, or operational status.
+    """Update an existing company's display name, legal name, employee code prefix, or operational status.
 
     Args:
         session: Active SQLAlchemy session.
@@ -125,8 +125,10 @@ def update_company(
         The refreshed Company instance.
 
     Raises:
-        ValueError: If company name conflicts with another company.
+        ValueError: If company name or employee code prefix conflicts with another company.
     """
+    from app.models.user import User
+
     try:
         if update_data.company_name is not None:
             norm_name = update_data.company_name.strip()
@@ -140,6 +142,34 @@ def update_company(
                 if existing:
                     raise ValueError(f"Company name '{norm_name}' is already taken.")
                 target_company.company_name = norm_name
+
+        if update_data.employee_code_prefix is not None:
+            norm_prefix = update_data.employee_code_prefix.strip().upper()
+            if not re.match(r"^[A-Z]{2,5}$", norm_prefix):
+                raise ValueError("employee_code_prefix must consist of 2 to 5 uppercase letters (A-Z).")
+            if norm_prefix != target_company.employee_code_prefix:
+                existing_prefix = session.execute(
+                    select(Company.company_id).where(
+                        func.upper(Company.employee_code_prefix) == norm_prefix,
+                        Company.company_id != target_company.company_id,
+                    )
+                ).scalar_one_or_none()
+                if existing_prefix:
+                    raise ValueError(
+                        f"Employee code prefix '{norm_prefix}' is already in use by another company."
+                    )
+
+                old_prefix = target_company.employee_code_prefix
+                target_company.employee_code_prefix = norm_prefix
+
+                # Migrate existing employees' codes to new prefix
+                users = session.execute(
+                    select(User).where(User.company_id == target_company.company_id)
+                ).scalars().all()
+                for u in users:
+                    if u.employee_code and u.employee_code.startswith(old_prefix):
+                        seq_suffix = u.employee_code[len(old_prefix):]
+                        u.employee_code = f"{norm_prefix}{seq_suffix}"
 
         if "legal_name" in update_data.model_fields_set:
             target_company.legal_name = (

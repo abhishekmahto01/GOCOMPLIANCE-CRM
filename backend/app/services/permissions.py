@@ -252,6 +252,84 @@ PAGE_CATALOG_CONFIG: Dict[str, Dict[str, Any]] = {
             "export": "accounts.entries.export",
         },
     },
+    # Admin Module Pages
+    "ADMIN_EMPLOYEES": {
+        "module_code": "ADMIN",
+        "page_name": "Employee Master",
+        "route": "/admin/employees",
+        "display_order": 10,
+        "supported_actions": ["read", "write", "update", "delete", "export"],
+        "slugs": {
+            "read": "admin.employees.read",
+            "write": "admin.employees.create",
+            "update": "admin.employees.update",
+            "delete": "admin.employees.delete",
+            "export": "admin.employees.export",
+        },
+    },
+    "ADMIN_ACCESS": {
+        "module_code": "ADMIN",
+        "page_name": "User Permissions",
+        "route": "/admin/access",
+        "display_order": 20,
+        "supported_actions": ["read", "update"],
+        "slugs": {
+            "read": "admin.access.read",
+            "update": "admin.access.update",
+        },
+    },
+    "ADMIN_COMPANIES": {
+        "module_code": "ADMIN",
+        "page_name": "Company Master",
+        "route": "/admin/companies",
+        "display_order": 30,
+        "supported_actions": ["read", "write", "update", "delete"],
+        "slugs": {
+            "read": "admin.companies.read",
+            "write": "admin.companies.create",
+            "update": "admin.companies.update",
+            "delete": "admin.companies.delete",
+        },
+    },
+    "ADMIN_DEPARTMENTS": {
+        "module_code": "ADMIN",
+        "page_name": "Department Master",
+        "route": "/admin/departments",
+        "display_order": 40,
+        "supported_actions": ["read", "write", "update", "delete"],
+        "slugs": {
+            "read": "admin.departments.read",
+            "write": "admin.departments.create",
+            "update": "admin.departments.update",
+            "delete": "admin.departments.delete",
+        },
+    },
+    "ADMIN_DESIGNATIONS": {
+        "module_code": "ADMIN",
+        "page_name": "Designation Master",
+        "route": "/admin/designations",
+        "display_order": 50,
+        "supported_actions": ["read", "write", "update", "delete"],
+        "slugs": {
+            "read": "admin.designations.read",
+            "write": "admin.designations.create",
+            "update": "admin.designations.update",
+            "delete": "admin.designations.delete",
+        },
+    },
+    "ADMIN_LICENSES": {
+        "module_code": "ADMIN",
+        "page_name": "License Master",
+        "route": "/admin/licenses",
+        "display_order": 60,
+        "supported_actions": ["read", "write", "update", "delete"],
+        "slugs": {
+            "read": "admin.licenses.read",
+            "write": "admin.licenses.create",
+            "update": "admin.licenses.update",
+            "delete": "admin.licenses.delete",
+        },
+    },
 }
 
 # Reverse lookup for slugs: slug -> (page_code, action)
@@ -534,6 +612,22 @@ def has_permission(
     # If asking for parent ACCOUNTS module, check if user has access to either child submodule
     if module_code_norm == "ACCOUNTS" and action_norm == "view":
         for child_code in ("ACCOUNTS_DASHBOARD", "ACCOUNTS_ENTRIES"):
+            child_perm = get_user_module_permission(session, user.user_id, child_code)
+            if child_perm and is_permission_active_and_valid(child_perm) and child_perm.can_view:
+                return True
+
+    # For ADMIN module pages, also inherit permissions from parent ADMIN module
+    if module_code_norm in ("ADMIN_EMPLOYEES", "ADMIN_ACCESS", "ADMIN_COMPANIES", "ADMIN_DEPARTMENTS", "ADMIN_DESIGNATIONS", "ADMIN_LICENSES"):
+        parent_admin_perm = get_user_module_permission(session, user.user_id, "ADMIN")
+        if parent_admin_perm and is_permission_active_and_valid(parent_admin_perm):
+            if action_norm == "view" and parent_admin_perm.can_view:
+                return True
+            if field_name and hasattr(parent_admin_perm, field_name) and bool(getattr(parent_admin_perm, field_name, False)):
+                return True
+
+    # If asking for parent ADMIN module, check if user has access to any child submodule
+    if module_code_norm == "ADMIN" and action_norm == "view":
+        for child_code in ("ADMIN_EMPLOYEES", "ADMIN_ACCESS", "ADMIN_COMPANIES", "ADMIN_DEPARTMENTS", "ADMIN_DESIGNATIONS", "ADMIN_LICENSES"):
             child_perm = get_user_module_permission(session, user.user_id, child_code)
             if child_perm and is_permission_active_and_valid(child_perm) and child_perm.can_view:
                 return True
@@ -963,7 +1057,8 @@ def deactivate_permission(
 # ==============================================================================
 
 def get_permission_catalog(session: Session) -> PermissionCatalogResponse:
-    """Return the structured catalog of Sales, Operation, and Accounts modules and pages with supported actions."""
+    """Return the structured catalog of Admin, Sales, Operation, and Accounts modules and pages with supported actions."""
+    admin_pages: List[CatalogPageItem] = []
     sales_pages: List[CatalogPageItem] = []
     operation_pages: List[CatalogPageItem] = []
     accounts_pages: List[CatalogPageItem] = []
@@ -977,7 +1072,9 @@ def get_permission_catalog(session: Session) -> PermissionCatalogResponse:
             action_slugs=config["slugs"],
             display_order=config["display_order"],
         )
-        if config["module_code"] == "SALES":
+        if config["module_code"] == "ADMIN":
+            admin_pages.append(page_item)
+        elif config["module_code"] == "SALES":
             sales_pages.append(page_item)
         elif config["module_code"] == "OPERATIONS":
             operation_pages.append(page_item)
@@ -986,6 +1083,11 @@ def get_permission_catalog(session: Session) -> PermissionCatalogResponse:
                 accounts_pages.append(page_item)
 
     modules = [
+        CatalogModuleItem(
+            module_code="ADMIN",
+            module_name="Admin",
+            pages=admin_pages,
+        ),
         CatalogModuleItem(
             module_code="SALES",
             module_name="Sales",
@@ -1157,7 +1259,7 @@ def save_user_permissions_bundle(
     mod_by_code = {m.module_code: m for m in active_modules}
 
     # Auto-seed if any required catalog module or parent module is missing from database
-    needed_codes = set(PAGE_CATALOG_CONFIG.keys()) | {"SALES", "OPERATIONS", "ACCOUNTS"}
+    needed_codes = set(PAGE_CATALOG_CONFIG.keys()) | {"ADMIN", "SALES", "OPERATIONS", "ACCOUNTS"}
     missing_codes = needed_codes - set(mod_by_code.keys())
     if missing_codes:
         from app.scripts.seed_modules import seed_modules
@@ -1167,10 +1269,11 @@ def save_user_permissions_bundle(
         ).scalars().all()
         mod_by_code = {m.module_code: m for m in active_modules}
 
-    # Also resolve parent module IDs (SALES, OPERATIONS, ACCOUNTS)
-    parent_codes = {"SALES", "OPERATIONS", "ACCOUNTS"}
+    # Also resolve parent module IDs (ADMIN, SALES, OPERATIONS, ACCOUNTS)
+    parent_codes = {"ADMIN", "SALES", "OPERATIONS", "ACCOUNTS"}
     parent_mods = {c: mod_by_code.get(c) for c in parent_codes}
 
+    admin_has_any_view = False
     sales_has_any_view = False
     operations_has_any_view = False
     accounts_has_any_view = False
@@ -1200,7 +1303,9 @@ def save_user_permissions_bundle(
 
         # Track parent module view requirement
         if perm_in.can_view:
-            if page_config["module_code"] == "SALES":
+            if page_config["module_code"] == "ADMIN":
+                admin_has_any_view = True
+            elif page_config["module_code"] == "SALES":
                 sales_has_any_view = True
             elif page_config["module_code"] == "OPERATIONS":
                 operations_has_any_view = True
@@ -1229,7 +1334,26 @@ def save_user_permissions_bundle(
             is_bootstrap=True,
         )
 
-    # 4. Sync parent module (SALES, OPERATIONS, ACCOUNTS) navigation view
+    # 4. Sync parent module (ADMIN, SALES, OPERATIONS, ACCOUNTS) navigation view
+    if parent_mods.get("ADMIN"):
+        grant_or_update_permission(
+            session=session,
+            user_id=target_user_id,
+            module_id=parent_mods["ADMIN"].module_id,
+            can_view=admin_has_any_view,
+            can_create=False,
+            can_edit=False,
+            can_delete=False,
+            can_approve=False,
+            can_assign=False,
+            can_reassign=False,
+            can_export=False,
+            data_scope="COMPANY",
+            status="ACTIVE" if admin_has_any_view else "INACTIVE",
+            granted_by_user_id=actor_user.user_id,
+            is_bootstrap=True,
+        )
+
     if parent_mods.get("SALES"):
         grant_or_update_permission(
             session=session,

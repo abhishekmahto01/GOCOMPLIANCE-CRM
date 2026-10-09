@@ -80,7 +80,10 @@ const ACTION_DISPLAY_CONFIG: Record<string, { label: string; activeColor: string
 
 export const UserPermissionsPage: React.FC = () => {
   const { hasPermission } = useAuth();
-  const canManageAccess = hasPermission('ADMIN', 'view') || hasPermission('ADMIN_EMPLOYEES', 'view');
+  const canManageAccess =
+    hasPermission('ADMIN', 'view') ||
+    hasPermission('ADMIN_ACCESS', 'view') ||
+    hasPermission('ADMIN_EMPLOYEES', 'view');
 
   const [searchParams] = useSearchParams();
   const initialUserId = searchParams.get('userId') || searchParams.get('user_id') || '';
@@ -641,8 +644,10 @@ export const UserPermissionsPage: React.FC = () => {
                 className="w-full h-10 px-3 text-xs sm:text-sm font-medium rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition-all"
               >
                 <option value="ALL">All Modules</option>
+                <option value="ADMIN">Admin</option>
                 <option value="SALES">Sales</option>
                 <option value="OPERATIONS">Operation</option>
+                <option value="ACCOUNTS">Accounts</option>
               </select>
             </div>
 

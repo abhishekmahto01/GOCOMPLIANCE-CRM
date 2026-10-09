@@ -19,7 +19,7 @@ INITIAL_COMPANIES: List[Dict[str, str]] = [
     {
         "company_code": "GOCOMPLIANCES",
         "company_name": "Gocompliances",
-        "employee_code_prefix": "CG",
+        "employee_code_prefix": "GC",
         "next_employee_number": 1,
         "status": "ACTIVE",
         "legal_name": None,
