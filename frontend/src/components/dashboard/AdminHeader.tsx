@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { BrandLogo } from '../auth/BrandLogo';
 import { ThemeToggle } from './ThemeToggle';
 import { LiveClock } from './LiveClock';
+import { NotificationBell } from './NotificationBell';
 import { LogOut, ChevronRight, Home, KeyRound, Menu } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -109,6 +110,9 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
 
         {/* Right: Controls & User Profile */}
         <div className="flex flex-wrap items-center justify-end gap-2.5 sm:gap-3 w-full md:w-auto">
+          {/* Notification Bell */}
+          <NotificationBell />
+
           {/* Theme Toggle */}
           <ThemeToggle theme={theme} onToggle={onToggleTheme} />
 

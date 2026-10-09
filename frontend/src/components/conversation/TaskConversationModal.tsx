@@ -23,6 +23,7 @@ import {
   postConversationMessageApi,
 } from '../../api/conversation';
 import { extractErrorMessage } from '../../api/client';
+import { useRemarkNotification } from '../../context/RemarkNotificationContext';
 import type {
   ConversationMessage,
   ConversationThread,
@@ -122,6 +123,7 @@ export const TaskConversationModal: React.FC<TaskConversationModalProps> = ({
   applicationId,
   onMessagePosted,
 }) => {
+  const { markMessagesRead, refreshUnreadSummary } = useRemarkNotification();
   const [thread, setThread] = useState<ConversationThread | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -137,6 +139,7 @@ export const TaskConversationModal: React.FC<TaskConversationModalProps> = ({
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const markedIdsRef = useRef<Set<string>>(new Set());
 
   const fetchThread = useCallback(
     async (isBackground = false) => {
@@ -158,6 +161,19 @@ export const TaskConversationModal: React.FC<TaskConversationModalProps> = ({
         }
 
         setThread(data);
+
+        // Explicitly mark rendered unread messages read for current user
+        if (data && data.items && data.items.length > 0) {
+          const newToMark = data.items
+            .filter((m) => !m.is_mine && !m.is_read)
+            .map((m) => m.message_id)
+            .filter((id) => !markedIdsRef.current.has(id));
+
+          if (newToMark.length > 0) {
+            newToMark.forEach((id) => markedIdsRef.current.add(id));
+            markMessagesRead(data.order_id, newToMark);
+          }
+        }
       } catch (err) {
         if (!isBackground) {
           setError(extractErrorMessage(err));
@@ -168,18 +184,20 @@ export const TaskConversationModal: React.FC<TaskConversationModalProps> = ({
         }
       }
     },
-    [orderId, applicationId]
+    [orderId, applicationId, markMessagesRead]
   );
 
   // Initial load when modal opens
   useEffect(() => {
     if (isOpen) {
+      markedIdsRef.current.clear();
       fetchThread(false);
       setSendError(null);
     } else {
       setThread(null);
       setMessageDraft('');
       setSendError(null);
+      markedIdsRef.current.clear();
     }
   }, [isOpen, fetchThread]);
 
@@ -285,7 +303,8 @@ export const TaskConversationModal: React.FC<TaskConversationModalProps> = ({
         };
       });
 
-      // Trigger parent callback (to update table remark preview)
+      // Trigger parent callback (to update table remark preview) & refresh unread summary
+      refreshUnreadSummary();
       if (onMessagePosted) {
         onMessagePosted();
       }

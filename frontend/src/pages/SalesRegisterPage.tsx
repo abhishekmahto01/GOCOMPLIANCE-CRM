@@ -42,6 +42,7 @@ import { TaskConversationModal } from '../components/conversation/TaskConversati
 import { CompanyFilterTabs } from '../components/common/CompanyFilterTabs';
 import { CompanyBadge } from '../components/common/CompanyBadge';
 import { useAuth } from '../context/AuthContext';
+import { useRemarkNotification } from '../context/RemarkNotificationContext';
 
 interface OutletContextType {
   addToast?: (type: 'success' | 'error' | 'info', title: string, message: string) => void;
@@ -203,6 +204,8 @@ export const SalesRegisterPage: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  const { unreadSummary } = useRemarkNotification();
+
   // Shared Task Conversation Modal State
   const [conversationOrderId, setConversationOrderId] = useState<string | null>(null);
   const [isConversationOpen, setIsConversationOpen] = useState<boolean>(false);
@@ -212,6 +215,15 @@ export const SalesRegisterPage: React.FC = () => {
     setConversationOrderId(orderId);
     setIsConversationOpen(true);
   };
+
+  // Open conversation from URL query parameter if present
+  const openConversationParam = searchParams.get('open_conversation_order_id') || searchParams.get('open_order_id');
+  useEffect(() => {
+    if (openConversationParam) {
+      setConversationOrderId(openConversationParam);
+      setIsConversationOpen(true);
+    }
+  }, [openConversationParam]);
 
   // Sync state with URL params
   const syncUrl = useCallback(
@@ -866,12 +878,18 @@ export const SalesRegisterPage: React.FC = () => {
                 {registerData.items.map((row, idx) => {
                   const sNo = (page - 1) * limit + idx + 1;
                   const isUnassigned = !row.assigned_to_user_id || row.assigned_to_name === 'Unassigned';
+                  const unreadInfo = unreadSummary?.unread_orders?.[row.order_id];
+                  const hasUnread = Boolean(unreadInfo && unreadInfo.unread_count > 0);
 
                   return (
                     <tr
                       key={row.order_id}
                       onClick={() => handleRowClick(row)}
-                      className="hover:bg-blue-50/40 dark:hover:bg-blue-950/20 transition-colors cursor-pointer group"
+                      className={`transition-colors cursor-pointer group ${
+                        hasUnread
+                          ? 'bg-blue-50/70 dark:bg-blue-950/40 border-l-4 border-l-blue-600 dark:border-l-blue-500 hover:bg-blue-100/60 dark:hover:bg-blue-900/50'
+                          : 'hover:bg-blue-50/40 dark:hover:bg-blue-950/20'
+                      }`}
                     >
                       {/* 1. S.No */}
                       <td className="py-3 px-3.5 text-center font-mono text-slate-400 font-semibold sticky left-0 bg-white dark:bg-slate-900 group-hover:bg-blue-50/40 dark:group-hover:bg-slate-900 z-10">
@@ -1018,7 +1036,7 @@ export const SalesRegisterPage: React.FC = () => {
                       </td>
 
                       {/* 20. Profits */}
-                      <td className="py-3 px-3.5 text-right font-bold text-emerald-700 dark:text-emerald-400">
+                      <td className="py-3 px-3.5 text-right font-bold text-emerald-800 dark:text-emerald-300">
                         {formatInr(row.profit_amount)}
                       </td>
 
@@ -1026,9 +1044,26 @@ export const SalesRegisterPage: React.FC = () => {
                       <td
                         className="py-2.5 px-3 max-w-[220px] cursor-pointer"
                         onClick={(e) => handleOpenConversation(row.order_id, e)}
-                        title={row.notes || row.remarks || 'Click to open shared conversation thread'}
+                        title={unreadInfo?.latest_remark_text || row.notes || row.remarks || 'Click to open shared conversation thread'}
                       >
-                        {row.notes || row.remarks ? (
+                        {hasUnread ? (
+                          <div className="p-1.5 rounded-xl bg-blue-100/90 dark:bg-blue-900/60 border border-blue-300 dark:border-blue-700 hover:border-blue-400 transition shadow-xs flex flex-col gap-1">
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-600 text-white dark:bg-blue-500 shadow-xs">
+                                <MessageSquare className="w-2.5 h-2.5" />
+                                <span>New update ({unreadInfo?.unread_count})</span>
+                              </span>
+                              {unreadInfo?.latest_author_name && (
+                                <span className="text-[10px] font-semibold text-blue-800 dark:text-blue-300 truncate max-w-[80px]">
+                                  {unreadInfo.latest_author_name}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-xs text-slate-800 dark:text-slate-100 truncate font-medium">
+                              {unreadInfo?.latest_remark_text || row.notes || row.remarks}
+                            </span>
+                          </div>
+                        ) : row.notes || row.remarks ? (
                           <div className="p-1.5 rounded-xl bg-slate-50/90 dark:bg-slate-800/80 hover:bg-blue-50/70 dark:hover:bg-blue-950/40 border border-slate-200/70 dark:border-slate-700/60 hover:border-blue-300 dark:hover:border-blue-700 transition shadow-2xs group/rem flex flex-col gap-0.5">
                             <span className="text-xs text-slate-800 dark:text-slate-200 truncate font-medium">
                               {row.notes || row.remarks}

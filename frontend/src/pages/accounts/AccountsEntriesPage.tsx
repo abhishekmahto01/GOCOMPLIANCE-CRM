@@ -30,6 +30,7 @@ import { Button } from '../../components/ui/button';
 import { TaskConversationModal } from '../../components/conversation/TaskConversationModal';
 import { CompanyFilterTabs } from '../../components/common/CompanyFilterTabs';
 import { CompanyBadge } from '../../components/common/CompanyBadge';
+import { useRemarkNotification } from '../../context/RemarkNotificationContext';
 
 interface OutletContextType {
   addToast?: (type: 'success' | 'error' | 'info', title: string, message: string) => void;
@@ -142,6 +143,7 @@ function getFieldLabel(field: EditableField): string {
 export const AccountsEntriesPage: React.FC = () => {
   const outletCtx = useOutletContext<OutletContextType>();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { unreadSummary } = useRemarkNotification();
 
   // Search & Filter State
   const [search, setSearch] = useState<string>(searchParams.get('search') || '');
@@ -176,6 +178,15 @@ export const AccountsEntriesPage: React.FC = () => {
   // Shared Task Conversation Modal State
   const [conversationOrderId, setConversationOrderId] = useState<string | null>(null);
   const [isConversationOpen, setIsConversationOpen] = useState<boolean>(false);
+
+  // Handle open_conversation_order_id query param
+  const openConversationParam = searchParams.get('open_conversation_order_id') || searchParams.get('open_order_id');
+  useEffect(() => {
+    if (openConversationParam) {
+      setConversationOrderId(openConversationParam);
+      setIsConversationOpen(true);
+    }
+  }, [openConversationParam]);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -815,327 +826,355 @@ export const AccountsEntriesPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
-                {entriesData.items.map((row) => (
-                  <tr
-                    key={row.order_id}
-                    className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors group"
-                  >
-                    {/* 1. S.No (Sticky) */}
-                    <td className="py-3 px-2 text-center font-mono text-slate-400 font-semibold sticky left-0 w-[52px] min-w-[52px] max-w-[52px] bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/80 z-20">
-                      {row.s_no}
-                    </td>
+                {entriesData.items.map((row) => {
+                  const unreadInfo = unreadSummary?.unread_orders?.[row.order_id];
+                  const hasUnread = Boolean(unreadInfo && unreadInfo.unread_count > 0);
 
-                    {/* 2. Date */}
-                    <td className="py-3 px-3.5 text-slate-700 dark:text-slate-300 font-medium w-[100px] min-w-[100px]">
-                      {row.formatted_date || row.order_date}
-                    </td>
-
-                    {/* 3. Client Name (Sticky) */}
-                    <td className="py-3 px-3.5 font-semibold text-slate-900 dark:text-white sticky left-[52px] w-[180px] min-w-[180px] max-w-[180px] bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/80 z-20">
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-1.5 truncate">
-                          <span className="truncate font-semibold" title={row.client_name}>
-                            {row.client_name}
-                          </span>
-                          {row.confirmation_status === 'CONFIRMED' && (
-                            <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 shrink-0">
-                              Confirmed
-                            </span>
-                          )}
-                        </div>
-                        <CompanyBadge
-                          companyName={row.company_name}
-                          companyCode={row.company_code}
-                          size="xs"
-                        />
-                      </div>
-                    </td>
-
-                    {/* 4. Location (Sticky) */}
-                    <td className="py-3 px-3.5 text-slate-600 dark:text-slate-300 sticky left-[232px] w-[140px] min-w-[140px] max-w-[140px] bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/80 z-20 shadow-[4px_0_8px_-2px_rgba(0,0,0,0.08)] dark:shadow-[4px_0_8px_-2px_rgba(0,0,0,0.35)] border-r border-slate-100 dark:border-slate-800">
-                      {row.location ? (
-                        <div className="inline-flex items-center gap-1 font-medium text-slate-700 dark:text-slate-300 truncate max-w-full" title={row.location}>
-                          <MapPin className="w-3 h-3 text-indigo-500 shrink-0" />
-                          <span className="truncate">{row.location}</span>
-                        </div>
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
-                    </td>
-
-                    {/* 5. Contact No */}
-                    <td className="py-3 px-3.5 text-slate-600 dark:text-slate-400 font-mono">
-                      {row.contact_no || '—'}
-                    </td>
-
-                    {/* 6. Source */}
-                    <td className="py-3 px-3.5">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                        {row.lead_source}
-                      </span>
-                    </td>
-
-                    {/* 7. Work */}
-                    <td className="py-3 px-4 text-slate-800 dark:text-slate-200 font-medium">
-                      {row.service_name}
-                    </td>
-
-                    {/* 8. Converted By */}
-                    <td className="py-3 px-3.5 text-slate-700 dark:text-slate-300">
-                      <div className="font-medium">{row.salesperson_name}</div>
-                      {row.salesperson_code && (
-                        <div className="text-[10px] text-slate-400 font-mono">{row.salesperson_code}</div>
-                      )}
-                    </td>
-
-                    {/* 9. Assigned To */}
-                    <td className="py-3 px-3.5 text-slate-600 dark:text-slate-400">
-                      {row.assigned_to_name && row.assigned_to_name !== 'Unassigned' ? (
-                        <div>
-                          <span className="font-medium text-slate-900 dark:text-slate-100">
-                            {row.assigned_to_name}
-                          </span>
-                          {row.assigned_to_code && (
-                            <span className="text-[10px] text-slate-400 font-mono ml-1">
-                              ({row.assigned_to_code})
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-[11px] text-slate-400 italic">Unassigned</span>
-                      )}
-                    </td>
-
-                    {/* 10. Work Status */}
-                    <td className="py-3 px-3.5">
-                      {renderWorkStatusBadge(row.work_status || row.operation_status || 'UNASSIGNED')}
-                    </td>
-
-                    {/* 11. Total Amount */}
-                    <td className="py-3 px-3.5 text-right font-mono font-bold text-slate-900 dark:text-white">
-                      {row.formatted_order_value}
-                    </td>
-
-                    {/* 12. Advance Amount */}
-                    <td className="py-3 px-3.5 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                      {row.formatted_amount_received}
-                    </td>
-
-                    {/* 13. Pending Amount */}
-                    <td className="py-3 px-3.5 text-right font-mono font-bold text-amber-600 dark:text-amber-400">
-                      {row.formatted_balance_amount}
-                    </td>
-
-                    {/* 14. Payment Status */}
-                    <td className="py-3 px-3.5 text-center">
-                      {renderPaymentBadge(row.payment_status)}
-                    </td>
-
-                    {/* 15. Proforma Inv. No. (Direct Inline Click-to-Edit) */}
-                    <td
-                      className="py-1.5 px-2 font-mono text-xs bg-indigo-50/20 dark:bg-indigo-950/10 min-w-[160px] relative group/cell"
-                      onClick={(e) => {
-                        if (!isCellActive(row.order_id, 'proforma_invoice_no')) {
-                          handleStartCellEdit(row.order_id, 'proforma_invoice_no', row.proforma_invoice_no, e);
-                        }
-                      }}
+                  return (
+                    <tr
+                      key={row.order_id}
+                      className={`transition-colors group ${
+                        hasUnread
+                          ? 'bg-blue-50/70 dark:bg-blue-950/40 border-l-4 border-l-blue-600 dark:border-l-blue-500 hover:bg-blue-100/60 dark:hover:bg-blue-900/50'
+                          : 'hover:bg-slate-50/80 dark:hover:bg-slate-800/40'
+                      }`}
                     >
-                      {isCellActive(row.order_id, 'proforma_invoice_no') ? (
-                        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                          <input
-                            ref={inputRef}
-                            type="text"
-                            autoFocus
-                            value={activeValue}
-                            onChange={(e) => setActiveValue(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
+                      {/* 1. S.No (Sticky) */}
+                      <td className="py-3 px-2 text-center font-mono text-slate-400 font-semibold sticky left-0 w-[52px] min-w-[52px] max-w-[52px] bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/80 z-20">
+                        {row.s_no}
+                      </td>
+
+                      {/* 2. Date */}
+                      <td className="py-3 px-3.5 text-slate-700 dark:text-slate-300 font-medium w-[100px] min-w-[100px]">
+                        {row.formatted_date || row.order_date}
+                      </td>
+
+                      {/* 3. Client Name (Sticky) */}
+                      <td className="py-3 px-3.5 font-semibold text-slate-900 dark:text-white sticky left-[52px] w-[180px] min-w-[180px] max-w-[180px] bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/80 z-20">
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <span className="truncate font-semibold" title={row.client_name}>
+                              {row.client_name}
+                            </span>
+                            {row.confirmation_status === 'CONFIRMED' && (
+                              <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 shrink-0">
+                                Confirmed
+                              </span>
+                            )}
+                          </div>
+                          <CompanyBadge
+                            companyName={row.company_name}
+                            companyCode={row.company_code}
+                            size="xs"
+                          />
+                        </div>
+                      </td>
+
+                      {/* 4. Location (Sticky) */}
+                      <td className="py-3 px-3.5 text-slate-600 dark:text-slate-300 sticky left-[232px] w-[140px] min-w-[140px] max-w-[140px] bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/80 z-20 shadow-[4px_0_8px_-2px_rgba(0,0,0,0.08)] dark:shadow-[4px_0_8px_-2px_rgba(0,0,0,0.35)] border-r border-slate-100 dark:border-slate-800">
+                        {row.location ? (
+                          <div className="inline-flex items-center gap-1 font-medium text-slate-700 dark:text-slate-300 truncate max-w-full" title={row.location}>
+                            <MapPin className="w-3 h-3 text-indigo-500 shrink-0" />
+                            <span className="truncate">{row.location}</span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
+
+                      {/* 5. Contact No */}
+                      <td className="py-3 px-3.5 text-slate-600 dark:text-slate-400 font-mono">
+                        {row.contact_no || '—'}
+                      </td>
+
+                      {/* 6. Source */}
+                      <td className="py-3 px-3.5">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                          {row.lead_source}
+                        </span>
+                      </td>
+
+                      {/* 7. Work */}
+                      <td className="py-3 px-4 text-slate-800 dark:text-slate-200 font-medium">
+                        {row.service_name}
+                      </td>
+
+                      {/* 8. Converted By */}
+                      <td className="py-3 px-3.5 text-slate-700 dark:text-slate-300">
+                        <div className="font-medium">{row.salesperson_name}</div>
+                        {row.salesperson_code && (
+                          <div className="text-[10px] text-slate-400 font-mono">{row.salesperson_code}</div>
+                        )}
+                      </td>
+
+                      {/* 9. Assigned To */}
+                      <td className="py-3 px-3.5 text-slate-600 dark:text-slate-400">
+                        {row.assigned_to_name && row.assigned_to_name !== 'Unassigned' ? (
+                          <div>
+                            <span className="font-medium text-slate-900 dark:text-slate-100">
+                              {row.assigned_to_name}
+                            </span>
+                            {row.assigned_to_code && (
+                              <span className="text-[10px] text-slate-400 font-mono ml-1">
+                                ({row.assigned_to_code})
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 italic">Unassigned</span>
+                        )}
+                      </td>
+
+                      {/* 10. Work Status */}
+                      <td className="py-3 px-3.5">
+                        {renderWorkStatusBadge(row.work_status || row.operation_status || 'UNASSIGNED')}
+                      </td>
+
+                      {/* 11. Total Amount */}
+                      <td className="py-3 px-3.5 text-right font-mono font-bold text-slate-900 dark:text-white">
+                        {row.formatted_order_value}
+                      </td>
+
+                      {/* 12. Advance Amount */}
+                      <td className="py-3 px-3.5 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                        {row.formatted_amount_received}
+                      </td>
+
+                      {/* 13. Pending Amount */}
+                      <td className="py-3 px-3.5 text-right font-mono font-bold text-amber-600 dark:text-amber-400">
+                        {row.formatted_balance_amount}
+                      </td>
+
+                      {/* 14. Payment Status */}
+                      <td className="py-3 px-3.5 text-center">
+                        {renderPaymentBadge(row.payment_status)}
+                      </td>
+
+                      {/* 15. Proforma Inv. No. (Direct Inline Click-to-Edit) */}
+                      <td
+                        className="py-1.5 px-2 font-mono text-xs bg-indigo-50/20 dark:bg-indigo-950/10 min-w-[160px] relative group/cell"
+                        onClick={(e) => {
+                          if (!isCellActive(row.order_id, 'proforma_invoice_no')) {
+                            handleStartCellEdit(row.order_id, 'proforma_invoice_no', row.proforma_invoice_no, e);
+                          }
+                        }}
+                      >
+                        {isCellActive(row.order_id, 'proforma_invoice_no') ? (
+                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              ref={inputRef}
+                              type="text"
+                              autoFocus
+                              value={activeValue}
+                              onChange={(e) => setActiveValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleCommitCellEdit(row.order_id, 'proforma_invoice_no', activeValue, row.proforma_invoice_no);
+                                } else if (e.key === 'Escape') {
+                                  setActiveCell(null);
+                                }
+                              }}
+                              onBlur={() => {
                                 handleCommitCellEdit(row.order_id, 'proforma_invoice_no', activeValue, row.proforma_invoice_no);
-                              } else if (e.key === 'Escape') {
-                                setActiveCell(null);
-                              }
-                            }}
-                            onBlur={() => {
-                              handleCommitCellEdit(row.order_id, 'proforma_invoice_no', activeValue, row.proforma_invoice_no);
-                            }}
-                            placeholder="Enter Proforma Inv #"
-                            className="w-full px-2 py-1 text-xs font-mono font-medium rounded-lg bg-white dark:bg-slate-800 border-2 border-indigo-500 text-slate-900 dark:text-white shadow-xs outline-hidden"
-                          />
-                          {isCellSaving(row.order_id, 'proforma_invoice_no') && (
-                            <RefreshCw className="w-3.5 h-3.5 text-indigo-600 animate-spin shrink-0" />
-                          )}
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-between gap-1.5 cursor-pointer py-1 px-1.5 rounded-lg hover:bg-indigo-100/60 dark:hover:bg-indigo-900/40 border border-transparent hover:border-indigo-300 dark:hover:border-indigo-700 transition">
-                          {row.proforma_invoice_no ? (
-                            <span className="inline-flex items-center gap-1 font-semibold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-md border border-indigo-200/60 dark:border-indigo-800 truncate">
-                              {row.proforma_invoice_no}
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 italic text-[11px]">Click to enter —</span>
-                          )}
-                          {lastSavedCell === `${row.order_id}_proforma_invoice_no` ? (
-                            <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                          ) : (
-                            <Edit className="w-3 h-3 text-indigo-400 opacity-0 group-hover/cell:opacity-100 shrink-0 transition" />
-                          )}
-                        </div>
-                      )}
-                    </td>
+                              }}
+                              placeholder="Enter Proforma Inv #"
+                              className="w-full px-2 py-1 text-xs font-mono font-medium rounded-lg bg-white dark:bg-slate-800 border-2 border-indigo-500 text-slate-900 dark:text-white shadow-xs outline-hidden"
+                            />
+                            {isCellSaving(row.order_id, 'proforma_invoice_no') && (
+                              <RefreshCw className="w-3.5 h-3.5 text-indigo-600 animate-spin shrink-0" />
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between gap-1.5 cursor-pointer py-1 px-1.5 rounded-lg hover:bg-indigo-100/60 dark:hover:bg-indigo-900/40 border border-transparent hover:border-indigo-300 dark:hover:border-indigo-700 transition">
+                            {row.proforma_invoice_no ? (
+                              <span className="inline-flex items-center gap-1 font-semibold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-md border border-indigo-200/60 dark:border-indigo-800 truncate">
+                                {row.proforma_invoice_no}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 italic text-[11px]">Click to enter —</span>
+                            )}
+                            {lastSavedCell === `${row.order_id}_proforma_invoice_no` ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            ) : (
+                              <Edit className="w-3 h-3 text-indigo-400 opacity-0 group-hover/cell:opacity-100 shrink-0 transition" />
+                            )}
+                          </div>
+                        )}
+                      </td>
 
-                    {/* 16. Tax Inv. No. (Direct Inline Click-to-Edit) */}
-                    <td
-                      className="py-1.5 px-2 font-mono text-xs bg-emerald-50/20 dark:bg-emerald-950/10 min-w-[160px] relative group/cell"
-                      onClick={(e) => {
-                        if (!isCellActive(row.order_id, 'tax_invoice_no')) {
-                          handleStartCellEdit(row.order_id, 'tax_invoice_no', row.tax_invoice_no, e);
-                        }
-                      }}
-                    >
-                      {isCellActive(row.order_id, 'tax_invoice_no') ? (
-                        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="text"
-                            autoFocus
-                            value={activeValue}
-                            onChange={(e) => setActiveValue(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
+                      {/* 16. Tax Inv. No. (Direct Inline Click-to-Edit) */}
+                      <td
+                        className="py-1.5 px-2 font-mono text-xs bg-emerald-50/20 dark:bg-emerald-950/10 min-w-[160px] relative group/cell"
+                        onClick={(e) => {
+                          if (!isCellActive(row.order_id, 'tax_invoice_no')) {
+                            handleStartCellEdit(row.order_id, 'tax_invoice_no', row.tax_invoice_no, e);
+                          }
+                        }}
+                      >
+                        {isCellActive(row.order_id, 'tax_invoice_no') ? (
+                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="text"
+                              autoFocus
+                              value={activeValue}
+                              onChange={(e) => setActiveValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleCommitCellEdit(row.order_id, 'tax_invoice_no', activeValue, row.tax_invoice_no);
+                                } else if (e.key === 'Escape') {
+                                  setActiveCell(null);
+                                }
+                              }}
+                              onBlur={() => {
                                 handleCommitCellEdit(row.order_id, 'tax_invoice_no', activeValue, row.tax_invoice_no);
-                              } else if (e.key === 'Escape') {
-                                setActiveCell(null);
-                              }
-                            }}
-                            onBlur={() => {
-                              handleCommitCellEdit(row.order_id, 'tax_invoice_no', activeValue, row.tax_invoice_no);
-                            }}
-                            placeholder="Enter Tax Inv #"
-                            className="w-full px-2 py-1 text-xs font-mono font-medium rounded-lg bg-white dark:bg-slate-800 border-2 border-emerald-500 text-slate-900 dark:text-white shadow-xs outline-hidden"
-                          />
-                          {isCellSaving(row.order_id, 'tax_invoice_no') && (
-                            <RefreshCw className="w-3.5 h-3.5 text-emerald-600 animate-spin shrink-0" />
-                          )}
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-between gap-1.5 cursor-pointer py-1 px-1.5 rounded-lg hover:bg-emerald-100/60 dark:hover:bg-emerald-900/40 border border-transparent hover:border-emerald-300 dark:hover:border-emerald-700 transition">
-                          {row.tax_invoice_no ? (
-                            <span className="inline-flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-200/60 dark:border-emerald-800 truncate">
-                              {row.tax_invoice_no}
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 italic text-[11px]">Click to enter —</span>
-                          )}
-                          {lastSavedCell === `${row.order_id}_tax_invoice_no` ? (
-                            <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                          ) : (
-                            <Edit className="w-3 h-3 text-emerald-400 opacity-0 group-hover/cell:opacity-100 shrink-0 transition" />
-                          )}
-                        </div>
-                      )}
-                    </td>
+                              }}
+                              placeholder="Enter Tax Inv #"
+                              className="w-full px-2 py-1 text-xs font-mono font-medium rounded-lg bg-white dark:bg-slate-800 border-2 border-emerald-500 text-slate-900 dark:text-white shadow-xs outline-hidden"
+                            />
+                            {isCellSaving(row.order_id, 'tax_invoice_no') && (
+                              <RefreshCw className="w-3.5 h-3.5 text-emerald-600 animate-spin shrink-0" />
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between gap-1.5 cursor-pointer py-1 px-1.5 rounded-lg hover:bg-emerald-100/60 dark:hover:bg-emerald-900/40 border border-transparent hover:border-emerald-300 dark:hover:border-emerald-700 transition">
+                            {row.tax_invoice_no ? (
+                              <span className="inline-flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-200/60 dark:border-emerald-800 truncate">
+                                {row.tax_invoice_no}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 italic text-[11px]">Click to enter —</span>
+                            )}
+                            {lastSavedCell === `${row.order_id}_tax_invoice_no` ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            ) : (
+                              <Edit className="w-3 h-3 text-emerald-400 opacity-0 group-hover/cell:opacity-100 shrink-0 transition" />
+                            )}
+                          </div>
+                        )}
+                      </td>
 
-                    {/* 17. Reimbursement Note (Direct Inline Click-to-Edit) */}
-                    <td
-                      className="py-1.5 px-2 text-xs bg-indigo-50/20 dark:bg-indigo-950/10 min-w-[200px] relative group/cell"
-                      onClick={(e) => {
-                        if (!isCellActive(row.order_id, 'reimbursement_note')) {
-                          handleStartCellEdit(row.order_id, 'reimbursement_note', row.reimbursement_note, e);
-                        }
-                      }}
-                    >
-                      {isCellActive(row.order_id, 'reimbursement_note') ? (
-                        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="text"
-                            autoFocus
-                            value={activeValue}
-                            onChange={(e) => setActiveValue(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
+                      {/* 17. Reimbursement Note (Direct Inline Click-to-Edit) */}
+                      <td
+                        className="py-1.5 px-2 text-xs bg-indigo-50/20 dark:bg-indigo-950/10 min-w-[200px] relative group/cell"
+                        onClick={(e) => {
+                          if (!isCellActive(row.order_id, 'reimbursement_note')) {
+                            handleStartCellEdit(row.order_id, 'reimbursement_note', row.reimbursement_note, e);
+                          }
+                        }}
+                      >
+                        {isCellActive(row.order_id, 'reimbursement_note') ? (
+                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="text"
+                              autoFocus
+                              value={activeValue}
+                              onChange={(e) => setActiveValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleCommitCellEdit(row.order_id, 'reimbursement_note', activeValue, row.reimbursement_note);
+                                } else if (e.key === 'Escape') {
+                                  setActiveCell(null);
+                                }
+                              }}
+                              onBlur={() => {
                                 handleCommitCellEdit(row.order_id, 'reimbursement_note', activeValue, row.reimbursement_note);
-                              } else if (e.key === 'Escape') {
-                                setActiveCell(null);
-                              }
-                            }}
-                            onBlur={() => {
-                              handleCommitCellEdit(row.order_id, 'reimbursement_note', activeValue, row.reimbursement_note);
-                            }}
-                            placeholder="Enter reimbursement note..."
-                            className="w-full px-2 py-1 text-xs rounded-lg bg-white dark:bg-slate-800 border-2 border-indigo-500 text-slate-900 dark:text-white shadow-xs outline-hidden"
-                          />
-                          {isCellSaving(row.order_id, 'reimbursement_note') && (
-                            <RefreshCw className="w-3.5 h-3.5 text-indigo-600 animate-spin shrink-0" />
-                          )}
+                              }}
+                              placeholder="Enter reimbursement note..."
+                              className="w-full px-2 py-1 text-xs rounded-lg bg-white dark:bg-slate-800 border-2 border-indigo-500 text-slate-900 dark:text-white shadow-xs outline-hidden"
+                            />
+                            {isCellSaving(row.order_id, 'reimbursement_note') && (
+                              <RefreshCw className="w-3.5 h-3.5 text-indigo-600 animate-spin shrink-0" />
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between gap-1.5 cursor-pointer py-1 px-1.5 rounded-lg hover:bg-indigo-100/60 dark:hover:bg-indigo-900/40 border border-transparent hover:border-indigo-300 dark:hover:border-indigo-700 transition" title={row.reimbursement_note || 'Click to edit'}>
+                            <span className="text-slate-700 dark:text-slate-300 truncate">
+                              {row.reimbursement_note || <span className="text-slate-400 italic text-[11px]">Click to enter —</span>}
+                            </span>
+                            {lastSavedCell === `${row.order_id}_reimbursement_note` ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            ) : (
+                              <Edit className="w-3 h-3 text-indigo-400 opacity-0 group-hover/cell:opacity-100 shrink-0 transition" />
+                            )}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* 18. Govt Fees */}
+                      <td className="py-3 px-3.5 text-right font-mono text-slate-600 dark:text-slate-400">
+                        {row.formatted_govt_fees}
+                      </td>
+
+                      {/* 19. Incidental Cost */}
+                      <td className="py-3 px-3.5 text-right font-mono text-slate-600 dark:text-slate-400">
+                        {row.formatted_incidental_cost}
+                      </td>
+
+                      {/* 20. Profits */}
+                      <td className="py-3 px-3.5 text-right font-mono font-bold text-emerald-700 dark:text-emerald-400">
+                        {row.formatted_profit_amount}
+                      </td>
+
+                      {/* 21. Remarks / Shared Conversation */}
+                      <td
+                        className="py-1.5 px-2 text-xs bg-indigo-50/20 dark:bg-indigo-950/10 min-w-[220px] relative group/cell cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConversationOrderId(row.order_id);
+                          setIsConversationOpen(true);
+                        }}
+                        title={unreadInfo?.latest_remark_text || row.remarks || row.notes || 'Click to open shared conversation thread'}
+                      >
+                        {hasUnread ? (
+                          <div className="flex flex-col gap-1 p-1.5 rounded-lg bg-blue-100/90 dark:bg-blue-900/60 border border-blue-300 dark:border-blue-700 hover:border-blue-400 transition shadow-xs">
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-600 text-white dark:bg-blue-500 shadow-xs">
+                                <MessageSquare className="w-2.5 h-2.5" />
+                                <span>New update ({unreadInfo?.unread_count})</span>
+                              </span>
+                              {unreadInfo?.latest_author_name && (
+                                <span className="text-[10px] font-semibold text-blue-800 dark:text-blue-300 truncate max-w-[80px]">
+                                  {unreadInfo.latest_author_name}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-xs text-slate-800 dark:text-slate-100 truncate font-medium">
+                              {unreadInfo?.latest_remark_text || row.remarks || row.notes}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between gap-1.5 py-1 px-1.5 rounded-lg hover:bg-indigo-100/60 dark:hover:bg-indigo-900/40 border border-transparent hover:border-indigo-300 dark:hover:border-indigo-700 transition">
+                            <span className="text-slate-700 dark:text-slate-300 truncate font-medium">
+                              {row.remarks || row.notes || <span className="text-slate-400 italic text-[11px]">Click to add remark —</span>}
+                            </span>
+                            <span className="p-1 rounded-md text-indigo-500 hover:text-indigo-700 hover:bg-white/80 dark:hover:bg-slate-800 transition shrink-0" title="Open Conversation Thread">
+                              <MessageSquare className="w-3.5 h-3.5" />
+                            </span>
+                          </div>
+                        )}
+                      </td>
+
+                      {/* 22. Action Column */}
+                      <td className="py-2.5 px-3 text-center sticky right-0 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/80 z-20 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.06)] border-l border-slate-200 dark:border-slate-800">
+                        <div className="flex items-center justify-center gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => handleStartCellEdit(row.order_id, 'proforma_invoice_no', row.proforma_invoice_no, e)}
+                            className="p-1.5 h-7 w-7 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-lg"
+                            title="Click to edit invoice details"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </Button>
                         </div>
-                      ) : (
-                        <div className="flex items-center justify-between gap-1.5 cursor-pointer py-1 px-1.5 rounded-lg hover:bg-indigo-100/60 dark:hover:bg-indigo-900/40 border border-transparent hover:border-indigo-300 dark:hover:border-indigo-700 transition" title={row.reimbursement_note || 'Click to edit'}>
-                          <span className="text-slate-700 dark:text-slate-300 truncate">
-                            {row.reimbursement_note || <span className="text-slate-400 italic text-[11px]">Click to enter —</span>}
-                          </span>
-                          {lastSavedCell === `${row.order_id}_reimbursement_note` ? (
-                            <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                          ) : (
-                            <Edit className="w-3 h-3 text-indigo-400 opacity-0 group-hover/cell:opacity-100 shrink-0 transition" />
-                          )}
-                        </div>
-                      )}
-                    </td>
-
-                    {/* 18. Govt Fees */}
-                    <td className="py-3 px-3.5 text-right font-mono text-slate-600 dark:text-slate-400">
-                      {row.formatted_govt_fees}
-                    </td>
-
-                    {/* 19. Incidental Cost */}
-                    <td className="py-3 px-3.5 text-right font-mono text-slate-600 dark:text-slate-400">
-                      {row.formatted_incidental_cost}
-                    </td>
-
-                    {/* 20. Profits */}
-                    <td className="py-3 px-3.5 text-right font-mono font-bold text-emerald-700 dark:text-emerald-400">
-                      {row.formatted_profit_amount}
-                    </td>
-
-                    {/* 21. Remarks / Shared Conversation */}
-                    <td
-                      className="py-1.5 px-2 text-xs bg-indigo-50/20 dark:bg-indigo-950/10 min-w-[220px] relative group/cell cursor-pointer"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setConversationOrderId(row.order_id);
-                        setIsConversationOpen(true);
-                      }}
-                      title="Click to open shared conversation thread"
-                    >
-                      <div className="flex items-center justify-between gap-1.5 py-1 px-1.5 rounded-lg hover:bg-indigo-100/60 dark:hover:bg-indigo-900/40 border border-transparent hover:border-indigo-300 dark:hover:border-indigo-700 transition">
-                        <span className="text-slate-700 dark:text-slate-300 truncate font-medium">
-                          {row.remarks || row.notes || <span className="text-slate-400 italic text-[11px]">Click to add remark —</span>}
-                        </span>
-                        <span className="p-1 rounded-md text-indigo-500 hover:text-indigo-700 hover:bg-white/80 dark:hover:bg-slate-800 transition shrink-0" title="Open Conversation Thread">
-                          <MessageSquare className="w-3.5 h-3.5" />
-                        </span>
-                      </div>
-                    </td>
-
-                    {/* 22. Action Column */}
-                    <td className="py-2.5 px-3 text-center sticky right-0 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/80 z-20 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.06)] border-l border-slate-200 dark:border-slate-800">
-                      <div className="flex items-center justify-center gap-1">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => handleStartCellEdit(row.order_id, 'proforma_invoice_no', row.proforma_invoice_no, e)}
-                          className="p-1.5 h-7 w-7 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-lg"
-                          title="Click to edit invoice details"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

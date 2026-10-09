@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useSearchParams } from 'react-router-dom';
 import {
   CheckSquare,
   Search,
@@ -17,11 +17,14 @@ import { TaskDetailModal } from '../../components/operations/TaskDetailModal';
 import { TaskConversationModal } from '../../components/conversation/TaskConversationModal';
 import { CompanyFilterTabs } from '../../components/common/CompanyFilterTabs';
 import { CompanyBadge } from '../../components/common/CompanyBadge';
+import { useRemarkNotification } from '../../context/RemarkNotificationContext';
 
 export const MyTasksPage: React.FC = () => {
   const context = useOutletContext<{
     addToast?: (type: 'success' | 'error' | 'info', title: string, message: string) => void;
   }>();
+  const [searchParams] = useSearchParams();
+  const { unreadSummary } = useRemarkNotification();
 
   const [taskListResponse, setTaskListResponse] = useState<OperationsTaskListResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,6 +46,15 @@ export const MyTasksPage: React.FC = () => {
   // Shared Task Conversation modal state
   const [conversationOrderId, setConversationOrderId] = useState<string | null>(null);
   const [isConversationOpen, setIsConversationOpen] = useState(false);
+
+  // Handle open_conversation_order_id query param
+  const openConversationParam = searchParams.get('open_conversation_order_id') || searchParams.get('open_order_id');
+  useEffect(() => {
+    if (openConversationParam) {
+      setConversationOrderId(openConversationParam);
+      setIsConversationOpen(true);
+    }
+  }, [openConversationParam]);
 
   const loadTasks = async () => {
     try {
@@ -298,117 +310,146 @@ export const MyTasksPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                {taskListResponse.items.map((task) => (
-                  <tr
-                    key={task.application_id}
-                    className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition cursor-pointer"
-                    onClick={() => openTaskDetail(task.application_id, 'overview')}
-                  >
-                    <td className="py-3.5 px-4 font-mono font-bold text-blue-600 dark:text-blue-400">
-                      {task.application_number}
-                    </td>
-                    <td className="py-3.5 px-4 font-mono text-slate-500">{task.sales_order_number || '—'}</td>
-                    <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-white">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span>{task.client_name}</span>
-                        <CompanyBadge
-                          companyName={task.company_name}
-                          companyCode={task.company_code}
-                          size="xs"
-                        />
-                      </div>
-                      {task.client_phone && (
-                        <div className="text-[11px] font-normal text-slate-400">{task.client_phone}</div>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                      {task.location ? (
-                        <span className="inline-flex items-center gap-1 font-medium text-slate-800 dark:text-slate-200">
-                          <MapPin className="w-3.5 h-3.5 text-blue-500 shrink-0 inline" />
-                          <span>{task.location}</span>
-                        </span>
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-4 font-semibold text-slate-700 dark:text-slate-300">
-                      {task.service_name}
-                    </td>
-                    <td className="py-3.5 px-4 text-slate-500">
-                      {task.salesperson_name || '—'}
-                      {task.salesperson_code && (
-                        <span className="text-[11px] text-slate-400"> ({task.salesperson_code})</span>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-4 text-slate-500">{task.formatted_assigned_at || '—'}</td>
-                    <td className="py-3.5 px-4">
-                      <span className={task.is_overdue ? 'text-red-600 font-bold' : 'text-slate-600 dark:text-slate-400'}>
-                        {task.formatted_due_date || 'No Date'}
-                        {task.is_overdue && ' ⚠️'}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4">{getPriorityBadge(task.priority)}</td>
-                    <td className="py-3.5 px-4">{getStatusBadge(task.application_status)}</td>
-                    <td
-                      className="py-3.5 px-4 max-w-[280px]"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (task.sales_order_id) {
-                          setConversationOrderId(task.sales_order_id);
-                          setIsConversationOpen(true);
-                        } else {
-                          openTaskDetail(task.application_id, 'remarks');
-                        }
-                      }}
+                {taskListResponse.items.map((task) => {
+                  const unreadInfo = task.sales_order_id ? unreadSummary?.unread_orders?.[task.sales_order_id] : undefined;
+                  const hasUnread = Boolean(unreadInfo && unreadInfo.unread_count > 0);
+
+                  return (
+                    <tr
+                      key={task.application_id}
+                      className={`transition cursor-pointer ${
+                        hasUnread
+                          ? 'bg-blue-50/70 dark:bg-blue-950/40 border-l-4 border-l-blue-600 dark:border-l-blue-500 hover:bg-blue-100/60 dark:hover:bg-blue-900/50'
+                          : 'hover:bg-slate-50/80 dark:hover:bg-slate-800/50'
+                      }`}
+                      onClick={() => openTaskDetail(task.application_id, 'overview')}
                     >
-                      {task.latest_remark ? (
-                        <div
-                          className="p-2 rounded-xl bg-slate-50/90 dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700/60 hover:border-blue-300 dark:hover:border-blue-700/70 hover:bg-blue-50/40 dark:hover:bg-blue-950/30 transition shadow-2xs cursor-pointer group"
-                          title={`${task.latest_remark.remark_text}\n— ${task.latest_remark.author_name} (${task.latest_remark.formatted_created_at || new Date(task.latest_remark.created_at).toLocaleDateString()})`}
-                        >
-                          <p className="text-xs text-slate-700 dark:text-slate-300 line-clamp-2 leading-relaxed font-normal whitespace-pre-wrap break-words">
-                            {task.latest_remark.remark_text}
-                          </p>
-                          <div className="flex items-center justify-between gap-1 text-[10px] text-slate-400 dark:text-slate-500 mt-1 pt-1 border-t border-slate-200/50 dark:border-slate-700/50">
-                            <span className="font-semibold text-slate-600 dark:text-slate-400 truncate max-w-[120px]">
-                              {task.latest_remark.author_name}
-                            </span>
-                            <span className="shrink-0 font-mono text-[9.5px]">
-                              {task.latest_remark.formatted_created_at ? task.latest_remark.formatted_created_at.split(',')[0] : new Date(task.latest_remark.created_at).toLocaleDateString()}
-                            </span>
-                          </div>
+                      <td className="py-3.5 px-4 font-mono font-bold text-blue-600 dark:text-blue-400">
+                        {task.application_number}
+                      </td>
+                      <td className="py-3.5 px-4 font-mono text-slate-500">{task.sales_order_number || '—'}</td>
+                      <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-white">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span>{task.client_name}</span>
+                          <CompanyBadge
+                            companyName={task.company_name}
+                            companyCode={task.company_code}
+                            size="xs"
+                          />
                         </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (task.sales_order_id) {
-                              setConversationOrderId(task.sales_order_id);
-                              setIsConversationOpen(true);
-                            }
-                          }}
-                          className="text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 italic text-[11px] flex items-center gap-1"
-                        >
-                          <MessageSquare className="w-3 h-3" />
-                          <span>No update yet</span>
-                        </button>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                      <div className="inline-flex items-center gap-1.5 justify-end">
-                        <button
-                          type="button"
-                          onClick={() => openTaskDetail(task.application_id, 'overview')}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-950 dark:text-blue-300 text-xs font-bold transition"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>Open Task</span>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                        {task.client_phone && (
+                          <div className="text-[11px] font-normal text-slate-400">{task.client_phone}</div>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                        {task.location ? (
+                          <span className="inline-flex items-center gap-1 font-medium text-slate-800 dark:text-slate-200">
+                            <MapPin className="w-3.5 h-3.5 text-blue-500 shrink-0 inline" />
+                            <span>{task.location}</span>
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 font-semibold text-slate-700 dark:text-slate-300">
+                        {task.service_name}
+                      </td>
+                      <td className="py-3.5 px-4 text-slate-500">
+                        {task.salesperson_name || '—'}
+                        {task.salesperson_code && (
+                          <span className="text-[11px] text-slate-400"> ({task.salesperson_code})</span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 text-slate-500">{task.formatted_assigned_at || '—'}</td>
+                      <td className="py-3.5 px-4">
+                        <span className={task.is_overdue ? 'text-red-600 font-bold' : 'text-slate-600 dark:text-slate-400'}>
+                          {task.formatted_due_date || 'No Date'}
+                          {task.is_overdue && ' ⚠️'}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4">{getPriorityBadge(task.priority)}</td>
+                      <td className="py-3.5 px-4">{getStatusBadge(task.application_status)}</td>
+                      <td
+                        className="py-3.5 px-4 max-w-[280px]"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (task.sales_order_id) {
+                            setConversationOrderId(task.sales_order_id);
+                            setIsConversationOpen(true);
+                          } else {
+                            openTaskDetail(task.application_id, 'remarks');
+                          }
+                        }}
+                      >
+                        {hasUnread ? (
+                          <div
+                            className="p-2 rounded-xl bg-blue-100/90 dark:bg-blue-900/60 border border-blue-300 dark:border-blue-700 hover:border-blue-400 transition shadow-xs cursor-pointer group flex flex-col gap-1"
+                            title={unreadInfo?.latest_remark_text || task.latest_remark?.remark_text}
+                          >
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-600 text-white dark:bg-blue-500 shadow-xs">
+                                <MessageSquare className="w-2.5 h-2.5" />
+                                <span>New update ({unreadInfo?.unread_count})</span>
+                              </span>
+                              {unreadInfo?.latest_author_name && (
+                                <span className="text-[10px] font-semibold text-blue-800 dark:text-blue-300 truncate max-w-[100px]">
+                                  {unreadInfo.latest_author_name}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-slate-800 dark:text-slate-100 line-clamp-2 leading-relaxed font-normal whitespace-pre-wrap break-words">
+                              {unreadInfo?.latest_remark_text || task.latest_remark?.remark_text}
+                            </p>
+                          </div>
+                        ) : task.latest_remark ? (
+                          <div
+                            className="p-2 rounded-xl bg-slate-50/90 dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700/60 hover:border-blue-300 dark:hover:border-blue-700/70 hover:bg-blue-50/40 dark:hover:bg-blue-950/30 transition shadow-2xs cursor-pointer group"
+                            title={`${task.latest_remark.remark_text}\n— ${task.latest_remark.author_name} (${task.latest_remark.formatted_created_at || new Date(task.latest_remark.created_at).toLocaleDateString()})`}
+                          >
+                            <p className="text-xs text-slate-700 dark:text-slate-300 line-clamp-2 leading-relaxed font-normal whitespace-pre-wrap break-words">
+                              {task.latest_remark.remark_text}
+                            </p>
+                            <div className="flex items-center justify-between gap-1 text-[10px] text-slate-400 dark:text-slate-500 mt-1 pt-1 border-t border-slate-200/50 dark:border-slate-700/50">
+                              <span className="font-semibold text-slate-600 dark:text-slate-400 truncate max-w-[120px]">
+                                {task.latest_remark.author_name}
+                              </span>
+                              <span className="shrink-0 font-mono text-[9.5px]">
+                                {task.latest_remark.formatted_created_at ? task.latest_remark.formatted_created_at.split(',')[0] : new Date(task.latest_remark.created_at).toLocaleDateString()}
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (task.sales_order_id) {
+                                setConversationOrderId(task.sales_order_id);
+                                setIsConversationOpen(true);
+                              }
+                            }}
+                            className="text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 italic text-[11px] flex items-center gap-1"
+                          >
+                            <MessageSquare className="w-3 h-3" />
+                            <span>No update yet</span>
+                          </button>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="inline-flex items-center gap-1.5 justify-end">
+                          <button
+                            type="button"
+                            onClick={() => openTaskDetail(task.application_id, 'overview')}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-950 dark:text-blue-300 text-xs font-bold transition"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Open Task</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

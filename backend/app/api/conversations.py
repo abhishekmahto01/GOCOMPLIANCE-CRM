@@ -12,10 +12,66 @@ from app.schemas.conversation import (
     ConversationMessageCreate,
     ConversationMessageRead,
     ConversationThreadResponse,
+    MarkReadRequest,
+    MarkReadResponse,
+    RemarkNotificationListResponse,
+    UnreadSummaryResponse,
 )
 from app.services import conversation_service, permissions
 
 router = APIRouter(prefix="/api/conversations", tags=["Shared Task Conversations"])
+
+
+@router.get(
+    "/unread-summary",
+    response_model=UnreadSummaryResponse,
+    summary="Get Unread Remarks Summary",
+    description="Retrieve unread remark counts and metadata aggregated across all authorized tasks for the authenticated user.",
+)
+def get_unread_summary(
+    current_user: User = Depends(require_fully_activated_user),
+    session: Session = Depends(get_db),
+):
+    """Return total unread count and map of order_id to unread summary."""
+    try:
+        return conversation_service.get_user_unread_summary(
+            session=session,
+            user=current_user,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch unread remarks summary: {str(e)}",
+        )
+
+
+@router.get(
+    "/notifications",
+    response_model=RemarkNotificationListResponse,
+    summary="Get Remark Notifications",
+    description="Retrieve paginated remark notifications for the notification bell dropdown with smart routing.",
+)
+def get_remark_notifications(
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(20, ge=1, le=100, description="Items per page"),
+    unread_only: bool = Query(False, description="Filter only unread notifications"),
+    current_user: User = Depends(require_fully_activated_user),
+    session: Session = Depends(get_db),
+):
+    """Return paginated remark notifications for current user with authorization checks."""
+    try:
+        return conversation_service.get_user_notifications_list(
+            session=session,
+            user=current_user,
+            page=page,
+            limit=limit,
+            unread_only=unread_only,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch notifications: {str(e)}",
+        )
 
 
 @router.get(
@@ -69,6 +125,7 @@ def post_conversation_message(
             user=current_user,
             order_id=order_id,
             message_text=payload.message_text,
+            originating_module=payload.originating_module,
             idempotency_key=payload.idempotency_key,
         )
         session.commit()
@@ -85,6 +142,46 @@ def post_conversation_message(
     except Exception:
         session.rollback()
         raise
+
+
+@router.post(
+    "/{order_id}/mark-read",
+    response_model=MarkReadResponse,
+    summary="Mark Rendered Messages as Read",
+    description="Explicitly mark rendered message IDs as read for the authenticated user.",
+)
+def mark_messages_read(
+    order_id: uuid.UUID,
+    payload: MarkReadRequest,
+    current_user: User = Depends(require_fully_activated_user),
+    session: Session = Depends(get_db),
+):
+    """Idempotently mark displayed message IDs as read for current user."""
+    try:
+        marked_count, valid_ids = conversation_service.mark_conversation_messages_as_read(
+            session=session,
+            user=current_user,
+            order_id=order_id,
+            message_ids=payload.message_ids,
+        )
+        session.commit()
+        return MarkReadResponse(
+            sales_order_id=order_id,
+            marked_read_count=marked_count,
+            read_message_ids=valid_ids,
+        )
+    except conversation_service.ConversationNotFoundError as e:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except permissions.PermissionDeniedError as e:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to mark messages as read: {str(e)}",
+        )
 
 
 @router.post(

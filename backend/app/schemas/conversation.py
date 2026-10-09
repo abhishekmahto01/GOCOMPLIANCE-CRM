@@ -1,4 +1,4 @@
-"""Pydantic schemas for Shared Task Conversation and Remarks."""
+"""Pydantic schemas for Shared Task Conversation, Remarks, and Per-User Read Receipts."""
 import json
 import uuid
 from datetime import datetime, timezone
@@ -30,6 +30,11 @@ class ConversationMessageCreate(BaseModel):
         max_length=3000,
         description="Remark / update text content",
     )
+    originating_module: Optional[str] = Field(
+        None,
+        max_length=30,
+        description="Optional module hint: SALES, OPERATIONS, ACCOUNTS",
+    )
     idempotency_key: Optional[str] = Field(
         None,
         max_length=100,
@@ -53,6 +58,7 @@ class ConversationMessageRead(BaseModel):
     author_user_id: Optional[uuid.UUID] = None
     message_type: str = Field(..., description="COMMENT or SYSTEM_EVENT")
     message_text: str
+    originating_module: Optional[str] = None
     author_name: str
     author_employee_code: Optional[str] = None
     author_department_name: Optional[str] = None
@@ -62,6 +68,7 @@ class ConversationMessageRead(BaseModel):
     created_at: datetime
     formatted_created_at: str
     is_mine: bool = False
+    is_read: bool = True
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -105,5 +112,92 @@ class ConversationThreadResponse(BaseModel):
     items: List[ConversationMessageRead]
     total_count: int
     has_more_older: bool = False
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MarkReadRequest(BaseModel):
+    """Payload for explicitly marking rendered message IDs as read for current user."""
+
+    message_ids: List[uuid.UUID] = Field(
+        ...,
+        min_length=1,
+        max_length=200,
+        description="List of explicitly displayed message IDs to mark read",
+    )
+
+
+class MarkReadResponse(BaseModel):
+    """Response returned after marking messages as read."""
+
+    sales_order_id: uuid.UUID
+    marked_read_count: int
+    read_message_ids: List[uuid.UUID]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UnreadOrderSummaryItem(BaseModel):
+    """Unread remarks metadata for a single sales order / compliance task."""
+
+    order_id: uuid.UUID
+    unread_count: int
+    latest_unread_id: Optional[uuid.UUID] = None
+    latest_remark_text: Optional[str] = None
+    latest_author_name: Optional[str] = None
+    latest_author_department: Optional[str] = None
+    latest_created_at: Optional[datetime] = None
+    formatted_latest_created_at: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UnreadSummaryResponse(BaseModel):
+    """Batch unread summary for authenticated user across all authorized tasks."""
+
+    total_unread_count: int
+    unread_orders: Dict[str, UnreadOrderSummaryItem] = Field(
+        default_factory=dict,
+        description="Map of sales_order_id (str) to UnreadOrderSummaryItem",
+    )
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RemarkNotificationItem(BaseModel):
+    """Single notification item for common notification bell dropdown."""
+
+    message_id: uuid.UUID
+    sales_order_id: uuid.UUID
+    order_number: str
+    client_name: str
+    service_name: str
+    location: Optional[str] = None
+    originating_module: Optional[str] = None
+    message_text: str
+    author_name: str
+    author_employee_code: Optional[str] = None
+    author_department_name: Optional[str] = None
+    author_role_name: Optional[str] = None
+    created_at: datetime
+    formatted_created_at: str
+    is_read: bool = False
+    target_route: str = Field(
+        ...,
+        description="Smart authorized deep-link URL for navigating directly to the entry & opening conversation",
+    )
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RemarkNotificationListResponse(BaseModel):
+    """Paginated list of remark notifications for notification bell."""
+
+    items: List[RemarkNotificationItem]
+    total_count: int
+    unread_count: int
+    page: int
+    limit: int
+    total_pages: int
 
     model_config = ConfigDict(from_attributes=True)

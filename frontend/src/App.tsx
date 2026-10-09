@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { RemarkNotificationProvider } from './context/RemarkNotificationContext';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { EmployeeListPage } from './pages/EmployeeListPage';
@@ -68,10 +69,11 @@ export const App: React.FC = () => {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <BrowserRouter>
-          <ImpersonationUrlHandler />
-          <ImpersonationBanner />
-          <Routes>
+        <RemarkNotificationProvider>
+          <BrowserRouter>
+            <ImpersonationUrlHandler />
+            <ImpersonationBanner />
+            <Routes>
           {/* Public Login Route */}
           <Route
             path="/login"
@@ -428,8 +430,9 @@ export const App: React.FC = () => {
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </BrowserRouter>
-    </AuthProvider>
-  </ThemeProvider>
+    </RemarkNotificationProvider>
+  </AuthProvider>
+</ThemeProvider>
   );
 };
 

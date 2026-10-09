@@ -67,7 +67,7 @@ export const ImpersonationUrlHandler: React.FC = () => {
       return;
     }
 
-    // User is authenticated Super Admin -> Execute impersonation
+    let isMounted = true;
     const targetCode = pendingTargetCode;
     isExecutingRef.current = true;
     setIsSwitching(true);
@@ -76,24 +76,32 @@ export const ImpersonationUrlHandler: React.FC = () => {
     const executeImpersonation = async () => {
       try {
         await startImpersonation(targetCode);
-        setPendingTargetCode(null);
-        setIsSwitching(false);
-        isExecutingRef.current = false;
+        if (isMounted) {
+          setPendingTargetCode(null);
+          setIsSwitching(false);
+          isExecutingRef.current = false;
 
-        // Navigate to default dashboard or target employee landing page
-        if (location.pathname === '/login' || location.pathname === '/') {
-          navigate('/dashboard', { replace: true });
+          // Navigate to default dashboard or target employee landing page
+          if (location.pathname === '/login' || location.pathname === '/') {
+            navigate('/dashboard', { replace: true });
+          }
         }
       } catch (err: unknown) {
-        setPendingTargetCode(null);
-        setIsSwitching(false);
-        isExecutingRef.current = false;
-        const msg = extractErrorMessage(err);
-        setErrorMessage(`Impersonation failed: ${msg}`);
+        if (isMounted) {
+          setPendingTargetCode(null);
+          setIsSwitching(false);
+          isExecutingRef.current = false;
+          const msg = extractErrorMessage(err);
+          setErrorMessage(`Impersonation failed: ${msg}`);
+        }
       }
     };
 
     executeImpersonation();
+
+    return () => {
+      isMounted = false;
+    };
   }, [
     pendingTargetCode,
     isLoading,

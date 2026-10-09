@@ -83,6 +83,7 @@ def test_registered_tables_in_metadata() -> None:
         "impersonation_sessions",
         "impersonation_audit_logs",
         "task_conversation_message",
+        "task_conversation_read_state",
         "operations_coordinator_config",
     }
 

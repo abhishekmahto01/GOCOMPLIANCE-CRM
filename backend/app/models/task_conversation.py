@@ -20,6 +20,7 @@ from app.database.base import Base
 
 if TYPE_CHECKING:
     from app.models.sales_order import SalesOrder
+    from app.models.task_conversation_read import TaskConversationReadState
     from app.models.user import User
 
 
@@ -94,6 +95,13 @@ class TaskConversationMessage(Base):
         comment="Message body or event description text",
     )
 
+    originating_module: Mapped[Optional[str]] = mapped_column(
+        String(30),
+        nullable=True,
+        index=True,
+        comment="Module where remark originated: SALES, OPERATIONS, ACCOUNTS, etc.",
+    )
+
     author_name: Mapped[str] = mapped_column(
         String(150),
         nullable=False,
@@ -156,6 +164,12 @@ class TaskConversationMessage(Base):
     author: Mapped[Optional["User"]] = relationship(
         "User",
         foreign_keys=[author_user_id],
+    )
+
+    read_states: Mapped[list["TaskConversationReadState"]] = relationship(
+        "TaskConversationReadState",
+        back_populates="message",
+        cascade="all, delete-orphan",
     )
 
     def __repr__(self) -> str:

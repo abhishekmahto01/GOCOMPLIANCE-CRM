@@ -2,6 +2,7 @@ import React from 'react';
 import { BrandLogo } from '../auth/BrandLogo';
 import { ThemeToggle } from './ThemeToggle';
 import { LiveClock } from './LiveClock';
+import { NotificationBell } from './NotificationBell';
 import { LogOut, KeyRound } from 'lucide-react';
 import type { AuthSession } from '../../utils/auth';
 
@@ -40,8 +41,11 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
           />
         </div>
 
-        {/* Right: Controls & User Profile (Order: Dark Mode | Live Time | User Profile | Password | Logout) */}
+        {/* Right: Controls & User Profile (Order: Notification Bell | Dark Mode | Live Time | User Profile | Password | Logout) */}
         <div className="flex flex-wrap items-center justify-end gap-2.5 sm:gap-3.5 w-full md:w-auto">
+          {/* Notification Bell */}
+          <NotificationBell />
+
           {/* 1. Theme Toggle */}
           <ThemeToggle theme={theme} onToggle={onToggleTheme} />
 

@@ -1,11 +1,14 @@
 /**
- * API client methods for Shared Task Conversation.
+ * API client methods for Shared Task Conversation and Remark Notifications.
  */
 import { apiClient } from './client';
 import type {
   ConversationMessage,
   ConversationThread,
+  MarkReadResponse,
   PostMessagePayload,
+  RemarkNotificationListResponse,
+  UnreadSummaryResponse,
 } from '../types/conversation';
 
 /**
@@ -70,5 +73,45 @@ export async function postTaskConversationByApplicationApi(
     `/operations/tasks/${applicationId}/conversation`,
     payload
   );
+  return response.data;
+}
+
+/**
+ * Retrieve aggregated unread summary for authenticated user across all authorized tasks.
+ */
+export async function getUnreadSummaryApi(): Promise<UnreadSummaryResponse> {
+  const response = await apiClient.get<UnreadSummaryResponse>('/conversations/unread-summary');
+  return response.data;
+}
+
+/**
+ * Retrieve paginated remark notifications for the notification bell dropdown.
+ */
+export async function getRemarkNotificationsApi(params?: {
+  page?: number;
+  limit?: number;
+  unread_only?: boolean;
+}): Promise<RemarkNotificationListResponse> {
+  const queryParams: Record<string, any> = {};
+  if (params?.page) queryParams.page = params.page;
+  if (params?.limit) queryParams.limit = params.limit;
+  if (params?.unread_only !== undefined) queryParams.unread_only = params.unread_only;
+
+  const response = await apiClient.get<RemarkNotificationListResponse>('/conversations/notifications', {
+    params: queryParams,
+  });
+  return response.data;
+}
+
+/**
+ * Explicitly mark displayed message IDs as read for the authenticated user.
+ */
+export async function markMessagesAsReadApi(
+  orderId: string,
+  messageIds: string[]
+): Promise<MarkReadResponse> {
+  const response = await apiClient.post<MarkReadResponse>(`/conversations/${orderId}/mark-read`, {
+    message_ids: messageIds,
+  });
   return response.data;
 }

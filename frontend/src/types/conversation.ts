@@ -1,5 +1,5 @@
 /**
- * TypeScript interfaces for Shared Task Conversation and Remarks.
+ * TypeScript interfaces for Shared Task Conversation, Remarks, and Per-User Read Receipts.
  */
 
 export interface ConversationMessage {
@@ -8,6 +8,7 @@ export interface ConversationMessage {
   author_user_id?: string | null;
   message_type: 'COMMENT' | 'SYSTEM_EVENT';
   message_text: string;
+  originating_module?: string | null;
   author_name: string;
   author_employee_code?: string | null;
   author_department_name?: string | null;
@@ -17,6 +18,7 @@ export interface ConversationMessage {
   created_at: string;
   formatted_created_at: string;
   is_mine: boolean;
+  is_read?: boolean;
 }
 
 export interface ConversationThread {
@@ -46,5 +48,60 @@ export interface ConversationThread {
 
 export interface PostMessagePayload {
   message_text: string;
+  originating_module?: string;
   idempotency_key?: string;
+}
+
+export interface MarkReadRequest {
+  message_ids: string[];
+}
+
+export interface MarkReadResponse {
+  sales_order_id: string;
+  marked_read_count: number;
+  read_message_ids: string[];
+}
+
+export interface UnreadOrderSummaryItem {
+  order_id: string;
+  unread_count: number;
+  latest_unread_id?: string | null;
+  latest_remark_text?: string | null;
+  latest_author_name?: string | null;
+  latest_author_department?: string | null;
+  latest_created_at?: string | null;
+  formatted_latest_created_at?: string | null;
+}
+
+export interface UnreadSummaryResponse {
+  total_unread_count: number;
+  unread_orders: Record<string, UnreadOrderSummaryItem>;
+}
+
+export interface RemarkNotificationItem {
+  message_id: string;
+  sales_order_id: string;
+  order_number: string;
+  client_name: string;
+  service_name: string;
+  location?: string | null;
+  originating_module?: string | null;
+  message_text: string;
+  author_name: string;
+  author_employee_code?: string | null;
+  author_department_name?: string | null;
+  author_role_name?: string | null;
+  created_at: string;
+  formatted_created_at: string;
+  is_read: boolean;
+  target_route: string;
+}
+
+export interface RemarkNotificationListResponse {
+  items: RemarkNotificationItem[];
+  total_count: number;
+  unread_count: number;
+  page: number;
+  limit: number;
+  total_pages: number;
 }
