@@ -17,10 +17,9 @@ class CompanyLookupRead(BaseModel):
 
 
 class DepartmentLookupRead(BaseModel):
-    """Minimal representation of a department for dependent dropdown lookups."""
+    """Minimal representation of a department for dropdown lookups."""
 
     department_id: uuid.UUID
-    company_id: Optional[uuid.UUID] = None
     department_code: str
     department_name: str
 
@@ -28,10 +27,9 @@ class DepartmentLookupRead(BaseModel):
 
 
 class DesignationLookupRead(BaseModel):
-    """Minimal representation of a designation for dependent dropdown lookups."""
+    """Minimal representation of a designation for dropdown lookups."""
 
     designation_id: uuid.UUID
-    company_id: Optional[uuid.UUID] = None
     designation_code: str
     designation_name: str
     level_rank: int

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
 import {
   CheckSquare,
@@ -10,6 +10,8 @@ import {
   ChevronRight,
   MapPin,
   MessageSquare,
+  User,
+  RotateCcw,
 } from 'lucide-react';
 import type { OperationsTaskListResponse } from '../../types/operations';
 import { getMyOperationsTasksApi } from '../../api/operations';
@@ -32,11 +34,32 @@ export const MyTasksPage: React.FC = () => {
 
   // Filters
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [clientName, setClientName] = useState('');
+  const [debouncedClientName, setDebouncedClientName] = useState('');
   const [companyId, setCompanyId] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [priorityFilter, setPriorityFilter] = useState('ALL');
   const [page, setPage] = useState(1);
   const limit = 20;
+
+  const currentRequestIdRef = useRef(0);
+
+  // Debounce search input (300ms)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // Debounce client name input (300ms)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedClientName(clientName.trim());
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [clientName]);
 
   // Selected task modal state
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
@@ -57,6 +80,7 @@ export const MyTasksPage: React.FC = () => {
   }, [openConversationParam]);
 
   const loadTasks = async () => {
+    const requestId = ++currentRequestIdRef.current;
     try {
       setLoading(true);
       setError(null);
@@ -67,25 +91,56 @@ export const MyTasksPage: React.FC = () => {
         company_id: companyId !== 'ALL' ? companyId : undefined,
         status: statusFilter !== 'ALL' ? statusFilter : undefined,
         priority: priorityFilter !== 'ALL' ? priorityFilter : undefined,
-        search: search.trim() || undefined,
+        search: debouncedSearch || undefined,
+        client_name: debouncedClientName || undefined,
       });
 
-      setTaskListResponse(data);
+      if (requestId === currentRequestIdRef.current) {
+        setTaskListResponse(data);
+      }
     } catch (err: any) {
-      setError(err?.response?.data?.detail || 'Failed to load your assigned tasks.');
+      if (requestId === currentRequestIdRef.current) {
+        setError(err?.response?.data?.detail || 'Failed to load your assigned tasks.');
+        setTaskListResponse(null);
+      }
     } finally {
-      setLoading(false);
+      if (requestId === currentRequestIdRef.current) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
     loadTasks();
-  }, [page, companyId, statusFilter, priorityFilter]);
+  }, [page, companyId, statusFilter, priorityFilter, debouncedSearch, debouncedClientName]);
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSearchChange = (val: string) => {
+    setSearch(val);
     setPage(1);
-    loadTasks();
+  };
+
+  const handleClientNameChange = (val: string) => {
+    setClientName(val);
+    setPage(1);
+  };
+
+  const hasActiveFilters = Boolean(
+    search ||
+    clientName ||
+    companyId !== 'ALL' ||
+    statusFilter !== 'ALL' ||
+    priorityFilter !== 'ALL'
+  );
+
+  const handleClearFilters = () => {
+    setSearch('');
+    setDebouncedSearch('');
+    setClientName('');
+    setDebouncedClientName('');
+    setCompanyId('ALL');
+    setStatusFilter('ALL');
+    setPriorityFilter('ALL');
+    setPage(1);
   };
 
   const openTaskDetail = (appId: string, tab: 'overview' | 'remarks' = 'overview') => {
@@ -146,7 +201,7 @@ export const MyTasksPage: React.FC = () => {
 
         <button
           type="button"
-          onClick={loadTasks}
+          onClick={() => loadTasks()}
           disabled={loading}
           className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-xs transition"
         >
@@ -215,63 +270,113 @@ export const MyTasksPage: React.FC = () => {
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col md:flex-row gap-3 items-center justify-between">
-        <form onSubmit={handleSearchSubmit} className="relative flex-1 w-full">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by client, service, application #, order #..."
-            className="w-full pl-10 pr-4 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-blue-500 outline-hidden transition"
-          />
-        </form>
+      <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-center">
+          {/* General Search */}
+          <div className="relative lg:col-span-5">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="Search by app #, order #, service, phone..."
+              className="w-full pl-10 pr-4 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-blue-500 outline-hidden transition"
+              aria-label="Search my tasks"
+            />
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+          {/* Dedicated Client Name Filter */}
+          <div className="relative lg:col-span-3">
+            <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={clientName}
+              onChange={(e) => handleClientNameChange(e.target.value)}
+              placeholder="Client Name (e.g. Varun)..."
+              className="w-full pl-10 pr-4 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-blue-500 outline-hidden transition"
+              aria-label="Client Name"
+            />
+          </div>
+
           {/* Status Filter */}
-          <select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setPage(1);
-            }}
-            className="px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 outline-hidden"
-          >
-            <option value="ALL">All Statuses</option>
-            <option value="ASSIGNED">Assigned</option>
-            <option value="IN_PROGRESS">In Progress</option>
-            <option value="PENDING_DOCUMENTS">Pending Documents</option>
-            <option value="READY_FOR_SUBMISSION">Ready for Submission</option>
-            <option value="SUBMITTED">Submitted</option>
-            <option value="AUTHORITY_QUERY">Authority Query</option>
-            <option value="APPROVED">Approved</option>
-            <option value="OVERDUE">Overdue</option>
-          </select>
+          <div className="lg:col-span-2">
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setPage(1);
+              }}
+              aria-label="Filter by Status"
+              className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 outline-hidden"
+            >
+              <option value="ALL">All Statuses</option>
+              <option value="ASSIGNED">Assigned</option>
+              <option value="IN_PROGRESS">In Progress</option>
+              <option value="PENDING_DOCUMENTS">Pending Documents</option>
+              <option value="READY_FOR_SUBMISSION">Ready for Submission</option>
+              <option value="SUBMITTED">Submitted</option>
+              <option value="AUTHORITY_QUERY">Authority Query</option>
+              <option value="APPROVED">Approved</option>
+              <option value="OVERDUE">Overdue</option>
+            </select>
+          </div>
 
           {/* Priority Filter */}
-          <select
-            value={priorityFilter}
-            onChange={(e) => {
-              setPriorityFilter(e.target.value);
-              setPage(1);
-            }}
-            className="px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 outline-hidden"
-          >
-            <option value="ALL">All Priorities</option>
-            <option value="LOW">Low</option>
-            <option value="MEDIUM">Medium</option>
-            <option value="HIGH">High</option>
-            <option value="URGENT">Urgent</option>
-          </select>
+          <div className="lg:col-span-1">
+            <select
+              value={priorityFilter}
+              onChange={(e) => {
+                setPriorityFilter(e.target.value);
+                setPage(1);
+              }}
+              aria-label="Filter by Priority"
+              className="w-full px-2.5 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 outline-hidden"
+            >
+              <option value="ALL">All Priority</option>
+              <option value="LOW">Low</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="HIGH">High</option>
+              <option value="URGENT">Urgent</option>
+            </select>
+          </div>
+
+          {/* Clear Filters Button */}
+          <div className="lg:col-span-1 flex justify-end">
+            <button
+              type="button"
+              onClick={handleClearFilters}
+              disabled={!hasActiveFilters}
+              className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border transition ${
+                hasActiveFilters
+                  ? 'border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer'
+                  : 'border-slate-100 dark:border-slate-800/50 bg-slate-50/50 dark:bg-slate-900/50 text-slate-400 dark:text-slate-600 cursor-not-allowed'
+              }`}
+              title="Clear all active filters"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Clear</span>
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Task List Table */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs overflow-hidden">
         {error && (
-          <div className="p-6 text-center text-red-600 dark:text-red-400 text-sm flex items-center justify-center gap-2">
-            <AlertCircle className="w-5 h-5" />
-            <span>{error}</span>
+          <div className="p-8 text-center bg-red-50/40 dark:bg-red-950/20 border-b border-red-200 dark:border-red-900/40 space-y-3">
+            <div className="inline-flex p-2.5 rounded-full bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400">
+              <AlertCircle className="w-5 h-5" />
+            </div>
+            <p className="text-sm font-semibold text-red-700 dark:text-red-300">{error}</p>
+            <div>
+              <button
+                type="button"
+                onClick={() => loadTasks()}
+                className="px-4 py-1.5 text-xs font-bold rounded-xl bg-red-600 hover:bg-red-700 text-white shadow-xs transition"
+              >
+                Retry
+              </button>
+            </div>
           </div>
         )}
 
@@ -282,7 +387,7 @@ export const MyTasksPage: React.FC = () => {
           </div>
         )}
 
-        {!loading && taskListResponse && taskListResponse.items.length === 0 && (
+        {!loading && !error && taskListResponse && taskListResponse.items.length === 0 && (
           <div className="py-20 text-center text-slate-400 space-y-2">
             <CheckSquare className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-700" />
             <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">No tasks found</p>

@@ -49,8 +49,8 @@ def validate_user_cross_company_integrity(
     """Validate cross-entity organizational integrity for an employee.
 
     Enforces business rules:
-    1. Department must belong to the selected Company and be ACTIVE.
-    2. Designation must belong to the selected Company and be ACTIVE.
+    1. Department must exist and be ACTIVE (global shared master).
+    2. Designation must exist and be ACTIVE (global shared master).
     3. Reporting Manager (if provided) must belong to the same Company and cannot be the user themselves.
 
     Args:
@@ -64,31 +64,23 @@ def validate_user_cross_company_integrity(
     Raises:
         ValueError: If any integrity constraint is violated.
     """
-    # 1. Validate Department
+    # 1. Validate Department (Global Shared Master)
     dept = session.execute(
         select(Department).where(Department.department_id == department_id)
     ).scalar_one_or_none()
 
     if not dept:
         raise ValueError(f"Department with ID '{department_id}' not found")
-    if dept.company_id is not None and dept.company_id != company_id:
-        raise ValueError(
-            f"Department '{dept.department_name}' ({dept.department_code}) does not belong to the selected company"
-        )
     if dept.status != "ACTIVE":
         raise ValueError(f"Department '{dept.department_name}' is inactive")
 
-    # 2. Validate Designation
+    # 2. Validate Designation (Global Shared Master)
     desig = session.execute(
         select(Designation).where(Designation.designation_id == designation_id)
     ).scalar_one_or_none()
 
     if not desig:
         raise ValueError(f"Designation with ID '{designation_id}' not found")
-    if desig.company_id is not None and desig.company_id != company_id:
-        raise ValueError(
-            f"Designation '{desig.designation_name}' ({desig.designation_code}) does not belong to the selected company"
-        )
     if desig.status != "ACTIVE":
         raise ValueError(f"Designation '{desig.designation_name}' is inactive")
 

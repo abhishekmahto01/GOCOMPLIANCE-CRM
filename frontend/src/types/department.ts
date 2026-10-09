@@ -6,7 +6,6 @@ export type DepartmentStatus = 'ACTIVE' | 'INACTIVE';
 
 export interface Department {
   department_id: string;
-  company_id?: string | null;
   department_code: string;
   department_name: string;
   description?: string | null;
@@ -16,7 +15,6 @@ export interface Department {
 }
 
 export interface DepartmentCreatePayload {
-  company_id?: string | null;
   department_code: string;
   department_name: string;
   description?: string | null;

@@ -1,14 +1,13 @@
-"""Idempotent seed script for initial company-specific department master records."""
+"""Idempotent seed script for global reusable department master records."""
 import logging
 import sys
 import uuid
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.database.session import SessionLocal
-from app.models.company import Company
 from app.models.department import Department
 
 logger = logging.getLogger("seed_departments")
@@ -42,6 +41,12 @@ DEFAULT_DEPARTMENTS: List[Dict[str, str]] = [
         "status": "ACTIVE",
     },
     {
+        "department_code": "ACCOUNTS",
+        "department_name": "Accounts",
+        "description": "Financial management, invoicing, billing, and accounting operations",
+        "status": "ACTIVE",
+    },
+    {
         "department_code": "RND",
         "department_name": "R&D",
         "description": "Research and development, technology solutions, and regulatory analysis",
@@ -50,77 +55,57 @@ DEFAULT_DEPARTMENTS: List[Dict[str, str]] = [
 ]
 
 
-def generate_department_uuid(company_code: str, department_code: str) -> uuid.UUID:
-    """Generate a deterministic UUIDv5 for a (company_code, department_code) pair."""
-    key = f"{company_code.upper()}:{department_code.upper()}"
+def generate_department_uuid(param1: str, param2: Optional[str] = None) -> uuid.UUID:
+    """Generate a deterministic UUIDv5 for a department_code globally (or company_code:department_code for legacy callers)."""
+    if param2 is not None:
+        key = param2.upper()
+    else:
+        key = param1.upper()
     return uuid.uuid5(NAMESPACE_DEPARTMENT, key)
 
 
 def seed_departments(db: Session) -> Tuple[int, int]:
-    """Idempotently seed the default 4 departments for all 3 required companies.
+    """Idempotently seed the default global reusable departments across all companies.
 
     Returns:
         Tuple[int, int]: (inserted_count, skipped_count)
-
-    Raises:
-        ValueError: If any of the required companies are missing in company_master.
     """
-    # 1. Resolve and validate all required companies
-    companies_by_code: Dict[str, Company] = {}
-    for code in REQUIRED_COMPANY_CODES:
-        comp = db.execute(
-            select(Company).where(Company.company_code == code)
-        ).scalar_one_or_none()
-
-        if comp is None:
-            raise ValueError(
-                f"Required company '{code}' not found in company_master. "
-                "Please run seed_companies first before seeding departments."
-            )
-        companies_by_code[code] = comp
-
     inserted = 0
     skipped = 0
 
-    # 2. Seed departments for each company
-    for comp_code, company in companies_by_code.items():
-        for dept_def in DEFAULT_DEPARTMENTS:
-            dept_code = dept_def["department_code"]
+    for dept_def in DEFAULT_DEPARTMENTS:
+        dept_code = dept_def["department_code"]
 
-            # Check if department already exists under this specific company
-            existing = db.execute(
-                select(Department).where(
-                    Department.company_id == company.company_id,
-                    Department.department_code == dept_code,
-                )
-            ).scalar_one_or_none()
-
-            if existing is not None:
-                skipped += 1
-                logger.info(
-                    "Department '%s' already exists for company '%s'. Skipping.",
-                    dept_code,
-                    comp_code,
-                )
-                continue
-
-            dept_id = generate_department_uuid(comp_code, dept_code)
-            new_dept = Department(
-                department_id=dept_id,
-                company_id=company.company_id,
-                department_code=dept_code,
-                department_name=dept_def["department_name"],
-                description=dept_def["description"],
-                status=dept_def["status"],
+        # Check if department already exists globally
+        existing = db.execute(
+            select(Department).where(
+                func.upper(Department.department_code) == dept_code.upper(),
             )
-            db.add(new_dept)
-            inserted += 1
+        ).scalar_one_or_none()
+
+        if existing is not None:
+            skipped += 1
             logger.info(
-                "Inserting department '%s' for company '%s' (ID: %s)",
+                "Department '%s' already exists globally. Skipping.",
                 dept_code,
-                comp_code,
-                dept_id,
             )
+            continue
+
+        dept_id = generate_department_uuid(dept_code)
+        new_dept = Department(
+            department_id=dept_id,
+            department_code=dept_code,
+            department_name=dept_def["department_name"],
+            description=dept_def["description"],
+            status=dept_def["status"],
+        )
+        db.add(new_dept)
+        inserted += 1
+        logger.info(
+            "Inserting global department '%s' (ID: %s)",
+            dept_code,
+            dept_id,
+        )
 
     db.commit()
     return inserted, skipped

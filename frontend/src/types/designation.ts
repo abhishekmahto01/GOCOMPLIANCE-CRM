@@ -6,7 +6,6 @@ export type DesignationStatus = 'ACTIVE' | 'INACTIVE';
 
 export interface Designation {
   designation_id: string;
-  company_id?: string | null;
   designation_code: string;
   designation_name: string;
   level_rank: number;
@@ -18,7 +17,6 @@ export interface Designation {
 }
 
 export interface DesignationCreatePayload {
-  company_id?: string | null;
   designation_code: string;
   designation_name: string;
   level_rank: number;

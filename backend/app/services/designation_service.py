@@ -2,7 +2,7 @@
 import uuid
 from typing import List, Optional
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 
 from app.models.designation import Designation
 from app.models.user import User
@@ -15,21 +15,18 @@ def list_designations(
     search: Optional[str] = None,
     status_filter: Optional[str] = None,
 ) -> List[Designation]:
-    """Retrieve all designations with optional company, search, and status filtering.
+    """Retrieve all global designations with optional search and status filtering.
 
     Args:
         session: Active SQLAlchemy session.
-        company_id: Optional UUID of parent company.
+        company_id: Ignored parameter for backwards compatibility (designations are global).
         search: Optional search term for code, name, or description.
         status_filter: Optional status ('ACTIVE' or 'INACTIVE').
 
     Returns:
-        List of Designation instances with eager loaded company.
+        List of Designation instances.
     """
-    stmt = select(Designation).options(joinedload(Designation.company))
-
-    if company_id:
-        stmt = stmt.where(Designation.company_id == company_id)
+    stmt = select(Designation)
 
     if status_filter and status_filter.strip().upper() in {"ACTIVE", "INACTIVE"}:
         stmt = stmt.where(Designation.status == status_filter.strip().upper())
@@ -49,17 +46,13 @@ def list_designations(
 
 
 def get_designation_by_id(session: Session, designation_id: uuid.UUID) -> Optional[Designation]:
-    """Retrieve a single designation by UUID primary key with company relationship."""
-    stmt = (
-        select(Designation)
-        .options(joinedload(Designation.company))
-        .where(Designation.designation_id == designation_id)
-    )
+    """Retrieve a single designation by UUID primary key."""
+    stmt = select(Designation).where(Designation.designation_id == designation_id)
     return session.execute(stmt).scalar_one_or_none()
 
 
 def create_designation(session: Session, desig_in: DesignationCreate) -> Designation:
-    """Create a new designation record ensuring global uniqueness.
+    """Create a new global designation record ensuring global uniqueness.
 
     Args:
         session: Active SQLAlchemy session.
@@ -94,7 +87,6 @@ def create_designation(session: Session, desig_in: DesignationCreate) -> Designa
 
     new_desig = Designation(
         designation_id=uuid.uuid4(),
-        company_id=desig_in.company_id,
         designation_code=norm_code,
         designation_name=norm_name,
         level_rank=desig_in.level_rank,

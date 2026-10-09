@@ -30,7 +30,6 @@ def admin_fixture(db_session: Session):
     db_session.flush()
 
     dept = Department(
-        company_id=company.company_id,
         department_code="ADMIN_DEPT",
         department_name="Admin Dept",
         status="ACTIVE",
@@ -39,7 +38,6 @@ def admin_fixture(db_session: Session):
     db_session.flush()
 
     desig = Designation(
-        company_id=company.company_id,
         designation_code="SUPER_ADMIN",
         designation_name="Super Administrator",
         level_rank=1,

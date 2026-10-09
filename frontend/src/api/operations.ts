@@ -22,6 +22,7 @@ export interface OperationsFilterParams {
   status?: string;
   priority?: string;
   search?: string;
+  client_name?: string;
   assigned_to_user_id?: string;
   company_id?: string;
   start_date?: string;
@@ -55,7 +56,8 @@ export async function getOperationsTasksApi(
   if (params?.limit) queryParams.limit = params.limit;
   if (params?.status && params.status !== 'ALL') queryParams.status = params.status;
   if (params?.priority && params.priority !== 'ALL') queryParams.priority = params.priority;
-  if (params?.search) queryParams.search = params.search;
+  if (params?.search && params.search.trim()) queryParams.search = params.search.trim();
+  if (params?.client_name && params.client_name.trim()) queryParams.client_name = params.client_name.trim();
   if (params?.assigned_to_user_id && params.assigned_to_user_id !== 'ALL') {
     queryParams.assigned_to_user_id = params.assigned_to_user_id;
   }
@@ -84,7 +86,8 @@ export async function getMyOperationsTasksApi(
   if (params?.limit) queryParams.limit = params.limit;
   if (params?.status && params.status !== 'ALL') queryParams.status = params.status;
   if (params?.priority && params.priority !== 'ALL') queryParams.priority = params.priority;
-  if (params?.search) queryParams.search = params.search;
+  if (params?.search && params.search.trim()) queryParams.search = params.search.trim();
+  if (params?.client_name && params.client_name.trim()) queryParams.client_name = params.client_name.trim();
   if (params?.assigned_to_user_id && params.assigned_to_user_id !== 'ALL') {
     queryParams.assigned_to_user_id = params.assigned_to_user_id;
   }
@@ -106,12 +109,13 @@ export async function getMyOperationsTasksApi(
  * List unassigned applications awaiting assignment.
  */
 export async function getUnassignedOperationsOrdersApi(
-  params?: { page?: number; limit?: number; search?: string; company_id?: string; sort_by?: string; sort_order?: string }
+  params?: { page?: number; limit?: number; search?: string; client_name?: string; company_id?: string; sort_by?: string; sort_order?: string }
 ): Promise<OperationsTaskListResponse> {
   const queryParams: Record<string, any> = {};
   if (params?.page) queryParams.page = params.page;
   if (params?.limit) queryParams.limit = params.limit;
-  if (params?.search) queryParams.search = params.search;
+  if (params?.search && params.search.trim()) queryParams.search = params.search.trim();
+  if (params?.client_name && params.client_name.trim()) queryParams.client_name = params.client_name.trim();
   if (params?.company_id && params.company_id !== 'ALL') {
     queryParams.company_id = params.company_id;
   }

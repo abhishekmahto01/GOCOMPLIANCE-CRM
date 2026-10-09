@@ -59,25 +59,21 @@ def multi_company_fixture(db_session: Session):
 
     # 2. Departments
     dept_sales_cg = Department(
-        company_id=comp_cg.company_id,
         department_code="SALES_CG",
         department_name="Sales Department CG",
         status="ACTIVE",
     )
     dept_ops_cg = Department(
-        company_id=comp_cg.company_id,
         department_code="OPERATIONS_CG",
         department_name="Operations Department CG",
         status="ACTIVE",
     )
     dept_sales_ec = Department(
-        company_id=comp_ec.company_id,
         department_code="SALES_EC",
         department_name="Sales Department EC",
         status="ACTIVE",
     )
     dept_ops_ec = Department(
-        company_id=comp_ec.company_id,
         department_code="OPERATIONS_EC",
         department_name="Operations Department EC",
         status="ACTIVE",
@@ -87,14 +83,12 @@ def multi_company_fixture(db_session: Session):
 
     # 3. Designations
     desig_exec = Designation(
-        company_id=comp_cg.company_id,
         designation_code="EXEC",
         designation_name="Executive",
         level_rank=1,
         status="ACTIVE",
     )
     desig_mgr = Designation(
-        company_id=comp_cg.company_id,
         designation_code="MGR",
         designation_name="Manager",
         level_rank=10,
@@ -390,7 +384,6 @@ def test_missing_or_inactive_company_rejects_sales_creation(db_session: Session,
     db_session.flush()
 
     dept_inact = Department(
-        company_id=comp_inact.company_id,
         department_code="SALES_INACT",
         department_name="Sales Inact",
         status="ACTIVE",
@@ -555,7 +548,6 @@ def test_missing_coordinator_creates_unassigned_work_item(db_session: Session, m
     db_session.flush()
 
     dept_bm = Department(
-        company_id=new_comp.company_id,
         department_code="SALES_BM",
         department_name="Sales BM",
         status="ACTIVE",

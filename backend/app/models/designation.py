@@ -7,7 +7,6 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
-    ForeignKey,
     Integer,
     String,
     UniqueConstraint,
@@ -20,12 +19,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import Base
 
 if TYPE_CHECKING:
-    from app.models.company import Company
     from app.models.user import User
 
 
 class Designation(Base):
-    """Designation Master table representing employee designations/job titles across companies."""
+    """Designation Master table representing global employee designations/job titles across all companies."""
 
     __tablename__ = "designation_master"
     __table_args__ = (
@@ -49,7 +47,7 @@ class Designation(Base):
             "designation_code ~ '^[A-Z_]+$'",
             name="chk_designation_code_format",
         ),
-        {"comment": "Master registry for employee designations in Gocompliances CRM"},
+        {"comment": "Global master registry for employee designations across all companies in Gocompliances CRM"},
     )
 
     designation_id: Mapped[uuid.UUID] = mapped_column(
@@ -60,28 +58,16 @@ class Designation(Base):
         comment="Unique identifier for the designation (UUIDv4)",
     )
 
-    company_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey(
-            "company_master.company_id",
-            ondelete="SET NULL",
-            name="fk_designation_company_id",
-        ),
-        nullable=True,
-        index=True,
-        comment="Optional foreign key referencing company_master.company_id",
-    )
-
     designation_code: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
-        comment="Uppercase designation code unique globally (e.g., EXECUTIVE, MANAGER)",
+        comment="Uppercase designation code unique globally (e.g., EXECUTIVE, SENIOR_EXECUTIVE, MANAGER, DIRECTOR)",
     )
 
     designation_name: Mapped[str] = mapped_column(
         String(100),
         nullable=False,
-        comment="Display job title of the designation (e.g., Executive, Manager, Director)",
+        comment="Display job title of the designation (e.g., Executive, Senior Executive, Manager, Director)",
     )
 
     level_rank: Mapped[int] = mapped_column(
@@ -125,12 +111,6 @@ class Designation(Base):
         server_default=func.now(),
         onupdate=func.now(),
         comment="Timestamp when designation record was last updated (UTC)",
-    )
-
-    # ORM Relationship to Company
-    company: Mapped["Company"] = relationship(
-        "Company",
-        back_populates="designations",
     )
 
     # ORM Relationship to User (Restrictive deletion; no cascade delete)

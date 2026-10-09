@@ -39,14 +39,12 @@ def impersonation_test_data(db_session: Session):
         department_id=uuid.uuid4(),
         department_code="DEPT_ADM",
         department_name="Administration",
-        company_id=comp.company_id,
         status="ACTIVE",
     )
     dept_sales = Department(
         department_id=uuid.uuid4(),
         department_code="DEPT_SALES",
         department_name="Sales & Marketing",
-        company_id=comp.company_id,
         status="ACTIVE",
     )
     db_session.add_all([dept_admin, dept_sales])

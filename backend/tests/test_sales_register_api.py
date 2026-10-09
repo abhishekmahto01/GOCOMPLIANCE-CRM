@@ -36,7 +36,6 @@ def sales_fixture(db_session: Session):
     db_session.flush()
 
     dept = Department(
-        company_id=company.company_id,
         department_code="SALES",
         department_name="Sales Department",
         status="ACTIVE",
@@ -45,14 +44,12 @@ def sales_fixture(db_session: Session):
     db_session.flush()
 
     desig_mgr = Designation(
-        company_id=company.company_id,
         designation_code="SALES_MGR",
         designation_name="Sales Manager",
         level_rank=10,
         status="ACTIVE",
     )
     desig_rep = Designation(
-        company_id=company.company_id,
         designation_code="SALES_REP",
         designation_name="Sales Representative",
         level_rank=5,
@@ -177,7 +174,6 @@ def sales_fixture(db_session: Session):
 
     # Operations Department and Designations
     dept_ops = Department(
-        company_id=company.company_id,
         department_code="OPERATIONS",
         department_name="Operations Department",
         status="ACTIVE",
@@ -186,14 +182,12 @@ def sales_fixture(db_session: Session):
     db_session.flush()
 
     desig_ops_head = Designation(
-        company_id=company.company_id,
         designation_code="OPS_HEAD",
         designation_name="Operations Head",
         level_rank=10,
         status="ACTIVE",
     )
     desig_ops_exec = Designation(
-        company_id=company.company_id,
         designation_code="OPS_EXEC",
         designation_name="Operations Executive",
         level_rank=4,

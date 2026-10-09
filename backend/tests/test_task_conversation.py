@@ -64,31 +64,26 @@ def conversation_test_fixture(db_session: Session):
 
     # 2. Departments
     dept_sales = Department(
-        company_id=company.company_id,
         department_code="SALES",
         department_name="Sales Department",
         status="ACTIVE",
     )
     dept_ops = Department(
-        company_id=company.company_id,
         department_code="OPERATIONS",
         department_name="Operations Department",
         status="ACTIVE",
     )
     dept_accounts = Department(
-        company_id=company.company_id,
         department_code="ACCOUNTS",
         department_name="Accounts Department",
         status="ACTIVE",
     )
     dept_mgmt = Department(
-        company_id=company.company_id,
         department_code="MANAGEMENT",
         department_name="Executive Management",
         status="ACTIVE",
     )
     dept_other = Department(
-        company_id=other_company.company_id,
         department_code="OTHER_DEPT",
         department_name="Other Department",
         status="ACTIVE",
@@ -98,35 +93,30 @@ def conversation_test_fixture(db_session: Session):
 
     # 3. Designations
     desig_sales = Designation(
-        company_id=company.company_id,
         designation_code="SALES_EXEC",
         designation_name="Sales Executive",
         level_rank=3,
         status="ACTIVE",
     )
     desig_ops = Designation(
-        company_id=company.company_id,
         designation_code="OPS_EXEC",
         designation_name="Operations Executive",
         level_rank=3,
         status="ACTIVE",
     )
     desig_accounts = Designation(
-        company_id=company.company_id,
         designation_code="ACC_EXEC",
         designation_name="Accounts Executive",
         level_rank=3,
         status="ACTIVE",
     )
     desig_director = Designation(
-        company_id=company.company_id,
         designation_code="SUPER_ADMIN",
         designation_name="Super Administrator",
         level_rank=10,
         status="ACTIVE",
     )
     desig_other = Designation(
-        company_id=other_company.company_id,
         designation_code="OTHER_DESIG",
         designation_name="Other Designation",
         level_rank=1,

@@ -65,7 +65,6 @@ def test_org_setup(db_session):
 
     dept = Department(
         department_id=uuid.uuid4(),
-        company_id=company.company_id,
         department_name="Engineering",
         department_code="ENG",
         status="ACTIVE",
@@ -75,7 +74,6 @@ def test_org_setup(db_session):
 
     desig = Designation(
         designation_id=uuid.uuid4(),
-        company_id=company.company_id,
         designation_name="Software Engineer",
         designation_code="SE",
         level_rank=1,

@@ -2,7 +2,7 @@
 import uuid
 from typing import List, Optional
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 
 from app.models.department import Department
 from app.models.user import User
@@ -15,21 +15,18 @@ def list_departments(
     search: Optional[str] = None,
     status_filter: Optional[str] = None,
 ) -> List[Department]:
-    """Retrieve all departments with optional company, search, and status filtering.
+    """Retrieve all global departments with optional search and status filtering.
 
     Args:
         session: Active SQLAlchemy session.
-        company_id: Optional UUID of parent company.
+        company_id: Ignored parameter for backwards compatibility (departments are global).
         search: Optional search term for code or name.
         status_filter: Optional status ('ACTIVE' or 'INACTIVE').
 
     Returns:
-        List of Department instances with eager loaded company.
+        List of Department instances.
     """
-    stmt = select(Department).options(joinedload(Department.company))
-
-    if company_id:
-        stmt = stmt.where(Department.company_id == company_id)
+    stmt = select(Department)
 
     if status_filter and status_filter.strip().upper() in {"ACTIVE", "INACTIVE"}:
         stmt = stmt.where(Department.status == status_filter.strip().upper())
@@ -49,17 +46,13 @@ def list_departments(
 
 
 def get_department_by_id(session: Session, department_id: uuid.UUID) -> Optional[Department]:
-    """Retrieve a single department by UUID primary key with company relationship."""
-    stmt = (
-        select(Department)
-        .options(joinedload(Department.company))
-        .where(Department.department_id == department_id)
-    )
+    """Retrieve a single department by UUID primary key."""
+    stmt = select(Department).where(Department.department_id == department_id)
     return session.execute(stmt).scalar_one_or_none()
 
 
 def create_department(session: Session, dept_in: DepartmentCreate) -> Department:
-    """Create a new department record ensuring global uniqueness.
+    """Create a new global department record ensuring global uniqueness.
 
     Args:
         session: Active SQLAlchemy session.
@@ -94,7 +87,6 @@ def create_department(session: Session, dept_in: DepartmentCreate) -> Department
 
     new_dept = Department(
         department_id=uuid.uuid4(),
-        company_id=dept_in.company_id,
         department_code=norm_code,
         department_name=norm_name,
         description=dept_in.description.strip() if dept_in.description else None,

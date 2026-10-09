@@ -45,26 +45,24 @@ def bootstrap_admin() -> None:
         dept_code = input("Enter Department Code (e.g., ADMINISTRATION): ").strip().upper()
         department = session.execute(
             select(Department).where(
-                Department.company_id == company.company_id,
-                Department.department_code == dept_code,
+                func.upper(Department.department_code) == dept_code,
             )
         ).scalar_one_or_none()
 
         if not department:
-            print(f"Error: Department '{dept_code}' not found for company '{company_code}'.")
+            print(f"Error: Department '{dept_code}' not found in master records.")
             sys.exit(1)
 
         # 3. Designation selection
         desig_code = input("Enter Designation Code (e.g., DIRECTOR): ").strip().upper()
         designation = session.execute(
             select(Designation).where(
-                Designation.company_id == company.company_id,
-                Designation.designation_code == desig_code,
+                func.upper(Designation.designation_code) == desig_code,
             )
         ).scalar_one_or_none()
 
         if not designation:
-            print(f"Error: Designation '{desig_code}' not found for company '{company_code}'.")
+            print(f"Error: Designation '{desig_code}' not found in master records.")
             sys.exit(1)
 
         # 4. Personal Information

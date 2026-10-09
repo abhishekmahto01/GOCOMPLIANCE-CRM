@@ -217,24 +217,6 @@ def delete_company(session: Session, target_company: Company) -> None:
             f"Cannot delete company '{target_company.company_name}' because {user_count} employee(s) are assigned to it. Please reassign or remove employees first, or mark the company as INACTIVE."
         )
 
-    # 2. Check for linked departments
-    dept_count = session.execute(
-        select(func.count(Department.department_id)).where(Department.company_id == target_company.company_id)
-    ).scalar() or 0
-    if dept_count > 0:
-        raise ValueError(
-            f"Cannot delete company '{target_company.company_name}' because {dept_count} department(s) are configured under it."
-        )
-
-    # 3. Check for linked designations
-    desig_count = session.execute(
-        select(func.count(Designation.designation_id)).where(Designation.company_id == target_company.company_id)
-    ).scalar() or 0
-    if desig_count > 0:
-        raise ValueError(
-            f"Cannot delete company '{target_company.company_name}' because {desig_count} designation(s) are configured under it."
-        )
-
     # 4. Check for sales orders
     order_count = session.execute(
         select(func.count(SalesOrder.order_id)).where(SalesOrder.company_id == target_company.company_id)

@@ -34,7 +34,6 @@ def sales_dashboard_fixture(db_session: Session):
     db_session.flush()
 
     dept = Department(
-        company_id=company.company_id,
         department_code="SALES",
         department_name="Sales Department",
         status="ACTIVE",
@@ -43,14 +42,12 @@ def sales_dashboard_fixture(db_session: Session):
     db_session.flush()
 
     desig_mgr = Designation(
-        company_id=company.company_id,
         designation_code="SALES_HEAD",
         designation_name="Sales Head",
         level_rank=10,
         status="ACTIVE",
     )
     desig_rep = Designation(
-        company_id=company.company_id,
         designation_code="SALES_EXEC",
         designation_name="Sales Executive",
         level_rank=5,
@@ -423,13 +420,11 @@ def test_sales_dashboard_empty_db_safety(client: TestClient, db_session: Session
     db_session.flush()
 
     dept = Department(
-        company_id=company.company_id,
         department_code="SALES",
         department_name="Sales",
         status="ACTIVE",
     )
     desig = Designation(
-        company_id=company.company_id,
         designation_code="DIR",
         designation_name="Director",
         level_rank=10,

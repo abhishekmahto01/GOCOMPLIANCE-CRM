@@ -132,13 +132,12 @@ def test_lookup_departments_success(
     test_department_id: uuid.UUID,
     mock_db_session: MagicMock,
 ) -> None:
-    """Verify departments lookup returns active departments filtered by company_id."""
+    """Verify departments lookup returns active departments."""
     app.dependency_overrides[get_current_active_user] = lambda: active_user
     app.dependency_overrides[get_db] = lambda: mock_db_session
 
     mock_dept = Department(
         department_id=test_department_id,
-        company_id=test_company_id,
         department_code="SALES",
         department_name="Sales",
         status="ACTIVE",
@@ -155,7 +154,7 @@ def test_lookup_departments_success(
              company_id=test_company_id,
              department_id=test_department_id,
          )):
-        res = client.get(f"/api/admin/lookup/departments?company_id={test_company_id}")
+        res = client.get("/api/admin/lookup/departments")
         assert res.status_code == status.HTTP_200_OK
         data = res.json()
         assert len(data) == 1
@@ -165,19 +164,18 @@ def test_lookup_departments_success(
     app.dependency_overrides.clear()
 
 
-def test_lookup_departments_common_master_with_null_company_id(
+def test_lookup_departments_common_master(
     client: TestClient,
     active_user: User,
     test_department_id: uuid.UUID,
     mock_db_session: MagicMock,
 ) -> None:
-    """Verify departments lookup successfully serializes global common master departments (company_id=None)."""
+    """Verify departments lookup successfully serializes global common master departments."""
     app.dependency_overrides[get_current_active_user] = lambda: active_user
     app.dependency_overrides[get_db] = lambda: mock_db_session
 
     mock_dept_accounts = Department(
         department_id=test_department_id,
-        company_id=None,
         department_code="ACCOUNTS",
         department_name="Accounts",
         status="ACTIVE",
@@ -194,7 +192,6 @@ def test_lookup_departments_common_master_with_null_company_id(
         assert len(data) == 1
         assert data[0]["department_code"] == "ACCOUNTS"
         assert data[0]["department_name"] == "Accounts"
-        assert data[0]["company_id"] is None
 
     app.dependency_overrides.clear()
 
@@ -207,13 +204,12 @@ def test_lookup_designations_success(
     test_designation_id: uuid.UUID,
     mock_db_session: MagicMock,
 ) -> None:
-    """Verify designations lookup returns active designations filtered by company_id."""
+    """Verify designations lookup returns active designations."""
     app.dependency_overrides[get_current_active_user] = lambda: active_user
     app.dependency_overrides[get_db] = lambda: mock_db_session
 
     mock_desig = Designation(
         designation_id=test_designation_id,
-        company_id=test_company_id,
         designation_code="MANAGER",
         designation_name="Manager",
         level_rank=5,
@@ -232,7 +228,7 @@ def test_lookup_designations_success(
              company_id=test_company_id,
              department_id=active_user.department_id,
          )):
-        res = client.get(f"/api/admin/lookup/designations?company_id={test_company_id}")
+        res = client.get("/api/admin/lookup/designations")
         assert res.status_code == status.HTTP_200_OK
         data = res.json()
         assert len(data) == 1

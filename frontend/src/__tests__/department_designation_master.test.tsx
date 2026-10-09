@@ -38,7 +38,6 @@ const mockCompanies: CompanyLookup[] = [
 const mockDepartments: Department[] = [
   {
     department_id: 'dept-1',
-    company_id: 'comp-1',
     department_code: 'SALES',
     department_name: 'Sales & BD',
     description: 'Direct sales and business development',
@@ -48,7 +47,6 @@ const mockDepartments: Department[] = [
   },
   {
     department_id: 'dept-2',
-    company_id: 'comp-1',
     department_code: 'OPERATIONS',
     department_name: 'Operations & Delivery',
     description: 'Processing and liaison',
@@ -61,7 +59,6 @@ const mockDepartments: Department[] = [
 const mockDesignations: Designation[] = [
   {
     designation_id: 'desig-1',
-    company_id: 'comp-1',
     designation_code: 'EXECUTIVE',
     designation_name: 'Executive',
     level_rank: 1,
@@ -73,7 +70,6 @@ const mockDesignations: Designation[] = [
   },
   {
     designation_id: 'desig-2',
-    company_id: 'comp-1',
     designation_code: 'MANAGER',
     designation_name: 'Operations Manager',
     level_rank: 5,
@@ -122,7 +118,6 @@ describe('Department & Designation Master Component Tests', () => {
     vi.spyOn(deptApi, 'getDepartmentsApi').mockResolvedValue(mockDepartments);
     const createSpy = vi.spyOn(deptApi, 'createDepartmentApi').mockResolvedValue({
       department_id: 'dept-3',
-      company_id: 'comp-1',
       department_code: 'FINANCE',
       department_name: 'Accounts & Finance',
       description: 'Invoicing and billing',
@@ -198,7 +193,6 @@ describe('Department & Designation Master Component Tests', () => {
     vi.spyOn(desigApi, 'getDesignationsApi').mockResolvedValue(mockDesignations);
     const createSpy = vi.spyOn(desigApi, 'createDesignationApi').mockResolvedValue({
       designation_id: 'desig-3',
-      company_id: null,
       designation_code: 'DIRECTOR',
       designation_name: 'Managing Director',
       level_rank: 10,

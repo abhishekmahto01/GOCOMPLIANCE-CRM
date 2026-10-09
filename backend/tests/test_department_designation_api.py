@@ -28,7 +28,6 @@ def admin_fixture(db_session: Session):
     db_session.flush()
 
     dept = Department(
-        company_id=company.company_id,
         department_code="ADMIN_DEPT",
         department_name="Admin Dept",
         status="ACTIVE",
@@ -37,7 +36,6 @@ def admin_fixture(db_session: Session):
     db_session.flush()
 
     desig = Designation(
-        company_id=company.company_id,
         designation_code="SUPER_ADMIN",
         designation_name="Super Administrator",
         level_rank=1,
@@ -95,7 +93,6 @@ def test_department_master_crud_flow(client: TestClient, admin_fixture):
 
     # 1. Create Department
     create_payload = {
-        "company_id": str(company.company_id),
         "department_code": "FINANCE",
         "department_name": "Finance & Audit",
         "description": "Tax and compliance auditing",
@@ -114,7 +111,7 @@ def test_department_master_crud_flow(client: TestClient, admin_fixture):
 
     # 2. List Departments
     list_res = client.get(
-        f"/api/admin/departments?company_id={company.company_id}",
+        "/api/admin/departments",
         headers=headers,
     )
     assert list_res.status_code == status.HTTP_200_OK
@@ -151,7 +148,6 @@ def test_designation_master_crud_flow(client: TestClient, admin_fixture):
 
     # 1. Create Designation
     create_payload = {
-        "company_id": str(company.company_id),
         "designation_code": "VP_OPERATIONS",
         "designation_name": "VP Operations",
         "level_rank": 8,
@@ -173,7 +169,7 @@ def test_designation_master_crud_flow(client: TestClient, admin_fixture):
 
     # 2. List Designations
     list_res = client.get(
-        f"/api/admin/designations?company_id={company.company_id}",
+        "/api/admin/designations",
         headers=headers,
     )
     assert list_res.status_code == status.HTTP_200_OK

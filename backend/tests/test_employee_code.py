@@ -112,22 +112,19 @@ def test_employee_code_inactive_or_missing_company() -> None:
     assert "inactive company" in str(exc_info.value)
 
 
-def test_cross_company_validation_department_mismatch() -> None:
-    """Verify department belonging to a different company is rejected."""
+def test_cross_company_validation_department_inactive() -> None:
+    """Verify inactive department is rejected during employee validation."""
     mock_session = MagicMock(spec=Session)
 
     comp_id = uuid.uuid4()
-    other_comp_id = uuid.uuid4()
     dept_id = uuid.uuid4()
     desig_id = uuid.uuid4()
 
-    # Department belongs to other_comp_id
     dept = Department(
         department_id=dept_id,
-        company_id=other_comp_id,
         department_code="SALES",
         department_name="Sales",
-        status="ACTIVE",
+        status="INACTIVE",
     )
     mock_session.execute.return_value.scalar_one_or_none.return_value = dept
 
@@ -138,28 +135,26 @@ def test_cross_company_validation_department_mismatch() -> None:
             department_id=dept_id,
             designation_id=desig_id,
         )
-    assert "does not belong to the selected company" in str(exc_info.value)
+    assert "is inactive" in str(exc_info.value)
 
 
 def test_cross_company_validation_common_master_department_and_designation_allowed() -> None:
-    """Verify common master department and designation (company_id=None) are valid for any company."""
+    """Verify global master department and designation are valid for any company."""
     mock_session = MagicMock(spec=Session)
 
     comp_id = uuid.uuid4()
     dept_id = uuid.uuid4()
     desig_id = uuid.uuid4()
 
-    # Department and Designation are Common Masters (company_id=None)
+    # Department and Designation are Global Reusable Masters
     dept = Department(
         department_id=dept_id,
-        company_id=None,
         department_code="ACCOUNTS",
         department_name="Accounts",
         status="ACTIVE",
     )
     desig = Designation(
         designation_id=desig_id,
-        company_id=None,
         designation_code="EXECUTIVE",
         designation_name="Executive",
         level_rank=1,
@@ -177,30 +172,26 @@ def test_cross_company_validation_common_master_department_and_designation_allow
     )
 
 
-
-def test_cross_company_validation_designation_mismatch() -> None:
-    """Verify designation belonging to a different company is rejected."""
+def test_cross_company_validation_designation_inactive() -> None:
+    """Verify inactive designation is rejected during employee validation."""
     mock_session = MagicMock(spec=Session)
 
     comp_id = uuid.uuid4()
-    other_comp_id = uuid.uuid4()
     dept_id = uuid.uuid4()
     desig_id = uuid.uuid4()
 
     dept = Department(
         department_id=dept_id,
-        company_id=comp_id,
         department_code="SALES",
         department_name="Sales",
         status="ACTIVE",
     )
     desig = Designation(
         designation_id=desig_id,
-        company_id=other_comp_id,
         designation_code="MANAGER",
         designation_name="Manager",
         level_rank=5,
-        status="ACTIVE",
+        status="INACTIVE",
     )
 
     # First scalar_one_or_none returns dept, second returns desig
@@ -213,7 +204,7 @@ def test_cross_company_validation_designation_mismatch() -> None:
             department_id=dept_id,
             designation_id=desig_id,
         )
-    assert "Designation 'Manager' (MANAGER) does not belong to the selected company" in str(exc_info.value)
+    assert "is inactive" in str(exc_info.value)
 
 
 def test_cross_company_validation_manager_mismatch() -> None:
@@ -228,14 +219,12 @@ def test_cross_company_validation_manager_mismatch() -> None:
 
     dept = Department(
         department_id=dept_id,
-        company_id=comp_id,
         department_code="SALES",
         department_name="Sales",
         status="ACTIVE",
     )
     desig = Designation(
         designation_id=desig_id,
-        company_id=comp_id,
         designation_code="EXECUTIVE",
         designation_name="Executive",
         level_rank=1,
@@ -278,14 +267,12 @@ def test_cross_company_validation_self_manager() -> None:
 
     dept = Department(
         department_id=dept_id,
-        company_id=comp_id,
         department_code="SALES",
         department_name="Sales",
         status="ACTIVE",
     )
     desig = Designation(
         designation_id=desig_id,
-        company_id=comp_id,
         designation_code="EXECUTIVE",
         designation_name="Executive",
         level_rank=1,
@@ -316,14 +303,12 @@ def test_create_user_service_success_and_rollback_on_failure() -> None:
 
     dept = Department(
         department_id=dept_id,
-        company_id=comp_id,
         department_code="SALES",
         department_name="Sales",
         status="ACTIVE",
     )
     desig = Designation(
         designation_id=desig_id,
-        company_id=comp_id,
         designation_code="EXECUTIVE",
         designation_name="Executive",
         level_rank=1,

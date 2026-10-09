@@ -10,21 +10,17 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 class DepartmentBase(BaseModel):
     """Base schema with common Department fields."""
 
-    company_id: Optional[uuid.UUID] = Field(
-        None,
-        description="Optional foreign key ID of company",
-    )
     department_code: str = Field(
         ...,
         min_length=2,
         max_length=30,
-        description="Uppercase department code unique per company (e.g. ADMINISTRATION, SALES)",
+        description="Uppercase department code unique globally (e.g. ADMINISTRATION, SALES, OPERATIONS, ACCOUNTS)",
     )
     department_name: str = Field(
         ...,
         min_length=1,
         max_length=100,
-        description="Display name of the department (e.g. Administration, Sales, R&D)",
+        description="Display name of the department (e.g. Administration, Sales, Operations, Accounts, R&D)",
     )
     description: Optional[str] = Field(
         None,

@@ -56,10 +56,9 @@ def sample_company() -> Company:
 
 
 @pytest.fixture
-def sample_department(sample_company: Company) -> Department:
+def sample_department() -> Department:
     return Department(
         department_id=uuid.uuid4(),
-        company_id=sample_company.company_id,
         department_code="ADMINISTRATION",
         department_name="Administration",
         status="ACTIVE",
@@ -67,10 +66,9 @@ def sample_department(sample_company: Company) -> Department:
 
 
 @pytest.fixture
-def sample_designation(sample_company: Company) -> Designation:
+def sample_designation() -> Designation:
     return Designation(
         designation_id=uuid.uuid4(),
-        company_id=sample_company.company_id,
         designation_code="DIRECTOR",
         designation_name="Director",
         status="ACTIVE",
@@ -254,11 +252,11 @@ def test_find_and_validate_department_success(
 def test_find_and_validate_department_not_found_or_mismatch(
     mock_session: MagicMock, sample_company: Company
 ) -> None:
-    """Verify department lookup fails when not found or mismatched with company."""
+    """Verify department lookup fails when not found."""
     mock_session.execute.return_value.scalar_one_or_none.return_value = None
     with pytest.raises(BootstrapError) as exc:
         find_and_validate_department(mock_session, sample_company.company_id, "UNKNOWN_DEPT")
-    assert "does not exist for the selected company" in str(exc.value)
+    assert "does not exist in master records" in str(exc.value)
 
 
 def test_find_and_validate_designation_success(

@@ -40,13 +40,11 @@ def ops_test_fixture(db_session: Session):
     db_session.flush()
 
     dept_ops = Department(
-        company_id=company.company_id,
         department_code="OPERATIONS",
         department_name="Operations Department",
         status="ACTIVE",
     )
     dept_sales = Department(
-        company_id=company.company_id,
         department_code="SALES",
         department_name="Sales Department",
         status="ACTIVE",
@@ -55,14 +53,12 @@ def ops_test_fixture(db_session: Session):
     db_session.flush()
 
     desig_head = Designation(
-        company_id=company.company_id,
         designation_code="OPS_HEAD",
         designation_name="Operations Head",
         level_rank=10,
         status="ACTIVE",
     )
     desig_exec = Designation(
-        company_id=company.company_id,
         designation_code="OPS_EXEC",
         designation_name="Operations Executive",
         level_rank=5,
@@ -583,7 +579,6 @@ class TestOperationsAPI:
 
         # 1. Query existing Sales Department and create sales user
         dept_sales = db_session.query(Department).filter(
-            Department.company_id == f["company"].company_id,
             Department.department_code == "SALES",
         ).first()
 
@@ -623,7 +618,6 @@ class TestOperationsAPI:
 
         # 3. Create Admin Department user and verify rejection
         dept_admin = Department(
-            company_id=f["company"].company_id,
             department_code="ADMIN",
             department_name="Administration Department",
             status="ACTIVE",
@@ -703,19 +697,16 @@ class TestOperationsAPI:
 
         # 1. Create Sales Department & Salesperson Karishma
         dept_sales = db_session.query(Department).filter(
-            Department.company_id == company.company_id,
             Department.department_code == "SALES",
         ).first()
 
         desig_sales_exec = Designation(
-            company_id=company.company_id,
             designation_code="SALES_EXEC",
             designation_name="Sales Executive",
             level_rank=5,
             status="ACTIVE",
         )
         desig_director = Designation(
-            company_id=company.company_id,
             designation_code="DIR",
             designation_name="Director",
             level_rank=20,

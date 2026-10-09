@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, List, Optional
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
-    ForeignKey,
     String,
     UniqueConstraint,
     func,
@@ -18,12 +17,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import Base
 
 if TYPE_CHECKING:
-    from app.models.company import Company
     from app.models.user import User
 
 
 class Department(Base):
-    """Department Master table representing organizational departments across companies."""
+    """Department Master table representing global organizational departments across all companies."""
 
     __tablename__ = "department_master"
     __table_args__ = (
@@ -43,7 +41,7 @@ class Department(Base):
             "department_code ~ '^[A-Z_]+$'",
             name="chk_department_code_format",
         ),
-        {"comment": "Master registry for departments in Gocompliances CRM"},
+        {"comment": "Global master registry for departments across all companies in Gocompliances CRM"},
     )
 
     department_id: Mapped[uuid.UUID] = mapped_column(
@@ -54,28 +52,16 @@ class Department(Base):
         comment="Unique identifier for the department (UUIDv4)",
     )
 
-    company_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey(
-            "company_master.company_id",
-            ondelete="SET NULL",
-            name="fk_department_company_id",
-        ),
-        nullable=True,
-        index=True,
-        comment="Optional foreign key referencing company_master.company_id",
-    )
-
     department_code: Mapped[str] = mapped_column(
         String(30),
         nullable=False,
-        comment="Uppercase department code unique globally (e.g., ADMINISTRATION, SALES)",
+        comment="Uppercase department code unique globally (e.g., ADMINISTRATION, SALES, OPERATIONS, ACCOUNTS)",
     )
 
     department_name: Mapped[str] = mapped_column(
         String(100),
         nullable=False,
-        comment="Display name of the department (e.g., Administration, Sales, R&D)",
+        comment="Display name of the department (e.g., Administration, Sales, Operations, Accounts, R&D)",
     )
 
     description: Mapped[Optional[str]] = mapped_column(
@@ -107,12 +93,6 @@ class Department(Base):
         comment="Timestamp when department record was last updated (UTC)",
     )
 
-    # ORM Relationship to Company
-    company: Mapped["Company"] = relationship(
-        "Company",
-        back_populates="departments",
-    )
-
     # ORM Relationship to User (Restrictive deletion; no cascade delete)
     users: Mapped[List["User"]] = relationship(
         "User",
@@ -125,6 +105,5 @@ class Department(Base):
         return (
             f"<Department(code='{self.department_code}', "
             f"name='{self.department_name}', "
-            f"company_id='{self.company_id}', "
             f"status='{self.status}')>"
         )

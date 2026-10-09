@@ -326,7 +326,6 @@ def test_company_delete_endpoint_permissions(client, db_session):
 
     # 2. Setup Super Admin
     sa_dept = Department(
-        company_id=dummy_company.company_id,
         department_code="ADMIN_CORP_DEPT",
         department_name="Admin Dept Corp",
         status="ACTIVE",
@@ -335,7 +334,6 @@ def test_company_delete_endpoint_permissions(client, db_session):
     db_session.flush()
 
     sa_desig = Designation(
-        company_id=dummy_company.company_id,
         designation_code="SUPER_ADMIN",
         designation_name="Super Administrator",
         level_rank=1,
@@ -362,7 +360,6 @@ def test_company_delete_endpoint_permissions(client, db_session):
 
     # 3. Setup Regular Admin
     reg_desig = Designation(
-        company_id=dummy_company.company_id,
         designation_code="CORP_MANAGER",
         designation_name="Corporate Manager",
         level_rank=2,

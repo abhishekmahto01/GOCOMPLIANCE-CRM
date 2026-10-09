@@ -1,14 +1,13 @@
-"""Idempotent seed script for initial company-specific designation master records."""
+"""Idempotent seed script for global reusable designation master records."""
 import logging
 import sys
 import uuid
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.database.session import SessionLocal
-from app.models.company import Company
 from app.models.designation import Designation
 
 logger = logging.getLogger("seed_designations")
@@ -74,81 +73,61 @@ DEFAULT_DESIGNATIONS: List[Dict[str, Any]] = [
 ]
 
 
-def generate_designation_uuid(company_code: str, designation_code: str) -> uuid.UUID:
-    """Generate a deterministic UUIDv5 for a (company_code, designation_code) pair."""
-    key = f"{company_code.upper()}:{designation_code.upper()}"
+def generate_designation_uuid(param1: str, param2: Optional[str] = None) -> uuid.UUID:
+    """Generate a deterministic UUIDv5 for a designation_code globally (or company_code:designation_code for legacy callers)."""
+    if param2 is not None:
+        key = param2.upper()
+    else:
+        key = param1.upper()
     return uuid.uuid5(NAMESPACE_DESIGNATION, key)
 
 
 def seed_designations(db: Session) -> Tuple[int, int]:
-    """Idempotently seed the 6 default designations for all 3 required companies.
+    """Idempotently seed the default global reusable designations across all companies.
 
     Returns:
         Tuple[int, int]: (inserted_count, skipped_count)
-
-    Raises:
-        ValueError: If any of the required companies are missing in company_master.
     """
-    # 1. Resolve and validate all required companies
-    companies_by_code: Dict[str, Company] = {}
-    for code in REQUIRED_COMPANY_CODES:
-        comp = db.execute(
-            select(Company).where(Company.company_code == code)
-        ).scalar_one_or_none()
-
-        if comp is None:
-            raise ValueError(
-                f"Required company '{code}' not found in company_master. "
-                "Please run seed_companies first before seeding designations."
-            )
-        companies_by_code[code] = comp
-
     inserted = 0
     skipped = 0
 
-    # 2. Seed designations for each company
-    for comp_code, company in companies_by_code.items():
-        for desig_def in DEFAULT_DESIGNATIONS:
-            desig_code = desig_def["designation_code"]
+    for desig_def in DEFAULT_DESIGNATIONS:
+        desig_code = desig_def["designation_code"]
 
-            # Check if designation already exists under this specific company
-            existing = db.execute(
-                select(Designation).where(
-                    Designation.company_id == company.company_id,
-                    Designation.designation_code == desig_code,
-                )
-            ).scalar_one_or_none()
-
-            if existing is not None:
-                skipped += 1
-                logger.info(
-                    "Designation '%s' already exists for company '%s'. Skipping.",
-                    desig_code,
-                    comp_code,
-                )
-                continue
-
-            desig_id = generate_designation_uuid(comp_code, desig_code)
-            new_desig = Designation(
-                designation_id=desig_id,
-                company_id=company.company_id,
-                designation_code=desig_code,
-                designation_name=desig_def["designation_name"],
-                level_rank=desig_def["level_rank"],
-                is_managerial=desig_def["is_managerial"],
-                description=desig_def["description"],
-                status=desig_def["status"],
+        # Check if designation already exists globally
+        existing = db.execute(
+            select(Designation).where(
+                func.upper(Designation.designation_code) == desig_code.upper(),
             )
-            db.add(new_desig)
-            inserted += 1
+        ).scalar_one_or_none()
+
+        if existing is not None:
+            skipped += 1
             logger.info(
-                "Inserting designation '%s' for company '%s' (ID: %s, Rank: %d, Managerial: %s)",
+                "Designation '%s' already exists globally. Skipping.",
                 desig_code,
-                comp_code,
-                desig_id,
-                desig_def["level_rank"],
-                desig_def["is_managerial"],
             )
+            continue
+
+        desig_id = generate_designation_uuid(desig_code)
+        new_desig = Designation(
+            designation_id=desig_id,
+            designation_code=desig_code,
+            designation_name=desig_def["designation_name"],
+            level_rank=desig_def["level_rank"],
+            is_managerial=desig_def["is_managerial"],
+            description=desig_def["description"],
+            status=desig_def["status"],
+        )
+        db.add(new_desig)
+        inserted += 1
+        logger.info(
+            "Inserting global designation '%s' (ID: %s, Rank: %d, Managerial: %s)",
+            desig_code,
+            desig_id,
+            desig_def["level_rank"],
+            desig_def["is_managerial"],
+        )
 
     db.commit()
     return inserted, skipped

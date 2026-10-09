@@ -79,13 +79,11 @@ def accounts_fixture(db_session: Session):
 
     # Departments
     dept_acc = Department(
-        company_id=company_a.company_id,
         department_code="ACCOUNTS",
         department_name="Accounts Department",
         status="ACTIVE",
     )
     dept_sales = Department(
-        company_id=company_a.company_id,
         department_code="SALES",
         department_name="Sales Department",
         status="ACTIVE",
@@ -95,21 +93,18 @@ def accounts_fixture(db_session: Session):
 
     # Designations
     desig_mgr = Designation(
-        company_id=company_a.company_id,
         designation_code="ACC_MGR",
         designation_name="Accounts Manager",
         level_rank=10,
         status="ACTIVE",
     )
     desig_sales = Designation(
-        company_id=company_a.company_id,
         designation_code="SALES_EXEC",
         designation_name="Sales Executive",
         level_rank=5,
         status="ACTIVE",
     )
     desig_admin = Designation(
-        company_id=company_a.company_id,
         designation_code="DIRECTOR",
         designation_name="Director / Super Admin",
         level_rank=20,

@@ -51,13 +51,11 @@ def test_setup_entities(db_session: Session):
     db_session.flush()
 
     dept_sales = Department(
-        company_id=company.company_id,
         department_code="SALES",
         department_name="Sales Department",
         status="ACTIVE",
     )
     dept_ops = Department(
-        company_id=company.company_id,
         department_code="OPERATIONS",
         department_name="Operations Department",
         status="ACTIVE",
@@ -66,7 +64,6 @@ def test_setup_entities(db_session: Session):
     db_session.flush()
 
     desig = Designation(
-        company_id=company.company_id,
         designation_code="EXECUTIVE",
         designation_name="Executive",
         level_rank=1,

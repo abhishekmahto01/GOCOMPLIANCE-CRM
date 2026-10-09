@@ -20,6 +20,7 @@ from app.models.operation_application import (
     OperationRemark,
 )
 from app.models.sales_order import SalesOrder
+from app.models.service import ServiceMaster
 from app.models.task_conversation import TaskConversationMessage
 from app.models.user import User
 from app.models.user_module_permission import UserModulePermission
@@ -499,6 +500,7 @@ def get_operations_tasks(
     status: Optional[str] = None,
     priority: Optional[str] = None,
     search: Optional[str] = None,
+    client_name: Optional[str] = None,
     assigned_to_user_id: Optional[uuid.UUID] = None,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
@@ -514,9 +516,9 @@ def get_operations_tasks(
 
     stmt = (
         select(OperationApplication)
-        .join(OperationApplication.sales_order)
-        .join(OperationApplication.client)
-        .join(OperationApplication.service)
+        .outerjoin(OperationApplication.sales_order)
+        .outerjoin(OperationApplication.client)
+        .outerjoin(OperationApplication.service)
         .options(
             joinedload(OperationApplication.company),
             joinedload(OperationApplication.client),
@@ -578,7 +580,11 @@ def get_operations_tasks(
     if end_date:
         stmt = stmt.where(func.date(OperationApplication.created_at) <= end_date)
 
-    if search:
+    if client_name and client_name.strip():
+        c_term = f"%{client_name.strip().lower()}%"
+        stmt = stmt.where(func.lower(ClientMaster.client_name).like(c_term))
+
+    if search and search.strip():
         s_term = f"%{search.strip().lower()}%"
         stmt = stmt.where(
             or_(
@@ -652,6 +658,7 @@ def get_my_tasks(
     status: Optional[str] = None,
     priority: Optional[str] = None,
     search: Optional[str] = None,
+    client_name: Optional[str] = None,
     assigned_to_user_id: Optional[uuid.UUID] = None,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
@@ -668,6 +675,7 @@ def get_my_tasks(
         status=status,
         priority=priority,
         search=search,
+        client_name=client_name,
         assigned_to_user_id=assigned_to_user_id,
         start_date=start_date,
         end_date=end_date,
@@ -684,6 +692,7 @@ def get_unassigned_operations_orders(
     page: int = 1,
     limit: int = 20,
     search: Optional[str] = None,
+    client_name: Optional[str] = None,
     sort_by: str = "created_at",
     sort_order: str = "desc",
     company_id: Optional[uuid.UUID] = None,
@@ -695,6 +704,7 @@ def get_unassigned_operations_orders(
         page=page,
         limit=limit,
         search=search,
+        client_name=client_name,
         sort_by=sort_by,
         sort_order=sort_order,
         unassigned_only=True,

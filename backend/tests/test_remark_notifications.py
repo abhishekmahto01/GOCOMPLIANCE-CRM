@@ -64,19 +64,19 @@ def notification_test_fixture(db_session: Session):
     db_session.flush()
 
     # 2. Departments
-    dept_sales = Department(company_id=company.company_id, department_code="SALES", department_name="Sales Department", status="ACTIVE")
-    dept_ops = Department(company_id=company.company_id, department_code="OPERATIONS", department_name="Operations Department", status="ACTIVE")
-    dept_acc = Department(company_id=company.company_id, department_code="ACCOUNTS", department_name="Accounts Department", status="ACTIVE")
-    dept_mgmt = Department(company_id=company.company_id, department_code="MGMT", department_name="Management", status="ACTIVE")
-    dept_other = Department(company_id=other_company.company_id, department_code="OTHER", department_name="Other Dept", status="ACTIVE")
+    dept_sales = Department(department_code="SALES", department_name="Sales Department", status="ACTIVE")
+    dept_ops = Department(department_code="OPERATIONS", department_name="Operations Department", status="ACTIVE")
+    dept_acc = Department(department_code="ACCOUNTS", department_name="Accounts Department", status="ACTIVE")
+    dept_mgmt = Department(department_code="MGMT", department_name="Management", status="ACTIVE")
+    dept_other = Department(department_code="OTHER", department_name="Other Dept", status="ACTIVE")
     db_session.add_all([dept_sales, dept_ops, dept_acc, dept_mgmt, dept_other])
     db_session.flush()
 
     # 3. Designations
-    desig_sales = Designation(company_id=company.company_id, designation_code="SALES_EXEC", designation_name="Sales Executive", level_rank=3, status="ACTIVE")
-    desig_ops = Designation(company_id=company.company_id, designation_code="OPS_EXEC", designation_name="Operations Executive", level_rank=3, status="ACTIVE")
-    desig_acc = Designation(company_id=company.company_id, designation_code="ACC_EXEC", designation_name="Accounts Executive", level_rank=3, status="ACTIVE")
-    desig_dir = Designation(company_id=company.company_id, designation_code="DIR", designation_name="Managing Director", level_rank=10, status="ACTIVE")
+    desig_sales = Designation(designation_code="SALES_EXEC", designation_name="Sales Executive", level_rank=3, status="ACTIVE")
+    desig_ops = Designation(designation_code="OPS_EXEC", designation_name="Operations Executive", level_rank=3, status="ACTIVE")
+    desig_acc = Designation(designation_code="ACC_EXEC", designation_name="Accounts Executive", level_rank=3, status="ACTIVE")
+    desig_dir = Designation(designation_code="DIR", designation_name="Managing Director", level_rank=10, status="ACTIVE")
     db_session.add_all([desig_sales, desig_ops, desig_acc, desig_dir])
     db_session.flush()
 

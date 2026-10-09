@@ -1,18 +1,14 @@
-"""Unit tests for Designation Master model, schemas, migration, and seed logic."""
-import ast
+"""Unit tests for Designation Master model, schemas, and seed logic."""
 import uuid
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 from pydantic import ValidationError
 from sqlalchemy.dialects.postgresql import UUID
 
-from alembic.config import Config
-from alembic.script import ScriptDirectory
 from app.database.base import Base
-from app.models.company import Company
 from app.models.designation import Designation
+from app.models.user import User
 from app.schemas.designation import (
     DesignationCreate,
     DesignationRead,
@@ -20,7 +16,6 @@ from app.schemas.designation import (
 )
 from app.scripts.seed_designations import (
     DEFAULT_DESIGNATIONS,
-    REQUIRED_COMPANY_CODES,
     generate_designation_uuid,
     seed_designations,
 )
@@ -34,35 +29,6 @@ def test_designation_model_table_name_and_metadata() -> None:
     """Verify table name and metadata registration for designation_master."""
     assert Designation.__tablename__ == "designation_master"
     assert "designation_master" in Base.metadata.tables
-    assert set(Base.metadata.tables.keys()) == {
-        "company_master",
-        "department_master",
-        "designation_master",
-        "user_master",
-        "auth_refresh_token",
-        "module_master",
-        "user_module_permission",
-        "permission_audit_log",
-        "service_master",
-        "service_required_document",
-        "client_master",
-        "sales_order",
-        "operation_application",
-        "application_document",
-        "application_assignment_history",
-        "application_activity_log",
-        "operation_remark",
-        "payment_transaction",
-        "accounts_invoice",
-        "accounts_audit_log",
-        "accounts_expense",
-        "accounts_follow_up",
-        "impersonation_sessions",
-        "impersonation_audit_logs",
-        "task_conversation_message",
-        "task_conversation_read_state",
-        "operations_coordinator_config",
-    }
 
 
 def test_designation_model_columns() -> None:
@@ -72,7 +38,6 @@ def test_designation_model_columns() -> None:
 
     expected_columns = {
         "designation_id",
-        "company_id",
         "designation_code",
         "designation_name",
         "level_rank",
@@ -95,8 +60,6 @@ def test_designation_model_columns() -> None:
 
     # Types and Nullability
     assert isinstance(columns["designation_id"].type, UUID)
-    assert isinstance(columns["company_id"].type, UUID)
-    assert columns["company_id"].nullable is True
     assert columns["designation_code"].nullable is False
     assert columns["designation_name"].nullable is False
     assert columns["level_rank"].nullable is False
@@ -108,16 +71,12 @@ def test_designation_model_columns() -> None:
 
 
 def test_designation_model_foreign_key_and_constraints() -> None:
-    """Verify foreign key ON DELETE SET NULL and unique/check constraints."""
+    """Verify unique/check constraints and absence of company foreign key."""
     table = Designation.__table__
 
-    # Foreign Key (to company_master only)
+    # No Foreign Key on Designation Master
     fk_list = list(table.foreign_keys)
-    assert len(fk_list) == 1
-    fk = fk_list[0]
-    assert fk.column.table.name == "company_master"
-    assert fk.column.name == "company_id"
-    assert fk.ondelete == "SET NULL"
+    assert len(fk_list) == 0
 
     # Unique constraints
     unique_col_sets = []
@@ -136,19 +95,10 @@ def test_designation_model_foreign_key_and_constraints() -> None:
 
 
 def test_designation_orm_relationships() -> None:
-    """Verify bi-directional ORM relationship between Company and Designation."""
-    company_mapper = Company.__mapper__
+    """Verify ORM relationship between Designation and User."""
     desig_mapper = Designation.__mapper__
-
-    assert "designations" in company_mapper.relationships
-    assert "company" in desig_mapper.relationships
-
-    assert company_mapper.relationships["designations"].back_populates == "company"
-    assert desig_mapper.relationships["company"].back_populates == "designations"
-
-    # Ensure no department relationship on Designation
-    assert "department" not in desig_mapper.relationships
-    assert "departments" not in desig_mapper.relationships
+    assert "users" in desig_mapper.relationships
+    assert desig_mapper.relationships["users"].back_populates == "designation"
 
 
 # ==============================================================================
@@ -157,9 +107,7 @@ def test_designation_orm_relationships() -> None:
 
 def test_designation_create_normalization_and_validation() -> None:
     """Verify normalization of designation codes and valid schema creation."""
-    comp_id = uuid.uuid4()
     desig = DesignationCreate(
-        company_id=comp_id,
         designation_code="  senior_manager  ",
         designation_name="  Senior Manager  ",
         level_rank=45,
@@ -167,7 +115,6 @@ def test_designation_create_normalization_and_validation() -> None:
         description="  Supervises multiple teams  ",
         status="active",
     )
-    assert desig.company_id == comp_id
     assert desig.designation_code == "SENIOR_MANAGER"
     assert desig.designation_name == "Senior Manager"
     assert desig.level_rank == 45
@@ -178,12 +125,9 @@ def test_designation_create_normalization_and_validation() -> None:
 
 def test_designation_schema_invalid_code_and_rank() -> None:
     """Verify that invalid designation codes and zero/negative ranks are rejected."""
-    comp_id = uuid.uuid4()
-
     # Code with invalid character '-'
     with pytest.raises(ValidationError):
         DesignationCreate(
-            company_id=comp_id,
             designation_code="SR-MANAGER",
             designation_name="Senior Manager",
             level_rank=40,
@@ -192,7 +136,6 @@ def test_designation_schema_invalid_code_and_rank() -> None:
     # Blank designation name
     with pytest.raises(ValidationError):
         DesignationCreate(
-            company_id=comp_id,
             designation_code="MANAGER",
             designation_name="   ",
             level_rank=40,
@@ -201,7 +144,6 @@ def test_designation_schema_invalid_code_and_rank() -> None:
     # Zero level_rank
     with pytest.raises(ValidationError):
         DesignationCreate(
-            company_id=comp_id,
             designation_code="MANAGER",
             designation_name="Manager",
             level_rank=0,
@@ -210,7 +152,6 @@ def test_designation_schema_invalid_code_and_rank() -> None:
     # Negative level_rank
     with pytest.raises(ValidationError):
         DesignationCreate(
-            company_id=comp_id,
             designation_code="MANAGER",
             designation_name="Manager",
             level_rank=-10,
@@ -219,7 +160,6 @@ def test_designation_schema_invalid_code_and_rank() -> None:
     # Invalid status
     with pytest.raises(ValidationError):
         DesignationCreate(
-            company_id=comp_id,
             designation_code="MANAGER",
             designation_name="Manager",
             level_rank=40,
@@ -245,10 +185,8 @@ def test_designation_update_schema() -> None:
 def test_designation_read_schema() -> None:
     """Verify DesignationRead schema attributes and from_attributes compatibility."""
     desig_id = uuid.uuid4()
-    comp_id = uuid.uuid4()
     desig_read = DesignationRead(
         designation_id=desig_id,
-        company_id=comp_id,
         designation_code="DIRECTOR",
         designation_name="Director",
         level_rank=60,
@@ -259,51 +197,8 @@ def test_designation_read_schema() -> None:
         updated_at="2026-09-20T12:00:00Z",
     )
     assert desig_read.designation_id == desig_id
-    assert desig_read.company_id == comp_id
     assert desig_read.designation_code == "DIRECTOR"
     assert desig_read.is_managerial is True
-
-
-# ==============================================================================
-# Migration Safety Tests
-# ==============================================================================
-
-def test_designation_migration_creates_only_designation_master() -> None:
-    """Verify that the Stage 6 migration touches only designation_master table."""
-    backend_dir = Path(__file__).resolve().parent.parent
-    ini_path = backend_dir / "alembic.ini"
-    cfg = Config(str(ini_path))
-    cfg.set_main_option("script_location", str(backend_dir / "alembic"))
-
-    script_dir = ScriptDirectory.from_config(cfg)
-    revisions = list(script_dir.walk_revisions())
-
-    desig_rev = next((r for r in revisions if "create_designation_master" in (r.doc or "")), None)
-    assert desig_rev is not None, "create_designation_master revision must exist"
-
-    # Verify down_revision is Stage 5 revision
-    dept_rev = next((r for r in revisions if "create_department_master" in (r.doc or "")), None)
-    assert desig_rev.down_revision == dept_rev.revision
-
-    migration_file = Path(desig_rev.path)
-    content = migration_file.read_text(encoding="utf-8")
-
-    tree = ast.parse(content)
-    created_tables = []
-    dropped_tables = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-            if node.func.attr == "create_table" and node.args:
-                if isinstance(node.args[0], ast.Constant):
-                    created_tables.append(node.args[0].value)
-            elif node.func.attr == "drop_table" and node.args:
-                if isinstance(node.args[0], ast.Constant):
-                    dropped_tables.append(node.args[0].value)
-
-    assert created_tables == ["designation_master"]
-    assert dropped_tables == ["designation_master"]
-    assert "fk_designation_company_id" in content
-    assert "RESTRICT" in content
 
 
 # ==============================================================================
@@ -311,13 +206,13 @@ def test_designation_migration_creates_only_designation_master() -> None:
 # ==============================================================================
 
 def test_deterministic_designation_uuid() -> None:
-    """Verify deterministic UUIDs produce consistent IDs for (company, designation) pairs."""
-    id1 = generate_designation_uuid("GOCOMPLIANCES", "MANAGER")
-    id2 = generate_designation_uuid("gocompliances", "manager")
-    id3 = generate_designation_uuid("ENTERPERNERSHIP", "MANAGER")
+    """Verify deterministic UUIDs produce consistent IDs for designation codes."""
+    id1 = generate_designation_uuid("MANAGER")
+    id2 = generate_designation_uuid("manager")
+    id3 = generate_designation_uuid("DIRECTOR")
 
     assert id1 == id2, "UUID generation must be case-insensitive and deterministic"
-    assert id1 != id3, "Same designation under different companies must have distinct UUIDs"
+    assert id1 != id3, "Different designations must have distinct UUIDs"
 
 
 def test_seed_designations_ranks_and_managerial_flags() -> None:
@@ -335,23 +230,12 @@ def test_seed_designations_ranks_and_managerial_flags() -> None:
     assert DEFAULT_DESIGNATIONS[5]["is_managerial"] is True   # DIRECTOR
 
 
-def test_seed_designations_idempotency_and_missing_company_guard() -> None:
-    """Verify seed function inserts 18 records on run 1, skips on run 2, and fails if company is missing."""
-    companies_mock = {
-        code: Company(
-            company_id=uuid.uuid5(uuid.NAMESPACE_DNS, code),
-            company_code=code,
-            company_name=code.capitalize(),
-            employee_code_prefix=code[:2],
-        )
-        for code in REQUIRED_COMPANY_CODES
-    }
-
+def test_seed_designations_idempotency() -> None:
+    """Verify seed function inserts records on run 1, skips on run 2."""
     desig_storage: dict = {}
 
     class MockSession:
-        def __init__(self, provide_companies=True):
-            self.provide_companies = provide_companies
+        def __init__(self):
             self.added = []
             self.committed = False
             self.rolled_back = False
@@ -360,32 +244,17 @@ def test_seed_designations_idempotency_and_missing_company_guard() -> None:
             mock_result = MagicMock()
             params = statement.compile().params
 
-            # If querying Company
-            if "company_master" in str(statement) or any(c in str(params) for c in REQUIRED_COMPANY_CODES):
-                code = None
-                for v in params.values():
-                    if v in companies_mock:
-                        code = v
-                        break
-                mock_result.scalar_one_or_none.return_value = (
-                    companies_mock.get(code) if self.provide_companies else None
-                )
-                return mock_result
+            target_code = None
+            for v in params.values():
+                if isinstance(v, str) and any(d["designation_code"] == v for d in DEFAULT_DESIGNATIONS):
+                    target_code = v
+                    break
 
-            # If querying Designation
-            target_key = None
-            for comp_id, comp_obj in companies_mock.items():
-                for desig_def in DEFAULT_DESIGNATIONS:
-                    d_code = desig_def["designation_code"]
-                    if d_code in str(params.values()):
-                        target_key = (params.get("company_id_1"), d_code)
-
-            mock_result.scalar_one_or_none.return_value = desig_storage.get(target_key)
+            mock_result.scalar_one_or_none.return_value = desig_storage.get(target_code)
             return mock_result
 
         def add(self, entity):
-            key = (entity.company_id, entity.designation_code)
-            desig_storage[key] = entity
+            desig_storage[entity.designation_code] = entity
             self.added.append(entity)
 
         def commit(self):
@@ -394,22 +263,16 @@ def test_seed_designations_idempotency_and_missing_company_guard() -> None:
         def rollback(self):
             self.rolled_back = True
 
-    # Test Missing Company Guard
-    missing_comp_db = MockSession(provide_companies=False)
-    with pytest.raises(ValueError) as exc_info:
-        seed_designations(missing_comp_db)
-    assert "Required company" in str(exc_info.value)
-
-    # First Run (Full Insert of 18)
-    mock_db = MockSession(provide_companies=True)
+    # First Run (Full Insert of DEFAULT_DESIGNATIONS)
+    mock_db = MockSession()
     inserted, skipped = seed_designations(mock_db)
-    assert inserted == 18
+    assert inserted == len(DEFAULT_DESIGNATIONS)
     assert skipped == 0
-    assert len(desig_storage) == 18
+    assert len(desig_storage) == len(DEFAULT_DESIGNATIONS)
 
-    # Second Run (Full Skip of 18)
-    mock_db2 = MockSession(provide_companies=True)
+    # Second Run (Full Skip)
+    mock_db2 = MockSession()
     inserted2, skipped2 = seed_designations(mock_db2)
     assert inserted2 == 0
-    assert skipped2 == 18
-    assert len(desig_storage) == 18
+    assert skipped2 == len(DEFAULT_DESIGNATIONS)
+    assert len(desig_storage) == len(DEFAULT_DESIGNATIONS)

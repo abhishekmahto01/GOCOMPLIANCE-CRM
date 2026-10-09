@@ -216,8 +216,8 @@ def test_get_user_permissions_bundle(
     mock_db.get.side_effect = lambda model, pk: {
         (User, standard_employee.user_id): standard_employee,
         (Company, standard_employee.company_id): Company(company_id=standard_employee.company_id, company_name="GoCompliances Org", company_code="GC", employee_code_prefix="GC", status="ACTIVE"),
-        (Department, standard_employee.department_id): Department(department_id=standard_employee.department_id, company_id=standard_employee.company_id, department_name="Admin", department_code="ADM", status="ACTIVE"),
-        (Designation, standard_employee.designation_id): Designation(designation_id=standard_employee.designation_id, company_id=standard_employee.company_id, designation_name="Exec", designation_code="EXE", level_rank=1, status="ACTIVE"),
+        (Department, standard_employee.department_id): Department(department_id=standard_employee.department_id, department_name="Admin", department_code="ADM", status="ACTIVE"),
+        (Designation, standard_employee.designation_id): Designation(designation_id=standard_employee.designation_id, designation_name="Exec", designation_code="EXE", level_rank=1, status="ACTIVE"),
     }.get((model, pk))
 
     mock_db.execute.return_value.all.return_value = []
@@ -237,8 +237,8 @@ def test_save_user_permissions_bundle(
     mock_db.get.side_effect = lambda model, pk: {
         (User, standard_employee.user_id): standard_employee,
         (Company, standard_employee.company_id): Company(company_id=standard_employee.company_id, company_name="GoCompliances Org", company_code="GC", employee_code_prefix="GC", status="ACTIVE"),
-        (Department, standard_employee.department_id): Department(department_id=standard_employee.department_id, company_id=standard_employee.company_id, department_name="Admin", department_code="ADM", status="ACTIVE"),
-        (Designation, standard_employee.designation_id): Designation(designation_id=standard_employee.designation_id, company_id=standard_employee.company_id, designation_name="Exec", designation_code="EXE", level_rank=1, status="ACTIVE"),
+        (Department, standard_employee.department_id): Department(department_id=standard_employee.department_id, department_name="Admin", department_code="ADM", status="ACTIVE"),
+        (Designation, standard_employee.designation_id): Designation(designation_id=standard_employee.designation_id, designation_name="Exec", designation_code="EXE", level_rank=1, status="ACTIVE"),
     }.get((model, pk))
 
     # Mock modules in database
@@ -289,8 +289,8 @@ def test_save_unsupported_action_rejected(
     mock_db.get.side_effect = lambda model, pk: {
         (User, standard_employee.user_id): standard_employee,
         (Company, standard_employee.company_id): Company(company_id=standard_employee.company_id, company_name="GoCompliances Org", company_code="GC", employee_code_prefix="GC", status="ACTIVE"),
-        (Department, standard_employee.department_id): Department(department_id=standard_employee.department_id, company_id=standard_employee.company_id, department_name="Admin", department_code="ADM", status="ACTIVE"),
-        (Designation, standard_employee.designation_id): Designation(designation_id=standard_employee.designation_id, company_id=standard_employee.company_id, designation_name="Exec", designation_code="EXE", level_rank=1, status="ACTIVE"),
+        (Department, standard_employee.department_id): Department(department_id=standard_employee.department_id, department_name="Admin", department_code="ADM", status="ACTIVE"),
+        (Designation, standard_employee.designation_id): Designation(designation_id=standard_employee.designation_id, designation_name="Exec", designation_code="EXE", level_rank=1, status="ACTIVE"),
     }.get((model, pk))
 
     mock_db.execute.return_value.all.return_value = []
@@ -341,8 +341,8 @@ def test_copy_user_permissions_service(
         (User, standard_employee.user_id): standard_employee,
         (User, target_user.user_id): target_user,
         (Company, standard_employee.company_id): Company(company_id=standard_employee.company_id, company_name="GoCompliances Org", company_code="GC", employee_code_prefix="GC", status="ACTIVE"),
-        (Department, standard_employee.department_id): Department(department_id=standard_employee.department_id, company_id=standard_employee.company_id, department_name="Admin", department_code="ADM", status="ACTIVE"),
-        (Designation, standard_employee.designation_id): Designation(designation_id=standard_employee.designation_id, company_id=standard_employee.company_id, designation_name="Exec", designation_code="EXE", level_rank=1, status="ACTIVE"),
+        (Department, standard_employee.department_id): Department(department_id=standard_employee.department_id, department_name="Admin", department_code="ADM", status="ACTIVE"),
+        (Designation, standard_employee.designation_id): Designation(designation_id=standard_employee.designation_id, designation_name="Exec", designation_code="EXE", level_rank=1, status="ACTIVE"),
     }.get((model, pk))
 
     mock_db.execute.return_value.all.return_value = []

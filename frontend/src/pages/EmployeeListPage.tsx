@@ -180,10 +180,8 @@ export const EmployeeListPage: React.FC = () => {
       } else {
         next.delete(key);
       }
-      // If company changed, reset department and designation filters
+      // If company changed, reset company-specific manager filter
       if (key === 'company_id') {
-        next.delete('department_id');
-        next.delete('designation_id');
         next.delete('manager_user_id');
       }
       next.set('page', '1');

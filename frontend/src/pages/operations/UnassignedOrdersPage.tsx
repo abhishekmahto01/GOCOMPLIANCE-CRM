@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import {
   Clock,
@@ -11,6 +11,8 @@ import {
   ChevronRight,
   UserPlus,
   MapPin,
+  User,
+  RotateCcw,
 } from 'lucide-react';
 import type {
   AssigneeOption,
@@ -35,9 +37,30 @@ export const UnassignedOrdersPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [clientName, setClientName] = useState('');
+  const [debouncedClientName, setDebouncedClientName] = useState('');
   const [companyId, setCompanyId] = useState('ALL');
   const [page, setPage] = useState(1);
   const limit = 20;
+
+  const currentRequestIdRef = useRef(0);
+
+  // Debounce search input (300ms)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // Debounce client name input (300ms)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedClientName(clientName.trim());
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [clientName]);
 
   // Assignee options
   const [eligibleAssignees, setEligibleAssignees] = useState<AssigneeOption[]>([]);
@@ -55,6 +78,7 @@ export const UnassignedOrdersPage: React.FC = () => {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
   const loadUnassigned = async () => {
+    const requestId = ++currentRequestIdRef.current;
     try {
       setLoading(true);
       setError(null);
@@ -62,13 +86,21 @@ export const UnassignedOrdersPage: React.FC = () => {
         page,
         limit,
         company_id: companyId !== 'ALL' ? companyId : undefined,
-        search: search.trim() || undefined,
+        search: debouncedSearch || undefined,
+        client_name: debouncedClientName || undefined,
       });
-      setTaskListResponse(data);
+      if (requestId === currentRequestIdRef.current) {
+        setTaskListResponse(data);
+      }
     } catch (err: any) {
-      setError(err?.response?.data?.detail || 'Failed to load unassigned applications.');
+      if (requestId === currentRequestIdRef.current) {
+        setError(err?.response?.data?.detail || 'Failed to load unassigned applications.');
+        setTaskListResponse(null);
+      }
     } finally {
-      setLoading(false);
+      if (requestId === currentRequestIdRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -83,13 +115,35 @@ export const UnassignedOrdersPage: React.FC = () => {
 
   useEffect(() => {
     loadUnassigned();
-    loadAssignees();
-  }, [page, companyId]);
+  }, [page, companyId, debouncedSearch, debouncedClientName]);
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
+  useEffect(() => {
+    loadAssignees();
+  }, []);
+
+  const handleSearchChange = (val: string) => {
+    setSearch(val);
     setPage(1);
-    loadUnassigned();
+  };
+
+  const handleClientNameChange = (val: string) => {
+    setClientName(val);
+    setPage(1);
+  };
+
+  const hasActiveFilters = Boolean(
+    search ||
+    clientName ||
+    companyId !== 'ALL'
+  );
+
+  const handleClearFilters = () => {
+    setSearch('');
+    setDebouncedSearch('');
+    setClientName('');
+    setDebouncedClientName('');
+    setCompanyId('ALL');
+    setPage(1);
   };
 
   const handleAssignSubmit = async (e: React.FormEvent) => {
@@ -142,7 +196,7 @@ export const UnassignedOrdersPage: React.FC = () => {
 
         <button
           type="button"
-          onClick={loadUnassigned}
+          onClick={() => loadUnassigned()}
           disabled={loading}
           className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-xs transition"
         >
@@ -168,26 +222,72 @@ export const UnassignedOrdersPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Search Bar */}
-      <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
-        <form onSubmit={handleSearch} className="relative w-full">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by client, service, application #, or order #..."
-            className="w-full pl-10 pr-4 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-blue-500 outline-hidden transition"
-          />
-        </form>
+      {/* Search and Filters Bar */}
+      <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-center">
+          {/* General Search */}
+          <div className="relative lg:col-span-6">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="Search by app #, order #, service, phone..."
+              className="w-full pl-10 pr-4 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-blue-500 outline-hidden transition"
+              aria-label="Search unassigned orders"
+            />
+          </div>
+
+          {/* Dedicated Client Name Filter */}
+          <div className="relative lg:col-span-4">
+            <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={clientName}
+              onChange={(e) => handleClientNameChange(e.target.value)}
+              placeholder="Client Name (e.g. Varun)..."
+              className="w-full pl-10 pr-4 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-blue-500 outline-hidden transition"
+              aria-label="Client Name"
+            />
+          </div>
+
+          {/* Clear Filters Button */}
+          <div className="lg:col-span-2 flex justify-end">
+            <button
+              type="button"
+              onClick={handleClearFilters}
+              disabled={!hasActiveFilters}
+              className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border transition ${
+                hasActiveFilters
+                  ? 'border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer'
+                  : 'border-slate-100 dark:border-slate-800/50 bg-slate-50/50 dark:bg-slate-900/50 text-slate-400 dark:text-slate-600 cursor-not-allowed'
+              }`}
+              title="Clear all active filters"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Clear</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Table */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs overflow-hidden">
         {error && (
-          <div className="p-6 text-center text-red-600 dark:text-red-400 text-sm flex items-center justify-center gap-2">
-            <AlertCircle className="w-5 h-5" />
-            <span>{error}</span>
+          <div className="p-8 text-center bg-red-50/40 dark:bg-red-950/20 border-b border-red-200 dark:border-red-900/40 space-y-3">
+            <div className="inline-flex p-2.5 rounded-full bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400">
+              <AlertCircle className="w-5 h-5" />
+            </div>
+            <p className="text-sm font-semibold text-red-700 dark:text-red-300">{error}</p>
+            <div>
+              <button
+                type="button"
+                onClick={() => loadUnassigned()}
+                className="px-4 py-1.5 text-xs font-bold rounded-xl bg-red-600 hover:bg-red-700 text-white shadow-xs transition"
+              >
+                Retry
+              </button>
+            </div>
           </div>
         )}
 
@@ -198,11 +298,26 @@ export const UnassignedOrdersPage: React.FC = () => {
           </div>
         )}
 
-        {!loading && taskListResponse && taskListResponse.items.length === 0 && (
+        {!loading && !error && taskListResponse && taskListResponse.items.length === 0 && (
           <div className="py-20 text-center text-slate-400 space-y-2">
             <CheckCircle2 className="w-10 h-10 mx-auto text-emerald-500" />
-            <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">All caught up!</p>
-            <p className="text-xs text-slate-500">There are no unassigned orders at this time.</p>
+            <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+              {hasActiveFilters ? 'No matching unassigned orders found' : 'All caught up!'}
+            </p>
+            <p className="text-xs text-slate-500">
+              {hasActiveFilters
+                ? 'No unassigned orders match your search criteria.'
+                : 'There are no unassigned orders at this time.'}
+            </p>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={handleClearFilters}
+                className="mt-3 px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition"
+              >
+                Clear all filters
+              </button>
+            )}
           </div>
         )}
 

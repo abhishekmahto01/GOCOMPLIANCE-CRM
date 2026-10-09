@@ -10,21 +10,17 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 class DesignationBase(BaseModel):
     """Base schema with common Designation fields."""
 
-    company_id: Optional[uuid.UUID] = Field(
-        None,
-        description="Optional foreign key ID of company",
-    )
     designation_code: str = Field(
         ...,
         min_length=2,
         max_length=50,
-        description="Uppercase designation code unique per company (e.g. EXECUTIVE, MANAGER)",
+        description="Uppercase designation code unique globally (e.g. EXECUTIVE, SENIOR_EXECUTIVE, MANAGER, DIRECTOR)",
     )
     designation_name: str = Field(
         ...,
         min_length=1,
         max_length=100,
-        description="Display job title of the designation (e.g. Executive, Manager, Director)",
+        description="Display job title of the designation (e.g. Executive, Senior Executive, Manager, Director)",
     )
     level_rank: int = Field(
         ...,

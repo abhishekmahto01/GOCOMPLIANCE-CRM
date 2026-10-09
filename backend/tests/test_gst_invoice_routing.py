@@ -62,19 +62,16 @@ def routing_fixture(db_session: Session):
 
     # 2. Departments
     dept_sales = Department(
-        company_id=company_a.company_id,
         department_code="SALES",
         department_name="Sales Department",
         status="ACTIVE",
     )
     dept_acc = Department(
-        company_id=company_a.company_id,
         department_code="ACCOUNTS",
         department_name="Accounts Department",
         status="ACTIVE",
     )
     dept_ops = Department(
-        company_id=company_a.company_id,
         department_code="OPERATIONS",
         department_name="Operations Department",
         status="ACTIVE",
@@ -84,28 +81,24 @@ def routing_fixture(db_session: Session):
 
     # 3. Designations
     desig_director = Designation(
-        company_id=company_a.company_id,
         designation_code="DIR",
         designation_name="Director",
         level_rank=20,
         status="ACTIVE",
     )
     desig_sales = Designation(
-        company_id=company_a.company_id,
         designation_code="SALES_EXEC",
         designation_name="Sales Executive",
         level_rank=5,
         status="ACTIVE",
     )
     desig_acc = Designation(
-        company_id=company_a.company_id,
         designation_code="ACC_EXEC",
         designation_name="Accounts Executive",
         level_rank=5,
         status="ACTIVE",
     )
     desig_ops = Designation(
-        company_id=company_a.company_id,
         designation_code="OPS_EXEC",
         designation_name="Operations Executive",
         level_rank=5,

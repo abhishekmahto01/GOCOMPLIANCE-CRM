@@ -150,14 +150,12 @@ def test_successful_employee_creation(
     )
     mock_dept = Department(
         department_id=test_department_id,
-        company_id=test_company_id,
         department_code="SALES",
         department_name="Sales",
         status="ACTIVE",
     )
     mock_desig = Designation(
         designation_id=test_designation_id,
-        company_id=test_company_id,
         designation_code="EXECUTIVE",
         designation_name="Sales Executive",
         level_rank=1,

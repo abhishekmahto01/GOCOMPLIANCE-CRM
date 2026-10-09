@@ -105,11 +105,10 @@ def find_and_validate_company(session: Session, company_code: str) -> Company:
 def find_and_validate_department(
     session: Session, company_id: uuid.UUID, department_code: str
 ) -> Department:
-    """Find and validate active Department belonging to target company."""
+    """Find and validate active global Department."""
     dept_norm = department_code.strip().upper()
     dept = session.execute(
         select(Department).where(
-            Department.company_id == company_id,
             or_(
                 func.upper(Department.department_code) == dept_norm,
                 func.upper(Department.department_name) == dept_norm,
@@ -119,7 +118,7 @@ def find_and_validate_department(
 
     if not dept:
         raise BootstrapError(
-            f"Department '{department_code}' does not exist for the selected company."
+            f"Department '{department_code}' does not exist in master records."
         )
     if dept.status != "ACTIVE":
         raise BootstrapError(f"Department '{dept.department_name}' is INACTIVE.")
@@ -129,11 +128,10 @@ def find_and_validate_department(
 def find_and_validate_designation(
     session: Session, company_id: uuid.UUID, designation_code: str
 ) -> Designation:
-    """Find and validate active Designation belonging to target company."""
+    """Find and validate active global Designation."""
     desig_norm = designation_code.strip().upper()
     desig = session.execute(
         select(Designation).where(
-            Designation.company_id == company_id,
             or_(
                 func.upper(Designation.designation_code) == desig_norm,
                 func.upper(Designation.designation_name) == desig_norm,
@@ -143,7 +141,7 @@ def find_and_validate_designation(
 
     if not desig:
         raise BootstrapError(
-            f"Designation '{designation_code}' does not exist for the selected company."
+            f"Designation '{designation_code}' does not exist in master records."
         )
     if desig.status != "ACTIVE":
         raise BootstrapError(f"Designation '{desig.designation_name}' is INACTIVE.")
