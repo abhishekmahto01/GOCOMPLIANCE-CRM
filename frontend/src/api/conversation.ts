@@ -6,6 +6,8 @@ import type {
   ConversationMessage,
   ConversationThread,
   MarkReadResponse,
+  MarkBatchReadResponse,
+  MarkAllReadResponse,
   PostMessagePayload,
   RemarkNotificationListResponse,
   UnreadSummaryResponse,
@@ -113,5 +115,25 @@ export async function markMessagesAsReadApi(
   const response = await apiClient.post<MarkReadResponse>(`/conversations/${orderId}/mark-read`, {
     message_ids: messageIds,
   });
+  return response.data;
+}
+
+/**
+ * Batch mark displayed notification message IDs as read for the authenticated user across orders.
+ */
+export async function markNotificationMessagesAsReadApi(
+  messageIds: string[]
+): Promise<MarkBatchReadResponse> {
+  const response = await apiClient.post<MarkBatchReadResponse>('/conversations/mark-read', {
+    message_ids: messageIds,
+  });
+  return response.data;
+}
+
+/**
+ * Mark all authorized unread notifications as read for the authenticated user.
+ */
+export async function markAllNotificationsAsReadApi(): Promise<MarkAllReadResponse> {
+  const response = await apiClient.post<MarkAllReadResponse>('/conversations/mark-all-read');
   return response.data;
 }

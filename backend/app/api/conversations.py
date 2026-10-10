@@ -12,6 +12,9 @@ from app.schemas.conversation import (
     ConversationMessageCreate,
     ConversationMessageRead,
     ConversationThreadResponse,
+    MarkAllReadResponse,
+    MarkBatchReadRequest,
+    MarkBatchReadResponse,
     MarkReadRequest,
     MarkReadResponse,
     RemarkNotificationListResponse,
@@ -181,6 +184,68 @@ def mark_messages_read(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to mark messages as read: {str(e)}",
+        )
+
+
+@router.post(
+    "/mark-read",
+    response_model=MarkBatchReadResponse,
+    summary="Mark Displayed Notification Messages as Read",
+    description="Idempotently mark displayed notification message IDs as read for current user.",
+)
+def mark_notification_messages_read(
+    payload: MarkBatchReadRequest,
+    current_user: User = Depends(require_fully_activated_user),
+    session: Session = Depends(get_db),
+):
+    """Idempotently mark displayed notification message IDs as read for current user."""
+    try:
+        marked_count, valid_ids = conversation_service.mark_notifications_as_read(
+            session=session,
+            user=current_user,
+            message_ids=payload.message_ids,
+        )
+        session.commit()
+        unread_summary = conversation_service.get_user_unread_summary(session=session, user=current_user)
+        return MarkBatchReadResponse(
+            marked_read_count=marked_count,
+            read_message_ids=valid_ids,
+            total_unread_count=unread_summary.total_unread_count,
+        )
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to mark notifications as read: {str(e)}",
+        )
+
+
+@router.post(
+    "/mark-all-read",
+    response_model=MarkAllReadResponse,
+    summary="Mark All Authorized Notifications as Read",
+    description="Mark all unread remark notifications across all authorized tasks as read for current user.",
+)
+def mark_all_notifications_read(
+    current_user: User = Depends(require_fully_activated_user),
+    session: Session = Depends(get_db),
+):
+    """Mark all unread notifications across all authorized tasks as read for the authenticated user."""
+    try:
+        marked_count = conversation_service.mark_all_user_notifications_as_read(
+            session=session,
+            user=current_user,
+        )
+        session.commit()
+        return MarkAllReadResponse(
+            marked_read_count=marked_count,
+            total_unread_count=0,
+        )
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to mark all notifications as read: {str(e)}",
         )
 
 

@@ -259,6 +259,9 @@ export interface SalesEmployeeOption {
   full_name: string;
   department_name?: string | null;
   designation_name?: string | null;
+  company_id?: string | null;
+  company_name?: string | null;
+  company_code?: string | null;
 }
 
 export interface SalesClientOption {
@@ -268,6 +271,7 @@ export interface SalesClientOption {
   contact_email?: string | null;
   contact_person?: string | null;
   entity_type?: string | null;
+  company_id?: string | null;
 }
 
 export interface SalesFormOptionsResponse {
@@ -297,6 +301,7 @@ export interface SalesEntryFormData {
   location?: string;
   service_id: string;
   salesperson_user_id?: string;
+  company_id?: string;
   lead_source: string;
   order_value: number;
   amount_received: number;

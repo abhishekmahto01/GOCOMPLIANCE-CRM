@@ -244,12 +244,16 @@ class SalesEmployeeOption(BaseModel):
     full_name: str
     department_name: Optional[str] = None
     designation_name: Optional[str] = None
+    company_id: Optional[uuid.UUID] = None
+    company_name: Optional[str] = None
+    company_code: Optional[str] = None
 
 
 class SalesClientOption(BaseModel):
     """Client lookup option for sales form matching."""
 
     client_id: uuid.UUID
+    company_id: Optional[uuid.UUID] = None
     client_name: str
     contact_phone: str
     contact_email: Optional[str] = None

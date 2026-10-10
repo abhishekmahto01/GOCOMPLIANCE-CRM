@@ -7,7 +7,12 @@ import React, {
   useRef,
 } from 'react';
 import { useAuth } from './AuthContext';
-import { getUnreadSummaryApi, markMessagesAsReadApi } from '../api/conversation';
+import {
+  getUnreadSummaryApi,
+  markMessagesAsReadApi,
+  markNotificationMessagesAsReadApi,
+  markAllNotificationsAsReadApi,
+} from '../api/conversation';
 import type { UnreadSummaryResponse } from '../types/conversation';
 
 interface RemarkNotificationContextType {
@@ -16,6 +21,8 @@ interface RemarkNotificationContextType {
   isLoading: boolean;
   refreshUnreadSummary: () => Promise<void>;
   markMessagesRead: (orderId: string, messageIds: string[]) => Promise<void>;
+  markBatchMessagesRead: (messageIds: string[]) => Promise<void>;
+  markAllAsRead: () => Promise<void>;
 }
 
 const RemarkNotificationContext = createContext<RemarkNotificationContextType | undefined>(
@@ -25,13 +32,14 @@ const RemarkNotificationContext = createContext<RemarkNotificationContextType | 
 export const RemarkNotificationProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const { isAuthenticated } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const [unreadSummary, setUnreadSummary] = useState<UnreadSummaryResponse | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const isFetchingRef = useRef<boolean>(false);
+  const currentUserId = user?.user_id || (user as any)?.id;
 
   const fetchSummary = useCallback(async () => {
-    if (!isAuthenticated || isFetchingRef.current) return;
+    if (!isAuthenticated || !currentUserId || isFetchingRef.current) return;
 
     isFetchingRef.current = true;
     try {
@@ -43,21 +51,22 @@ export const RemarkNotificationProvider: React.FC<{ children: React.ReactNode }>
       isFetchingRef.current = false;
       setIsLoading(false);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, currentUserId]);
 
-  // Initial fetch when authenticated
+  // Initial fetch when authenticated identity changes
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && currentUserId) {
       setIsLoading(true);
+      setUnreadSummary(null);
       fetchSummary();
     } else {
       setUnreadSummary(null);
     }
-  }, [isAuthenticated, fetchSummary]);
+  }, [isAuthenticated, currentUserId, fetchSummary]);
 
   // Polling every 45 seconds while authenticated, and refetch on window focus
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !currentUserId) return;
 
     const interval = setInterval(() => {
       fetchSummary();
@@ -73,16 +82,15 @@ export const RemarkNotificationProvider: React.FC<{ children: React.ReactNode }>
       clearInterval(interval);
       window.removeEventListener('focus', handleFocus);
     };
-  }, [isAuthenticated, fetchSummary]);
+  }, [isAuthenticated, currentUserId, fetchSummary]);
 
-  // Mark displayed messages read
+  // Mark displayed messages read for a specific order
   const markMessagesRead = useCallback(
     async (orderId: string, messageIds: string[]) => {
       if (!orderId || !messageIds || messageIds.length === 0) return;
 
       try {
         await markMessagesAsReadApi(orderId, messageIds);
-        // Optimistically update local state & refresh
         await fetchSummary();
       } catch {
         // Silently handle or let caller handle
@@ -90,6 +98,35 @@ export const RemarkNotificationProvider: React.FC<{ children: React.ReactNode }>
     },
     [fetchSummary]
   );
+
+  // Batch mark notification messages read across orders
+  const markBatchMessagesRead = useCallback(
+    async (messageIds: string[]) => {
+      if (!messageIds || messageIds.length === 0) return;
+
+      try {
+        await markNotificationMessagesAsReadApi(messageIds);
+        await fetchSummary();
+      } catch {
+        // Silently handle
+      }
+    },
+    [fetchSummary]
+  );
+
+  // Mark all authorized notifications read
+  const markAllAsRead = useCallback(async () => {
+    try {
+      await markAllNotificationsAsReadApi();
+      setUnreadSummary({
+        total_unread_count: 0,
+        unread_orders: {},
+      });
+      await fetchSummary();
+    } catch {
+      // Silently handle
+    }
+  }, [fetchSummary]);
 
   const totalUnreadCount = unreadSummary?.total_unread_count ?? 0;
 
@@ -101,6 +138,8 @@ export const RemarkNotificationProvider: React.FC<{ children: React.ReactNode }>
         isLoading,
         refreshUnreadSummary: fetchSummary,
         markMessagesRead,
+        markBatchMessagesRead,
+        markAllAsRead,
       }}
     >
       {children}
@@ -114,6 +153,8 @@ const defaultFallback: RemarkNotificationContextType = {
   isLoading: false,
   refreshUnreadSummary: async () => {},
   markMessagesRead: async () => {},
+  markBatchMessagesRead: async () => {},
+  markAllAsRead: async () => {},
 };
 
 export const useRemarkNotification = (): RemarkNotificationContextType => {

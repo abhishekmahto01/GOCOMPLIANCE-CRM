@@ -128,11 +128,41 @@ class MarkReadRequest(BaseModel):
 
 
 class MarkReadResponse(BaseModel):
-    """Response returned after marking messages as read."""
+    """Response returned after marking messages as read for a specific sales order."""
 
     sales_order_id: uuid.UUID
     marked_read_count: int
     read_message_ids: List[uuid.UUID]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MarkBatchReadRequest(BaseModel):
+    """Payload for marking a list of displayed notification message IDs as read."""
+
+    message_ids: List[uuid.UUID] = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="List of message IDs to mark as read for current user",
+    )
+
+
+class MarkBatchReadResponse(BaseModel):
+    """Response returned after marking batch messages as read."""
+
+    marked_read_count: int
+    read_message_ids: List[uuid.UUID]
+    total_unread_count: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MarkAllReadResponse(BaseModel):
+    """Response returned after marking all notifications as read for current user."""
+
+    marked_read_count: int
+    total_unread_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 

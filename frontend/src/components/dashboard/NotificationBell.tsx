@@ -7,6 +7,7 @@ import {
   ChevronRight,
   RefreshCw,
   User,
+  CheckCheck,
 } from 'lucide-react';
 import { useRemarkNotification } from '../../context/RemarkNotificationContext';
 import { getRemarkNotificationsApi } from '../../api/conversation';
@@ -27,7 +28,8 @@ function getModuleBadgeClass(moduleName?: string | null): string {
 }
 
 export const NotificationBell: React.FC = () => {
-  const { totalUnreadCount, refreshUnreadSummary } = useRemarkNotification();
+  const { totalUnreadCount, refreshUnreadSummary, markBatchMessagesRead, markAllAsRead } =
+    useRemarkNotification();
   const inRouter = useInRouterContext();
   const routerNavigate = inRouter ? useNavigate() : null;
   const navigate = (to: string) => {
@@ -64,13 +66,20 @@ export const NotificationBell: React.FC = () => {
         }
         setPage(data.page);
         setTotalPages(data.total_pages);
+
+        // Mark displayed unread notifications as read
+        const unreadItems = data.items.filter((item) => !item.is_read);
+        if (unreadItems.length > 0) {
+          const unreadIds = unreadItems.map((item) => item.message_id);
+          markBatchMessagesRead(unreadIds);
+        }
       } catch {
         // Fallback gracefully
       } finally {
         setIsLoading(false);
       }
     },
-    [unreadOnly]
+    [unreadOnly, markBatchMessagesRead]
   );
 
   // Fetch when dropdown is opened
@@ -96,9 +105,17 @@ export const NotificationBell: React.FC = () => {
     };
   }, [isOpen]);
 
-  const handleNotificationClick = (item: RemarkNotificationItem) => {
+  const handleNotificationClick = async (item: RemarkNotificationItem) => {
+    if (!item.is_read) {
+      markBatchMessagesRead([item.message_id]);
+    }
     setIsOpen(false);
     navigate(item.target_route);
+  };
+
+  const handleMarkAllAsRead = async () => {
+    await markAllAsRead();
+    setNotifications((prev) => prev.map((item) => ({ ...item, is_read: true })));
   };
 
   const handleLoadMore = () => {
@@ -139,7 +156,7 @@ export const NotificationBell: React.FC = () => {
       {isOpen && (
         <div
           data-testid="notification-dropdown-panel"
-          className="absolute right-0 mt-2 w-[340px] sm:w-[400px] max-w-[90vw] rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border border-slate-200/90 dark:border-slate-800 shadow-2xl z-50 overflow-hidden flex flex-col animate-in fade-in slide-in-from-top-2 duration-200"
+          className="absolute right-0 mt-2 w-[340px] sm:w-[420px] max-w-[90vw] rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border border-slate-200/90 dark:border-slate-800 shadow-2xl z-50 overflow-hidden flex flex-col animate-in fade-in slide-in-from-top-2 duration-200"
         >
           {/* Header */}
           <div className="p-3.5 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50">
@@ -155,8 +172,21 @@ export const NotificationBell: React.FC = () => {
               )}
             </div>
 
-            {/* Filter Toggle */}
+            {/* Actions & Filter Toggle */}
             <div className="flex items-center gap-1.5">
+              {totalUnreadCount > 0 && (
+                <button
+                  type="button"
+                  onClick={handleMarkAllAsRead}
+                  data-testid="mark-all-read-btn"
+                  className="text-[11px] font-semibold px-2 py-1 rounded-lg transition border bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-750 flex items-center gap-1"
+                  title="Mark all notifications as read"
+                >
+                  <CheckCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                  <span className="hidden sm:inline">Mark all as read</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={() => setUnreadOnly(!unreadOnly)}

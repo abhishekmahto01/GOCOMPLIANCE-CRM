@@ -62,6 +62,19 @@ export interface MarkReadResponse {
   read_message_ids: string[];
 }
 
+export interface MarkBatchReadRequest {
+  message_ids: string[];
+}
+
+export interface MarkBatchReadResponse {
+  marked_read_count: number;
+  read_message_ids: string[];
+}
+
+export interface MarkAllReadResponse {
+  marked_read_count: number;
+}
+
 export interface UnreadOrderSummaryItem {
   order_id: string;
   unread_count: number;

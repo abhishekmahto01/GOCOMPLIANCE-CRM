@@ -815,6 +815,98 @@ def mark_conversation_messages_as_read(
     return len(to_insert), list(valid_messages)
 
 
+def mark_notifications_as_read(
+    session: Session,
+    user: User,
+    message_ids: List[uuid.UUID],
+) -> Tuple[int, List[uuid.UUID]]:
+    """Idempotently mark displayed notification message IDs as read for current user."""
+    if not message_ids:
+        return 0, []
+
+    auth_orders_subquery = get_user_authorized_orders_subquery(session, user)
+
+    # Validate that the message IDs belong to orders authorized for this user
+    valid_msgs = session.execute(
+        select(TaskConversationMessage.message_id, TaskConversationMessage.sales_order_id).where(
+            TaskConversationMessage.sales_order_id.in_(auth_orders_subquery),
+            TaskConversationMessage.message_id.in_(message_ids),
+        )
+    ).all()
+
+    if not valid_msgs:
+        return 0, []
+
+    valid_message_ids = [row.message_id for row in valid_msgs]
+
+    # Find which ones are already read for this user
+    already_read = set(
+        session.execute(
+            select(TaskConversationReadState.message_id).where(
+                TaskConversationReadState.user_id == user.user_id,
+                TaskConversationReadState.message_id.in_(valid_message_ids),
+            )
+        ).scalars().all()
+    )
+
+    now_utc = datetime.now(timezone.utc)
+    to_insert = [row for row in valid_msgs if row.message_id not in already_read]
+
+    for row in to_insert:
+        read_receipt = TaskConversationReadState(
+            read_id=uuid.uuid4(),
+            message_id=row.message_id,
+            user_id=user.user_id,
+            sales_order_id=row.sales_order_id,
+            read_at=now_utc,
+        )
+        session.add(read_receipt)
+
+    session.flush()
+    return len(to_insert), valid_message_ids
+
+
+def mark_all_user_notifications_as_read(
+    session: Session,
+    user: User,
+) -> int:
+    """Mark all unread notifications across all authorized tasks as read for the authenticated user."""
+    auth_orders_subquery = get_user_authorized_orders_subquery(session, user)
+
+    read_exists = exists(
+        select(1).where(
+            TaskConversationReadState.message_id == TaskConversationMessage.message_id,
+            TaskConversationReadState.user_id == user.user_id,
+        )
+    )
+
+    unread_msgs = session.execute(
+        select(TaskConversationMessage.message_id, TaskConversationMessage.sales_order_id).where(
+            TaskConversationMessage.sales_order_id.in_(auth_orders_subquery),
+            TaskConversationMessage.message_type == "COMMENT",
+            TaskConversationMessage.created_at >= FEATURE_CUTOFF_DATE,
+            not_(read_exists),
+        )
+    ).all()
+
+    if not unread_msgs:
+        return 0
+
+    now_utc = datetime.now(timezone.utc)
+    for row in unread_msgs:
+        read_receipt = TaskConversationReadState(
+            read_id=uuid.uuid4(),
+            message_id=row.message_id,
+            user_id=user.user_id,
+            sales_order_id=row.sales_order_id,
+            read_at=now_utc,
+        )
+        session.add(read_receipt)
+
+    session.flush()
+    return len(unread_msgs)
+
+
 def get_user_unread_summary(
     session: Session,
     user: User,

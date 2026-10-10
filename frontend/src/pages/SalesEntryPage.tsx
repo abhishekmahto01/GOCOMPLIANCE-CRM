@@ -126,6 +126,29 @@ export const SalesEntryPage: React.FC = () => {
   const watchedGovtFees = watch('govt_fees') || 0;
   const watchedIncidental = watch('incidental_cost') || 0;
   const watchedClientName = watch('client_name') || '';
+  const watchedClientId = watch('client_id') || '';
+  const watchedSalespersonId = watch('salesperson_user_id') || '';
+
+  // Derive salesperson object and company
+  const selectedSalesperson = useMemo(() => {
+    if (!formOptions?.salespersons || !watchedSalespersonId) return null;
+    return formOptions.salespersons.find((sp) => sp.user_id === watchedSalespersonId) || null;
+  }, [formOptions?.salespersons, watchedSalespersonId]);
+
+  const derivedCompanyName = selectedSalesperson?.company_name || formOptions?.company_name || '';
+  const derivedCompanyId = selectedSalesperson?.company_id || formOptions?.company_id;
+
+  // Clear client selection if selected client's company differs from salesperson's company
+  useEffect(() => {
+    if (watchedClientId && derivedCompanyId && formOptions?.clients) {
+      const clientObj = formOptions.clients.find((c) => c.client_id === watchedClientId);
+      if (clientObj && clientObj.company_id && clientObj.company_id !== derivedCompanyId) {
+        setValue('client_id', '');
+        setValue('client_name', '');
+        setValue('contact_no', '');
+      }
+    }
+  }, [derivedCompanyId, watchedClientId, formOptions?.clients, setValue]);
 
   // Real-time Calculations
   const calculatedPending = Math.max(0, watchedOrderValue - watchedAdvance);
@@ -166,18 +189,22 @@ export const SalesEntryPage: React.FC = () => {
     };
   }, [setValue]);
 
-  // Filter existing clients for autocomplete
+  // Filter existing clients for autocomplete (scoped to derived company if available)
   const matchingClients = useMemo(() => {
     if (!formOptions?.clients || !watchedClientName.trim()) return [];
     const q = watchedClientName.toLowerCase().trim();
     return formOptions.clients
-      .filter(
-        (c) =>
+      .filter((c) => {
+        if (derivedCompanyId && c.company_id && c.company_id !== derivedCompanyId) {
+          return false;
+        }
+        return (
           c.client_name.toLowerCase().includes(q) ||
           (c.contact_phone && c.contact_phone.includes(q))
-      )
+        );
+      })
       .slice(0, 6);
-  }, [formOptions?.clients, watchedClientName]);
+  }, [formOptions?.clients, watchedClientName, derivedCompanyId]);
 
   // Handle selecting an existing client from autocomplete
   const handleSelectClient = (client: SalesClientOption) => {
@@ -202,6 +229,7 @@ export const SalesEntryPage: React.FC = () => {
         location: values.location?.trim() || undefined,
         service_id: values.service_id,
         salesperson_user_id: values.salesperson_user_id,
+        company_id: derivedCompanyId || undefined,
         lead_source: values.lead_source,
         order_value: Number(values.order_value),
         amount_received: Number(values.amount_received),
@@ -418,17 +446,20 @@ export const SalesEntryPage: React.FC = () => {
               </p>
             </div>
 
-            {formOptions?.company_name && (
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-50/90 dark:bg-blue-950/50 border border-blue-200/80 dark:border-blue-800/80 text-xs text-blue-900 dark:text-blue-200 self-start sm:self-auto">
+            {derivedCompanyName && (
+              <div
+                data-testid="originating-company-badge"
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-50/90 dark:bg-blue-950/50 border border-blue-200/80 dark:border-blue-800/80 text-xs text-blue-900 dark:text-blue-200 self-start sm:self-auto"
+              >
                 <Building2 className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
                 <span>
                   Originating Company:{' '}
                   <strong className="font-bold text-slate-900 dark:text-white">
-                    {formOptions.company_name}
+                    {derivedCompanyName}
                   </strong>
                 </span>
                 <span className="text-[10.5px] font-medium text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/60 px-1.5 py-0.2 rounded-md">
-                  Read-only
+                  Derived (Read-only)
                 </span>
               </div>
             )}
@@ -612,7 +643,7 @@ export const SalesEntryPage: React.FC = () => {
                 <option value="">-- Select Salesperson --</option>
                 {(formOptions?.salespersons || []).map((sp) => (
                   <option key={sp.user_id} value={sp.user_id}>
-                    {sp.full_name} ({sp.employee_code})
+                    {sp.full_name} ({sp.employee_code}{sp.company_name ? ` · ${sp.company_name}` : ''})
                   </option>
                 ))}
               </select>

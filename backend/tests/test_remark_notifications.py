@@ -614,3 +614,99 @@ class TestRemarkNotificationsAndUnreadSystem:
         # Karishma should not see any unread count from this old message
         summary = client.get("/api/conversations/unread-summary", headers=auth_headers(karishma)).json()
         assert summary["total_unread_count"] == 0
+
+    def test_batch_mark_read_displayed_messages(
+        self, client: TestClient, db_session: Session, notification_test_fixture: dict
+    ):
+        """Verify POST /api/conversations/mark-read with list of message IDs across multiple orders."""
+        f = notification_test_fixture
+        order1_id = f["order"].order_id
+        deepak = f["deepak"]
+        karishma = f["karishma"]
+
+        # Post 2 remarks on order 1
+        resp1 = client.post(
+            f"/api/conversations/{order1_id}/messages",
+            json={"message_text": "Batch test remark 1", "originating_module": "OPERATIONS"},
+            headers=auth_headers(deepak),
+        )
+        msg1_id = resp1.json()["message_id"]
+
+        resp2 = client.post(
+            f"/api/conversations/{order1_id}/messages",
+            json={"message_text": "Batch test remark 2", "originating_module": "OPERATIONS"},
+            headers=auth_headers(deepak),
+        )
+        msg2_id = resp2.json()["message_id"]
+
+        # Karishma should see 2 unread
+        karishma_summary = client.get("/api/conversations/unread-summary", headers=auth_headers(karishma)).json()
+        assert karishma_summary["total_unread_count"] == 2
+
+        # Karishma batch marks both messages as read
+        batch_resp = client.post(
+            "/api/conversations/mark-read",
+            json={"message_ids": [msg1_id, msg2_id]},
+            headers=auth_headers(karishma),
+        )
+        assert batch_resp.status_code == 200
+        assert batch_resp.json()["marked_read_count"] == 2
+        assert set(batch_resp.json()["read_message_ids"]) == {msg1_id, msg2_id}
+
+        # Verify summary is now 0
+        summary_after = client.get("/api/conversations/unread-summary", headers=auth_headers(karishma)).json()
+        assert summary_after["total_unread_count"] == 0
+
+        # Idempotent repeat
+        batch_repeat = client.post(
+            "/api/conversations/mark-read",
+            json={"message_ids": [msg1_id, msg2_id]},
+            headers=auth_headers(karishma),
+        )
+        assert batch_repeat.status_code == 200
+        assert batch_repeat.json()["marked_read_count"] == 0
+
+    def test_mark_all_user_notifications_as_read(
+        self, client: TestClient, db_session: Session, notification_test_fixture: dict
+    ):
+        """Verify POST /api/conversations/mark-all-read marks all authorized unread remarks as read."""
+        f = notification_test_fixture
+        order1_id = f["order"].order_id
+        deepak = f["deepak"]
+        karishma = f["karishma"]
+        vikram = f["vikram"]
+
+        # Deepak posts 3 remarks
+        msg_ids = []
+        for i in range(3):
+            r = client.post(
+                f"/api/conversations/{order1_id}/messages",
+                json={"message_text": f"Mark all test remark {i+1}", "originating_module": "OPERATIONS"},
+                headers=auth_headers(deepak),
+            )
+            msg_ids.append(r.json()["message_id"])
+
+        # Karishma sees 3 unread
+        k_summary = client.get("/api/conversations/unread-summary", headers=auth_headers(karishma)).json()
+        assert k_summary["total_unread_count"] == 3
+
+        # Vikram sees 3 unread
+        v_summary = client.get("/api/conversations/unread-summary", headers=auth_headers(vikram)).json()
+        assert v_summary["total_unread_count"] == 3
+
+        # Karishma calls mark-all-read
+        mark_all_resp = client.post(
+            "/api/conversations/mark-all-read",
+            headers=auth_headers(karishma),
+        )
+        assert mark_all_resp.status_code == 200
+        assert mark_all_resp.json()["marked_read_count"] == 3
+
+        # Karishma's unread is now 0
+        k_summary_after = client.get("/api/conversations/unread-summary", headers=auth_headers(karishma)).json()
+        assert k_summary_after["total_unread_count"] == 0
+
+        # Vikram still sees 3 unread (per-user isolation preserved!)
+        v_summary_after = client.get("/api/conversations/unread-summary", headers=auth_headers(vikram)).json()
+        assert v_summary_after["total_unread_count"] == 3
+

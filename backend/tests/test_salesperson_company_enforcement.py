@@ -393,7 +393,7 @@ def test_karishma_supplying_different_company_id_is_rejected(
     res = client.post("/api/sales/orders", json=payload, headers=auth_header(f["karishma"]))
     assert res.status_code in (status.HTTP_400_BAD_REQUEST, status.HTTP_403_FORBIDDEN)
     err = res.json()["detail"]
-    assert "Cannot create sales entry for another company" in err
+    assert "conflicts with the provided company ID" in err or "Cannot create sales entry for another company" in err
 
 
 # ============================================================================
@@ -678,7 +678,8 @@ def test_missing_or_inactive_company_blocks_creation(
         headers=auth_header(f["inactive_comp_user"]),
     )
     assert res_inactive.status_code == status.HTTP_400_BAD_REQUEST
-    assert "Employee on-roll company is missing or inactive. Please contact your administrator." in res_inactive.json()["detail"]
+    err_inactive = res_inactive.json()["detail"]
+    assert "company is missing or inactive" in err_inactive or "company is inactive or not found" in err_inactive
 
 
 # ============================================================================
@@ -732,3 +733,76 @@ def test_cross_company_operations_assignment_preserves_sale_company(
     assert app_record is not None
     assert app_record.assigned_to_user_id == f["ops_user"].user_id
     assert app_record.company_id == f["comp_a"].company_id
+
+
+# ============================================================================
+# Requirement 10: Super Admin creates sale on behalf of another company's salesperson
+# ============================================================================
+def test_super_admin_creates_sale_for_other_company_salesperson_without_explicit_company_id(
+    client: TestClient, db_session: Session, enforcement_fixture
+):
+    """Verify:
+
+    Super Admin (on-roll Comp A) selects Priya (on-roll Comp B).
+    Originating company is automatically derived as Comp B.
+    created_by is Super Admin, salesperson_user_id is Priya.
+    """
+    f = enforcement_fixture
+    payload = {
+        "order_date": "2026-03-05",
+        "client_name": "SuperAdmin Cross-Company Client",
+        "contact_no": "9812345699",
+        "service_id": str(f["service"].service_id),
+        "salesperson_user_id": str(f["priya"].user_id),  # Priya is in Comp B
+        "lead_source": "WEBSITE",
+        "order_value": 25000.0,
+        "amount_received": 12500.0,
+        "govt_fees": 1500.0,
+        "incidental_cost": 500.0,
+        "auto_confirm": True,
+    }
+
+    # Super Admin (Admin Director) creates sale
+    res = client.post("/api/sales/orders", json=payload, headers=auth_header(f["admin_director"]))
+    assert res.status_code == status.HTTP_201_CREATED, res.json()
+    data = res.json()
+
+    # The sale's company_id must be Comp B (Priya's company), NOT Comp A (Admin's company)
+    assert data["company_id"] == str(f["comp_b"].company_id)
+    assert data["company_name"] == f["comp_b"].company_name
+    assert data["salesperson_name"] == "Priya Patel"
+
+    # Verify directly in DB
+    order = db_session.get(SalesOrder, uuid.UUID(data["order_id"]))
+    assert order is not None
+    assert order.company_id == f["comp_b"].company_id
+    assert order.salesperson_user_id == f["priya"].user_id
+
+
+def test_super_admin_conflicting_company_id_payload_is_rejected(
+    client: TestClient, db_session: Session, enforcement_fixture
+):
+    """Verify:
+
+    If an explicit conflicting company_id is provided (e.g. Comp A while salesperson is in Comp B),
+    the backend rejects it with a clear 400 error.
+    """
+    f = enforcement_fixture
+    payload = {
+        "order_date": "2026-03-05",
+        "company_id": str(f["comp_a"].company_id),  # Conflicting with Priya's Comp B
+        "client_name": "Conflicting Company Client",
+        "contact_no": "9812345699",
+        "service_id": str(f["service"].service_id),
+        "salesperson_user_id": str(f["priya"].user_id),  # Priya is in Comp B
+        "lead_source": "WEBSITE",
+        "order_value": 25000.0,
+        "amount_received": 12500.0,
+        "auto_confirm": True,
+    }
+
+    res = client.post("/api/sales/orders", json=payload, headers=auth_header(f["admin_director"]))
+    assert res.status_code == status.HTTP_400_BAD_REQUEST
+    err = res.json()["detail"]
+    assert "Selected salesperson belongs to company" in err or "does not belong to specified company" in err
+

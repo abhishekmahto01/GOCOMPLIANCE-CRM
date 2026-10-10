@@ -301,7 +301,15 @@ def create_sales_order(
     data: SalesOrderCreate,
     current_user: User,
 ) -> SalesOrder:
-    """Create a new sales order with client matching/deduplication, RBAC scoping, and financial calculations."""
+    """Create a new sales order with client matching/deduplication, RBAC scoping, and financial calculations.
+    
+    Business Rules:
+    - Originating company is derived strictly from the authoritative on-roll company of the selected salesperson.
+    - Super Admin can create sales entries on behalf of eligible sales employees across any company.
+    - Directors / Admins with ALL scope can create across companies; COMPANY scope admins are restricted to their company.
+    - Normal sales users create entries for themselves under their own company.
+    - Conflicting explicit company_id is rejected with a clear validation error.
+    """
     is_super = permissions.is_super_admin_user(session, current_user)
     is_all_scope = is_super
     scope_ctx = None
@@ -318,38 +326,55 @@ def create_sales_order(
             except permissions.PermissionDeniedError:
                 continue
 
-    if is_all_scope:
-        # Privileged user (Super Admin / Director with ALL scope)
-        if data.company_id:
-            company = session.get(Company, data.company_id)
-            if not company or company.status != "ACTIVE":
-                raise ValueError(f"Active company with ID '{data.company_id}' not found.")
-            company_id = data.company_id
-        else:
-            if current_user.company_id:
-                company = session.get(Company, current_user.company_id)
-                if company and company.status == "ACTIVE":
-                    company_id = current_user.company_id
-                else:
-                    raise ValueError("Company ID must be specified for sales order creation.")
-            else:
-                raise ValueError("Company ID must be specified for sales order creation.")
+    # 1. Resolve Salesperson and Validate Actor Authorization
+    salesperson: Optional[User] = None
+    if not is_all_scope and scope_ctx and scope_ctx.scope == "SELF":
+        salesperson = current_user
+    elif data.salesperson_user_id:
+        target_sp = session.get(User, data.salesperson_user_id)
+        if not target_sp or target_sp.account_status != "ACTIVE":
+            raise ValueError(f"Active salesperson with ID '{data.salesperson_user_id}' not found.")
+        if not is_sales_department_employee(target_sp):
+            raise ValueError(
+                f"Selected employee '{target_sp.first_name} {target_sp.last_name}' does not belong to the Sales department. Converted By must be an active Sales employee."
+            )
+        # Check authorization to create on behalf of this salesperson
+        if not is_all_scope:
+            if scope_ctx and scope_ctx.scope == "COMPANY":
+                if target_sp.company_id != current_user.company_id:
+                    raise ValueError("Selected salesperson does not belong to your authorized company.")
+            elif scope_ctx and scope_ctx.scope == "TEAM":
+                if target_sp.user_id not in scope_ctx.team_user_ids:
+                    raise ValueError("Selected salesperson is not within your permitted team.")
+            elif target_sp.user_id != current_user.user_id:
+                raise ValueError("You are not authorized to create sales on behalf of another salesperson.")
+        salesperson = target_sp
     else:
-        # Ordinary salesperson / single-company employee
-        if not current_user.company_id:
-            raise ValueError("Employee on-roll company is missing or inactive. Please contact your administrator.")
+        salesperson = current_user
 
-        company = session.get(Company, current_user.company_id)
-        if not company or company.status != "ACTIVE":
-            raise ValueError("Employee on-roll company is missing or inactive. Please contact your administrator.")
+    if not salesperson or salesperson.account_status != "ACTIVE":
+        raise ValueError("Valid active salesperson could not be identified.")
+    if not is_sales_department_employee(salesperson):
+        raise ValueError(
+            f"Selected employee '{salesperson.first_name} {salesperson.last_name}' does not belong to the Sales department. Converted By must be an active Sales employee."
+        )
+    if not salesperson.company_id:
+        raise ValueError("Selected salesperson does not have an active on-roll company assigned. Employee on-roll company is missing or inactive.")
 
-        # Reject explicitly supplied different company_id
-        if data.company_id and data.company_id != current_user.company_id:
-            raise ValueError("Cannot create sales entry for another company. Entry company is derived strictly from your employee profile.")
+    sp_company = session.get(Company, salesperson.company_id)
+    if not sp_company or sp_company.status != "ACTIVE":
+        raise ValueError("Selected salesperson's on-roll company is inactive or not found. Employee on-roll company is missing or inactive.")
 
-        company_id = current_user.company_id
+    # 2. Authoritative Company Derivation
+    authoritative_company_id = salesperson.company_id
+    if data.company_id and data.company_id != authoritative_company_id:
+        raise ValueError(
+            f"Cannot create sales entry for another company. Selected salesperson belongs to company '{sp_company.company_name}', which conflicts with the provided company ID."
+        )
 
-    # 1. Client Resolution and Deduplication
+    company_id = authoritative_company_id
+
+    # 3. Client Resolution and Deduplication within company_id
     client = None
     if data.client_id:
         client = session.get(ClientMaster, data.client_id)
@@ -400,44 +425,12 @@ def create_sales_order(
     if not client:
         raise ValueError("Valid client could not be identified or created.")
 
-    # 2. Service Verification
+    # 4. Service Verification
     service = session.get(ServiceMaster, data.service_id)
     if not service or service.status != "ACTIVE":
         raise ValueError(f"Active service with ID '{data.service_id}' not found.")
 
-    # 3. Salesperson Resolution and Data Scope Check
-    salesperson: Optional[User] = None
-    if not is_all_scope and scope_ctx and scope_ctx.scope == "SELF":
-        salesperson_id = current_user.user_id
-    elif data.salesperson_user_id:
-        target_sp = session.get(User, data.salesperson_user_id)
-        if not target_sp or target_sp.account_status != "ACTIVE":
-            raise ValueError(f"Active salesperson with ID '{data.salesperson_user_id}' not found.")
-        if not is_sales_department_employee(target_sp):
-            raise ValueError(
-                f"Selected employee '{target_sp.first_name} {target_sp.last_name}' does not belong to the Sales department. Converted By must be an active Sales employee."
-            )
-        if target_sp.company_id != company_id:
-            raise ValueError("Selected salesperson does not belong to specified company.")
-        if not is_all_scope and scope_ctx and scope_ctx.scope == "TEAM" and target_sp.user_id not in scope_ctx.team_user_ids:
-            raise ValueError("Selected salesperson is not within your permitted team.")
-        salesperson_id = target_sp.user_id
-        salesperson = target_sp
-    else:
-        salesperson_id = current_user.user_id
-
-    if salesperson is None:
-        salesperson = session.get(User, salesperson_id)
-        if not salesperson or salesperson.account_status != "ACTIVE":
-            raise ValueError(f"Active salesperson with ID '{salesperson_id}' not found.")
-        if not is_sales_department_employee(salesperson):
-            raise ValueError(
-                f"Selected employee '{salesperson.first_name} {salesperson.last_name}' does not belong to the Sales department. Converted By must be an active Sales employee."
-            )
-        if salesperson.company_id != company_id:
-            raise ValueError("Selected salesperson does not belong to specified company.")
-
-    # 4. Financial Calculations & Validations
+    # 5. Financial Calculations & Validations
     val = Decimal(str(data.order_value))
     rcvd = Decimal(str(data.amount_received or "0.00"))
     g_fee = Decimal(str(data.govt_fees or "0.00"))
@@ -470,7 +463,7 @@ def create_sales_order(
         company_id=company_id,
         client_id=client.client_id,
         service_id=data.service_id,
-        salesperson_user_id=salesperson_id,
+        salesperson_user_id=salesperson.user_id,
         lead_source=data.lead_source,
         location=data.location.strip() if data.location else None,
         order_date=data.order_date,

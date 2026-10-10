@@ -29,6 +29,8 @@ vi.mock('../api/conversation', () => ({
   getConversationThreadApi: vi.fn(),
   postConversationMessageApi: vi.fn(),
   markMessagesAsReadApi: vi.fn(),
+  markNotificationMessagesAsReadApi: vi.fn(),
+  markAllNotificationsAsReadApi: vi.fn(),
 }));
 
 describe('Shared Remark Notification & Per-User Unread UI Tests', () => {
@@ -77,7 +79,7 @@ describe('Shared Remark Notification & Per-User Unread UI Tests', () => {
     });
   });
 
-  it('opening NotificationBell dropdown fetches notification list without marking as read', async () => {
+  it('opening NotificationBell dropdown automatically marks displayed unread items as read', async () => {
     vi.mocked(conversationApi.getUnreadSummaryApi).mockResolvedValue({
       total_unread_count: 1,
       unread_orders: {
@@ -122,6 +124,11 @@ describe('Shared Remark Notification & Per-User Unread UI Tests', () => {
       total_pages: 1,
     });
 
+    vi.mocked(conversationApi.markNotificationMessagesAsReadApi).mockResolvedValue({
+      marked_read_count: 1,
+      read_message_ids: ['msg-1'],
+    });
+
     render(
       <MemoryRouter>
         <RemarkNotificationProvider>
@@ -140,8 +147,73 @@ describe('Shared Remark Notification & Per-User Unread UI Tests', () => {
       expect(screen.getByText('OPERATIONS')).toBeInTheDocument();
     });
 
-    // Opening the bell alone must NOT call markMessagesAsReadApi
-    expect(conversationApi.markMessagesAsReadApi).not.toHaveBeenCalled();
+    // Opening the bell dropdown must mark displayed unread IDs as read
+    await waitFor(() => {
+      expect(conversationApi.markNotificationMessagesAsReadApi).toHaveBeenCalledWith(['msg-1']);
+    });
+  });
+
+  it('clicking "Mark all as read" invokes markAllNotificationsAsReadApi', async () => {
+    vi.mocked(conversationApi.getUnreadSummaryApi).mockResolvedValue({
+      total_unread_count: 2,
+      unread_orders: {
+        'order-1': {
+          order_id: 'order-1',
+          unread_count: 2,
+          latest_unread_id: 'msg-1',
+          latest_remark_text: 'Update 1',
+          latest_author_name: 'Deepak Operations',
+        },
+      },
+    });
+
+    vi.mocked(conversationApi.getRemarkNotificationsApi).mockResolvedValue({
+      items: [
+        {
+          message_id: 'msg-1',
+          sales_order_id: 'order-1',
+          order_number: 'ORD-2026-001',
+          client_name: 'Acme Pvt Ltd',
+          service_name: 'Pvt Ltd Registration',
+          location: 'Bangalore',
+          originating_module: 'OPERATIONS',
+          message_text: 'Update 1',
+          author_name: 'Deepak Operations',
+          created_at: '2026-10-09T10:00:00Z',
+          formatted_created_at: '09 Oct 2026, 10:00',
+          is_read: false,
+          target_route: '/operations/my-tasks?open_conversation_order_id=order-1',
+        },
+      ],
+      total_count: 1,
+      unread_count: 1,
+      page: 1,
+      limit: 15,
+      total_pages: 1,
+    });
+
+    vi.mocked(conversationApi.markAllNotificationsAsReadApi).mockResolvedValue({
+      marked_read_count: 2,
+    });
+
+    render(
+      <MemoryRouter>
+        <RemarkNotificationProvider>
+          <NotificationBell />
+        </RemarkNotificationProvider>
+      </MemoryRouter>
+    );
+
+    const bellBtn = await screen.findByRole('button', { name: /notifications/i });
+    fireEvent.click(bellBtn);
+
+    const markAllBtn = await screen.findByTestId('mark-all-read-btn');
+    expect(markAllBtn).toBeInTheDocument();
+    fireEvent.click(markAllBtn);
+
+    await waitFor(() => {
+      expect(conversationApi.markAllNotificationsAsReadApi).toHaveBeenCalled();
+    });
   });
 
   it('opening TaskConversationModal explicitly marks only displayed unread message IDs as read', async () => {
