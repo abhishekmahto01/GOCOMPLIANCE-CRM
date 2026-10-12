@@ -1,0 +1,94 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-is_gocompliance_db}
+      POSTGRES_USER: ${POSTGRES_USER:-gocompliance}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gocompliance} -d ${POSTGRES_DB:-is_gocompliance_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - crm-net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-gocompliance}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-is_gocompliance_db}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      JWT_ALGORITHM: HS256
+      ENVIRONMENT: production
+      CORS_ORIGINS: https://${MAIN_DOMAIN},https://${ADMIN_DOMAIN}
+      FRONTEND_ORIGIN: https://${MAIN_DOMAIN}
+      ADMIN_FRONTEND_ORIGIN: https://${ADMIN_DOMAIN}
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+    volumes:
+      - uploads_data:/app/uploads
+    networks:
+      - crm-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    networks:
+      - crm-net
+
+  admin-frontend:
+    build:
+      context: ./admin-frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    networks:
+      - crm-net
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      MAIN_DOMAIN: ${MAIN_DOMAIN}
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN}
+    volumes:
+      - ./deploy/nginx/templates:/etc/nginx/templates:ro
+      - ./deploy/certbot/conf:/etc/letsencrypt:ro
+      - ./deploy/certbot/www:/var/www/certbot:ro
+    depends_on:
+      - backend
+      - frontend
+      - admin-frontend
+    networks:
+      - crm-net
+
+  certbot:
+    image: certbot/certbot
+    restart: unless-stopped
+    volumes:
+      - ./deploy/certbot/conf:/etc/letsencrypt
+      - ./deploy/certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    networks:
+      - crm-net
+
+volumes:
+  pgdata:
+  uploads_data:
+
+networks:
+  crm-net:
+    driver: bridge
