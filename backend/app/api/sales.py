@@ -577,7 +577,7 @@ def get_operations_assignees(
     session: Session = Depends(get_db),
 ) -> List[SalesEmployeeOption]:
     """Return active Operations department employees eligible for task assignment."""
-    return sales_service.get_eligible_operations_assignees(session, current_user.company_id)
+    return sales_service.get_eligible_operations_assignees(session, current_user.company_id, current_user=current_user)
 
 
 @router.post(

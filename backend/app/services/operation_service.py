@@ -812,7 +812,7 @@ def get_eligible_operations_assignees(
     session: Session,
     user: Optional[User] = None,
 ) -> List[User]:
-    """Retrieve active employees eligible to be assigned operations tasks across companies (strictly excluding Sales, Admin, and Directors)."""
+    """Retrieve active employees eligible to be assigned operations tasks across companies."""
     stmt = (
         select(User)
         .options(
@@ -837,8 +837,12 @@ def get_eligible_operations_assignees(
         elif permissions.has_permission(session, u, "OPERATIONS", "view"):
             eligible.append(u)
 
-    # Sort by first_name, last_name
-    eligible.sort(key=lambda u: (u.first_name, u.last_name))
+    # If the user requesting is Super Admin or has ALL scope, always allow Super Admin as an eligible assignee
+    if user and permissions.is_super_admin_user(session, user):
+        if user not in eligible:
+            eligible.insert(0, user)
+
+    # Sort by first_name, last_name (preserving Super Admin at the top if present)
     return eligible
 
 
@@ -860,8 +864,8 @@ def assign_task(
     if not assignee or assignee.account_status != "ACTIVE":
         raise ValueError(f"Target assignee with ID '{assignee_user_id}' is not an active employee.")
 
-    # Validation: target assignee cannot be from Sales, Admin, or Director roles
-    if is_disallowed_ops_assignee(assignee):
+    # Validation: target assignee cannot be from Sales, Admin, or Director roles, UNLESS they are Super Admin
+    if is_disallowed_ops_assignee(assignee) and not permissions.is_super_admin_user(session, assignee):
         raise ValueError(
             "Task cannot be assigned to Sales, Administration, or Director personnel. "
             "Please select an eligible Operations team member."
@@ -947,18 +951,18 @@ def reassign_task(
     if not new_assignee or new_assignee.account_status != "ACTIVE":
         raise ValueError(f"Target assignee with ID '{new_assignee_user_id}' is not an active employee.")
 
-    # Validation: target assignee cannot be from Sales, Admin, or Director roles
-    if is_disallowed_ops_assignee(new_assignee):
+    # Validation: target assignee cannot be from Sales, Admin, or Director roles, UNLESS they are Super Admin
+    if is_disallowed_ops_assignee(new_assignee) and not permissions.is_super_admin_user(session, new_assignee):
         raise ValueError(
             "Task cannot be assigned to Sales, Administration, or Director personnel. "
             "Please select an eligible Operations team member."
         )
 
-    # Validation: cannot reassign to current assignee or self
+    # Validation: cannot reassign to current assignee
     if app.assigned_to_user_id and str(app.assigned_to_user_id) == str(new_assignee_user_id):
         raise ValueError("Task is already assigned to this employee. Cannot reassign to the current assignee.")
 
-    if reassigned_by and str(reassigned_by.user_id) == str(new_assignee_user_id):
+    if not permissions.is_super_admin_user(session, reassigned_by) and reassigned_by and str(reassigned_by.user_id) == str(new_assignee_user_id):
         raise ValueError("Cannot reassign task to yourself.")
 
     prev_assignee_id = app.assigned_to_user_id

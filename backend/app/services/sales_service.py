@@ -334,7 +334,7 @@ def create_sales_order(
         target_sp = session.get(User, data.salesperson_user_id)
         if not target_sp or target_sp.account_status != "ACTIVE":
             raise ValueError(f"Active salesperson with ID '{data.salesperson_user_id}' not found.")
-        if not is_sales_department_employee(target_sp):
+        if not is_sales_department_employee(target_sp) and not (is_all_scope and (permissions.is_super_admin_user(session, target_sp) or target_sp.user_id == current_user.user_id)):
             raise ValueError(
                 f"Selected employee '{target_sp.first_name} {target_sp.last_name}' does not belong to the Sales department. Converted By must be an active Sales employee."
             )
@@ -354,7 +354,7 @@ def create_sales_order(
 
     if not salesperson or salesperson.account_status != "ACTIVE":
         raise ValueError("Valid active salesperson could not be identified.")
-    if not is_sales_department_employee(salesperson):
+    if not is_sales_department_employee(salesperson) and not (is_all_scope and (permissions.is_super_admin_user(session, salesperson) or salesperson.user_id == current_user.user_id)):
         raise ValueError(
             f"Selected employee '{salesperson.first_name} {salesperson.last_name}' does not belong to the Sales department. Converted By must be an active Sales employee."
         )
@@ -588,11 +588,11 @@ def update_sales_order(
         new_sp = session.get(User, data.salesperson_user_id)
         if not new_sp or new_sp.account_status != "ACTIVE":
             raise ValueError(f"Active salesperson with ID '{data.salesperson_user_id}' not found.")
-        if not is_sales_department_employee(new_sp):
+        if not is_sales_department_employee(new_sp) and not (is_all_scope and (permissions.is_super_admin_user(session, new_sp) or new_sp.user_id == current_user.user_id)):
             raise ValueError(
                 f"Selected employee '{new_sp.first_name} {new_sp.last_name}' does not belong to the Sales department. Converted By must be an active Sales employee."
             )
-        if new_sp.company_id != order.company_id:
+        if not is_all_scope and new_sp.company_id != order.company_id:
             raise ValueError("Selected salesperson does not belong to the same company as the sales order.")
 
         if scope_ctx.scope == "TEAM" and new_sp.user_id not in scope_ctx.team_user_ids:
@@ -1901,7 +1901,7 @@ def get_sales_form_options(
     elif scope_ctx.scope == "TEAM":
         all_team_users = session.execute(
             select(User)
-            .options(joinedload(User.department), joinedload(User.designation))
+            .options(joinedload(User.department), joinedload(User.designation), joinedload(User.company))
             .where(
                 User.user_id.in_(scope_ctx.team_user_ids),
                 User.account_status == "ACTIVE",
@@ -1913,7 +1913,7 @@ def get_sales_form_options(
     else:  # COMPANY, ALL
         all_comp_users = session.execute(
             select(User)
-            .options(joinedload(User.department), joinedload(User.designation))
+            .options(joinedload(User.department), joinedload(User.designation), joinedload(User.company))
             .where(
                 User.company_id == current_user.company_id if scope_ctx.scope == "COMPANY" else True,
                 User.account_status == "ACTIVE",
@@ -1921,6 +1921,10 @@ def get_sales_form_options(
             .order_by(User.first_name.asc(), User.last_name.asc())
         ).scalars().all()
         sp_users = [u for u in all_comp_users if is_sales_department_employee(u)]
+        # If current user is Super Admin or has ALL scope, always allow current user as a valid option
+        is_super = permissions.is_super_admin_user(session, current_user)
+        if (is_super or scope_ctx.scope == "ALL") and current_user not in sp_users:
+            sp_users.insert(0, current_user)
         can_select = True
 
     employee_opts = [
@@ -1930,13 +1934,16 @@ def get_sales_form_options(
             full_name=f"{u.first_name} {u.last_name}".strip(),
             department_name=u.department.department_name if u.department else None,
             designation_name=u.designation.designation_name if u.designation else None,
+            company_id=u.company_id,
+            company_name=u.company.company_name if u.company else None,
+            company_code=u.company.company_code if u.company else None,
         )
         for u in sp_users
     ]
 
     default_salesperson_id = (
         current_user.user_id
-        if is_sales_department_employee(current_user)
+        if (is_sales_department_employee(current_user) or permissions.is_super_admin_user(session, current_user) or scope_ctx.scope == "ALL")
         else (sp_users[0].user_id if sp_users else None)
     )
 
@@ -1961,7 +1968,7 @@ def get_sales_form_options(
     ]
 
     # 4. Eligible Operations Assignees
-    ops_assignees = get_eligible_operations_assignees(session, current_user.company_id)
+    ops_assignees = get_eligible_operations_assignees(session, current_user.company_id, current_user=current_user)
 
     lead_sources = ["WEBSITE", "REFERRAL", "DIRECT", "JUSTDIAL", "INDIAMART", "OTHERS"]
     comp = session.get(Company, current_user.company_id) if current_user.company_id else None
@@ -1985,14 +1992,18 @@ def get_sales_form_options(
 def get_eligible_operations_assignees(
     session: Session,
     company_id: Optional[uuid.UUID] = None,
+    current_user: Optional[User] = None,
 ) -> List[SalesEmployeeOption]:
     """Retrieve active employees in the Operations department/roles for task assignment across companies."""
     from app.services.operation_service import is_disallowed_ops_assignee
 
     stmt = (
         select(User)
-        .outerjoin(Department, User.department_id == Department.department_id)
-        .outerjoin(Designation, User.designation_id == Designation.designation_id)
+        .options(
+            joinedload(User.company),
+            joinedload(User.department),
+            joinedload(User.designation),
+        )
         .where(
             User.account_status == "ACTIVE",
             or_(
@@ -2008,6 +2019,10 @@ def get_eligible_operations_assignees(
     users = session.execute(stmt).scalars().all()
     eligible = [u for u in users if not is_disallowed_ops_assignee(u)]
 
+    if current_user and permissions.is_super_admin_user(session, current_user):
+        if current_user not in eligible:
+            eligible.insert(0, current_user)
+
     return [
         SalesEmployeeOption(
             user_id=u.user_id,
@@ -2015,6 +2030,9 @@ def get_eligible_operations_assignees(
             full_name=f"{u.first_name} {u.last_name}".strip(),
             department_name=u.department.department_name if u.department else None,
             designation_name=u.designation.designation_name if u.designation else None,
+            company_id=u.company_id,
+            company_name=u.company.company_name if u.company else None,
+            company_code=u.company.company_code if u.company else None,
         )
         for u in eligible
     ]

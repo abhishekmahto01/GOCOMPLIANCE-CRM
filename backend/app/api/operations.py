@@ -393,6 +393,9 @@ def list_operations_assignees(
             full_name=f"{u.first_name} {u.last_name}".strip(),
             department_name=u.department.department_name if u.department else None,
             designation_name=u.designation.designation_name if u.designation else None,
+            company_id=u.company_id,
+            company_name=u.company.company_name if u.company else None,
+            company_code=u.company.company_code if u.company else None,
         )
         for u in users
     ]
