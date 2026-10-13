@@ -599,3 +599,50 @@ def test_user_module_permission_migration_ast() -> None:
                     created_tables.append(node.args[0].value)
 
     assert created_tables == ["user_module_permission"], f"Migration should create only user_module_permission, got: {created_tables}"
+
+
+def test_is_super_admin_user_strict_rbac() -> None:
+    """Verify is_super_admin_user returns False for employees even if they use research emails, and True only for genuine super admins."""
+    from app.services.permissions import is_super_admin_user
+
+    # 1. Abhishek Kumar with research.rnd.gc@gmail.com is NOT a super admin
+    abhishek = MagicMock(
+        spec=User,
+        account_status="ACTIVE",
+        first_name="Abhishek",
+        last_name="Kumar",
+        official_email="research.rnd.gc@gmail.com",
+        employee_code="GC0007",
+        is_super_admin=False,
+        role_type="EMPLOYEE",
+        designation=MagicMock(designation_name="Assistant Manager", designation_code="ASSISTANT_MANAGER"),
+    )
+    assert is_super_admin_user(None, abhishek) is False
+
+    # 2. Genuine Super Admin accounts
+    genuine_super_admin_by_name = MagicMock(
+        spec=User,
+        account_status="ACTIVE",
+        first_name="Super",
+        last_name="Admin",
+        official_email="custom@company.com",
+        employee_code="GC0001",
+        is_super_admin=False,
+        role_type="EMPLOYEE",
+        designation=MagicMock(designation_name="Executive", designation_code="EXECUTIVE"),
+    )
+    assert is_super_admin_user(None, genuine_super_admin_by_name) is True
+
+    genuine_super_admin_by_email = MagicMock(
+        spec=User,
+        account_status="ACTIVE",
+        first_name="Owner",
+        last_name="Person",
+        official_email="superadmin@gocompliances.com",
+        employee_code="GC0099",
+        is_super_admin=False,
+        role_type="EMPLOYEE",
+        designation=None,
+    )
+    assert is_super_admin_user(None, genuine_super_admin_by_email) is True
+

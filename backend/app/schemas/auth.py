@@ -156,6 +156,7 @@ class CurrentUserRead(BaseModel):
     must_change_password: bool
     is_hod: bool = False
     is_reporting_manager: bool = False
+    is_super_admin: bool = False
     primary_location: Optional[str] = None
     last_login_at: Optional[datetime] = None
 

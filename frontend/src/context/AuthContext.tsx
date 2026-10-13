@@ -228,21 +228,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (impersonation !== null) {
       return false;
     }
+    if (user?.is_super_admin === true) {
+      return true;
+    }
     if (
-      user?.employee_code === 'CG0001' ||
-      user?.employee_code === 'GC0001' ||
       user?.designation?.name?.toLowerCase().includes('super admin') ||
       user?.designation?.name?.toLowerCase().includes('super administrator') ||
       user?.designation_name?.toLowerCase().includes('super admin') ||
       user?.designation_name?.toLowerCase().includes('super administrator') ||
       (user?.first_name?.toLowerCase() === 'super' && user?.last_name?.toLowerCase() === 'admin') ||
-      user?.official_email?.toLowerCase() === 'research.rnd.gc@gmail.com' ||
-      user?.official_email?.toLowerCase() === 'admin@gocompliances.in' ||
-      user?.official_email?.toLowerCase() === 'admin@gocompliances.com' ||
+      ((user?.employee_code === 'CG0001' || user?.employee_code === 'GC0001') &&
+        (['super', 'admin'].includes(user?.first_name?.toLowerCase() || '') ||
+          ['super', 'admin'].includes(user?.last_name?.toLowerCase() || ''))) ||
       user?.official_email?.toLowerCase() === 'superadmin@gocompliances.in' ||
       user?.official_email?.toLowerCase() === 'superadmin@gocompliances.com' ||
-      user?.official_email?.toLowerCase().startsWith('superadmin@') ||
-      user?.official_email?.toLowerCase().startsWith('admin@')
+      user?.official_email?.toLowerCase().startsWith('superadmin@')
     ) {
       return true;
     }

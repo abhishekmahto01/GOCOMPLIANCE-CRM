@@ -47,6 +47,7 @@ export interface CurrentUser {
   must_change_password: boolean;
   is_hod?: boolean;
   is_reporting_manager?: boolean;
+  is_super_admin?: boolean;
   primary_location?: string | null;
   company_name?: string | null;
   company_code?: string | null;

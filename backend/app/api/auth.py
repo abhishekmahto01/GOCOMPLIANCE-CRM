@@ -290,6 +290,7 @@ def get_current_user_profile(
         must_change_password=current_user.must_change_password,
         is_hod=bool(getattr(current_user, "is_hod", False)),
         is_reporting_manager=bool(getattr(current_user, "is_reporting_manager", False)),
+        is_super_admin=permissions.is_super_admin_user(session, current_user),
         primary_location=getattr(current_user, "primary_location", None),
         last_login_at=current_user.last_login_at,
         department_name=dept.department_name if dept else None,

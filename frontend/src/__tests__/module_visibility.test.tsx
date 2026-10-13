@@ -451,4 +451,79 @@ describe('Permission-based Module Visibility & Authorization', () => {
     expect(moduleHeadings).toHaveLength(1);
     expect(moduleHeadings[0].textContent).toBe('Sales');
   });
+
+  it('14. User with R&D email (research.rnd.gc@gmail.com) and Accounts-only permission strictly renders only Accounts card', async () => {
+    const rndAccountsUser: CurrentUser = {
+      user_id: 'usr-abhishek-0007',
+      employee_code: 'GC0007',
+      first_name: 'Abhishek',
+      last_name: 'Kumar',
+      official_email: 'research.rnd.gc@gmail.com',
+      mobile_number: '+919876543299',
+      company_id: 'comp-1',
+      department_id: 'dept-rnd',
+      designation_id: 'desig-astmgr',
+      account_status: 'ACTIVE',
+      must_change_password: false,
+      is_super_admin: false,
+    };
+
+    const accountsOnlyModules: AccessibleModule[] = [
+      {
+        module_id: 'mod-accounts-root',
+        module_code: 'ACCOUNTS',
+        module_name: 'Accounts',
+        display_order: 40,
+        is_navigation: true,
+        can_view: true,
+        can_create: false,
+        can_edit: false,
+        can_delete: false,
+        can_approve: false,
+        data_scope: 'SELF',
+      },
+      {
+        module_id: 'mod-accounts-dash',
+        module_code: 'ACCOUNTS_DASHBOARD',
+        module_name: 'Accounts Dashboard',
+        display_order: 10,
+        is_navigation: true,
+        can_view: true,
+        can_create: false,
+        can_edit: false,
+        can_delete: false,
+        can_approve: false,
+        can_export: true,
+        data_scope: 'SELF',
+      },
+      {
+        module_id: 'mod-accounts-entries',
+        module_code: 'ACCOUNTS_ENTRIES',
+        module_name: 'Accounts Entries',
+        display_order: 20,
+        is_navigation: true,
+        can_view: true,
+        can_create: false,
+        can_edit: true,
+        can_delete: false,
+        can_approve: false,
+        can_export: true,
+        data_scope: 'SELF',
+      },
+    ];
+
+    vi.spyOn(authApi, 'getCurrentUserApi').mockResolvedValue(rndAccountsUser);
+    vi.spyOn(authApi, 'getAccessibleModulesApi').mockResolvedValue(accountsOnlyModules);
+
+    renderWithProviders();
+
+    await screen.findByRole('heading', { name: 'Accounts' });
+    const moduleHeadings = screen.getAllByRole('heading', { level: 3 });
+    expect(moduleHeadings).toHaveLength(1);
+    expect(moduleHeadings[0].textContent).toBe('Accounts');
+    expect(screen.queryByRole('heading', { name: 'Admin' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Sales' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Operations' })).not.toBeInTheDocument();
+  });
 });
+

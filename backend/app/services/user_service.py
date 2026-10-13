@@ -637,10 +637,11 @@ def delete_employee(
     if target_user.user_id == current_user.user_id:
         raise ValueError("Super Admin cannot delete their own account")
 
-    if target_user.employee_code == "CG0001" or target_user.official_email in (
+    if target_user.employee_code in ("CG0001", "GC0001") or target_user.official_email in (
         "admin@gocompliances.com",
         "superadmin@gocompliances.com",
-        "research.rnd.gc@gmail.com",
+        "admin@gocompliances.in",
+        "superadmin@gocompliances.in",
     ):
         raise ValueError("Primary Super Admin account cannot be deleted")
 

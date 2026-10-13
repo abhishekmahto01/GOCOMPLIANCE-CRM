@@ -496,19 +496,16 @@ def is_super_admin_user(session: Optional[Session], user: Optional[User]) -> boo
     if isinstance(official_email, str):
         em = official_email.strip().lower()
         if em in (
-            "research.rnd.gc@gmail.com",
             "admin@gocompliances.in",
             "admin@gocompliances.com",
             "superadmin@gocompliances.in",
             "superadmin@gocompliances.com",
-        ) or em.startswith("superadmin@") or em.startswith("admin@"):
+        ) or em.startswith("superadmin@"):
             return True
 
     emp_code = getattr(user, "employee_code", None)
     if isinstance(emp_code, str) and emp_code.strip().upper() in ("CG0001", "GC0001"):
         if isinstance(first_name, str) and first_name.strip().lower() in ("super", "admin"):
-            return True
-        if isinstance(official_email, str) and any(kw in official_email.lower() for kw in ("admin", "research", "super")):
             return True
 
     return False
