@@ -525,6 +525,9 @@ def update_sales_order(
     if not scope_ctx.is_user_permitted(order.salesperson_user_id, order.company_id):
         raise SalesOrderPermissionError("You are not authorized to edit this sales order.")
 
+    is_super = permissions.is_super_admin_user(session, current_user)
+    is_all_scope = is_super or (scope_ctx is not None and scope_ctx.scope == "ALL")
+
     # Track old values for audit trail
     old_values = {
         "order_value": Decimal(str(order.order_value)),
@@ -1995,33 +1998,9 @@ def get_eligible_operations_assignees(
     current_user: Optional[User] = None,
 ) -> List[SalesEmployeeOption]:
     """Retrieve active employees in the Operations department/roles for task assignment across companies."""
-    from app.services.operation_service import is_disallowed_ops_assignee
+    from app.services.operation_service import get_eligible_operations_assignees as get_ops_assignees
 
-    stmt = (
-        select(User)
-        .options(
-            joinedload(User.company),
-            joinedload(User.department),
-            joinedload(User.designation),
-        )
-        .where(
-            User.account_status == "ACTIVE",
-            or_(
-                Department.department_name.ilike("%operation%"),
-                Department.department_code.ilike("%operation%"),
-                Department.department_code.ilike("%ops%"),
-                Designation.designation_name.ilike("%operation%"),
-                Designation.designation_code.ilike("%ops%"),
-            ),
-        )
-        .order_by(User.first_name.asc(), User.last_name.asc())
-    )
-    users = session.execute(stmt).scalars().all()
-    eligible = [u for u in users if not is_disallowed_ops_assignee(u)]
-
-    if current_user and permissions.is_super_admin_user(session, current_user):
-        if current_user not in eligible:
-            eligible.insert(0, current_user)
+    users = get_ops_assignees(session, user=current_user)
 
     return [
         SalesEmployeeOption(
@@ -2034,7 +2013,7 @@ def get_eligible_operations_assignees(
             company_name=u.company.company_name if u.company else None,
             company_code=u.company.company_code if u.company else None,
         )
-        for u in eligible
+        for u in users
     ]
 
 
@@ -2094,7 +2073,7 @@ def assign_sales_order_operations(
     assignee = session.get(User, assignee_user_id)
     if not assignee or assignee.account_status != "ACTIVE":
         raise ValueError(f"Target assignee '{assignee_user_id}' is not an active employee.")
-    if is_disallowed_ops_assignee(assignee):
+    if is_disallowed_ops_assignee(assignee, session=session):
         raise ValueError("Task cannot be assigned to Sales, Administration, or Director personnel.")
 
     # Call operation_service.assign_task

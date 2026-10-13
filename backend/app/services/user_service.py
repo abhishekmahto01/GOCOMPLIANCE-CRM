@@ -24,6 +24,7 @@ from app.schemas.user import (
     UserUpdate,
 )
 from app.services.employee_code import extract_code_number, generate_employee_code
+from app.services import permissions
 from app.services.permissions import DataScopeContext, get_team_user_ids
 
 
@@ -407,8 +408,10 @@ def list_employees(
     """
     base_query = select(User)
 
-    # 1. Apply Server-Side Data Scope
-    if scope_context.scope == "SELF":
+    # 1. Apply Server-Side Data Scope (Super Admin is always globally unrestricted)
+    if permissions.is_super_admin_user(session, current_user) or scope_context.scope == "ALL":
+        pass  # No scope restriction
+    elif scope_context.scope == "SELF":
         base_query = base_query.where(User.user_id == current_user.user_id)
     elif scope_context.scope == "TEAM":
         base_query = base_query.where(User.user_id.in_(scope_context.team_user_ids))
@@ -419,8 +422,6 @@ def list_employees(
         )
     elif scope_context.scope == "COMPANY":
         base_query = base_query.where(User.company_id == current_user.company_id)
-    elif scope_context.scope == "ALL":
-        pass  # No scope restriction
 
     # 2. Apply User-Specified Filters
     if company_id:

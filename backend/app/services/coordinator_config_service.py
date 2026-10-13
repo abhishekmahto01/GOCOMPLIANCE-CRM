@@ -137,7 +137,7 @@ def update_coordinator_config(
             raise ValueError(f"Target coordinator user '{coordinator_user_id}' not found.")
         if coordinator.account_status != "ACTIVE":
             raise ValueError("Configured coordinator must be an active employee.")
-        if is_disallowed_ops_assignee(coordinator):
+        if is_disallowed_ops_assignee(coordinator, session=session):
             raise ValueError(
                 "Selected user cannot be an Operations coordinator (disallowed role / department)."
             )
@@ -200,11 +200,12 @@ def get_eligible_coordinators(session: Session) -> List[EligibleCoordinatorOptio
         .where(User.account_status == "ACTIVE")
     )
 
-    users = session.execute(stmt).scalars().all()
+    users = session.execute(stmt).scalars().unique().all()
     eligible: List[EligibleCoordinatorOption] = []
+    seen_ids = set()
 
     for u in users:
-        if is_disallowed_ops_assignee(u):
+        if is_disallowed_ops_assignee(u, session=session):
             continue
 
         dept_name = u.department.department_name.lower() if u.department else ""
@@ -217,24 +218,26 @@ def get_eligible_coordinators(session: Session) -> List[EligibleCoordinatorOptio
         has_ops_perm = permissions.has_permission(session, u, "OPERATIONS", "view")
 
         if has_ops_dept or has_ops_perm:
-            comp_name = u.company.company_name if u.company else "Unknown"
-            comp_code = u.company.company_code if u.company else "UNK"
-            dept_display = u.department.department_name if u.department else None
-            desig_display = u.designation.designation_name if u.designation else None
+            if u.user_id not in seen_ids:
+                seen_ids.add(u.user_id)
+                comp_name = u.company.company_name if u.company else "Unknown"
+                comp_code = u.company.company_code if u.company else "UNK"
+                dept_display = u.department.department_name if u.department else None
+                desig_display = u.designation.designation_name if u.designation else None
 
-            eligible.append(
-                EligibleCoordinatorOption(
-                    user_id=u.user_id,
-                    employee_code=u.employee_code,
-                    full_name=f"{u.first_name} {u.last_name}".strip(),
-                    email=u.official_email,
-                    company_id=u.company_id,
-                    company_name=comp_name,
-                    company_code=comp_code,
-                    department_name=dept_display,
-                    designation_name=desig_display,
+                eligible.append(
+                    EligibleCoordinatorOption(
+                        user_id=u.user_id,
+                        employee_code=u.employee_code,
+                        full_name=f"{u.first_name} {u.last_name}".strip(),
+                        email=u.official_email,
+                        company_id=u.company_id,
+                        company_name=comp_name,
+                        company_code=comp_code,
+                        department_name=dept_display,
+                        designation_name=desig_display,
+                    )
                 )
-            )
 
     eligible.sort(key=lambda o: (o.full_name, o.employee_code))
     return eligible

@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import desc, func, or_, select
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import Session, joinedload, object_session, selectinload
 
 from app.models.client import ClientMaster
 from app.models.company import Company
@@ -773,10 +773,23 @@ def get_operation_application_detail(
     return _to_application_detail_read(app)
 
 
-def is_disallowed_ops_assignee(u: User) -> bool:
-    """Check if user belongs to Sales, Admin, or Director roles, who are forbidden from being assigned operations tasks."""
-    if not u or u.account_status != "ACTIVE":
+def is_disallowed_ops_assignee(u: User, session: Optional[Session] = None) -> bool:
+    """Check if user belongs to Sales, Admin, or Director roles who lack Operations access.
+
+    An active employee is ELIGIBLE if they have Operations permissions (can_view on OPERATIONS)
+    or are a Super Admin. Employees who purely belong to Sales, Administration, or Director
+    roles WITHOUT Operations permissions or Super Admin status are disallowed.
+    """
+    if not u or getattr(u, "account_status", None) != "ACTIVE":
         return True
+
+    # Check if user is authorized via Super Admin or Operations permissions
+    s = session or (object_session(u) if hasattr(u, "_sa_instance_state") else None)
+    if s is not None:
+        if permissions.is_super_admin_user(s, u):
+            return False
+        if permissions.has_permission(s, u, "OPERATIONS", "view"):
+            return False
 
     dept_name = (u.department.department_name.lower() if u.department and u.department.department_name else "")
     dept_code = (u.department.department_code.upper() if u.department and u.department.department_code else "")
@@ -801,10 +814,6 @@ def is_disallowed_ops_assignee(u: User) -> bool:
     if "managing director" in desig_name or "ceo" in desig_name or "chief" in desig_name:
         return True
 
-    # Disallow Super Admin
-    if getattr(u, "is_super_admin", False) or getattr(u, "role_type", "") == "SUPER_ADMIN" or getattr(u, "employee_code", "") == "CG0001":
-        return True
-
     return False
 
 
@@ -825,10 +834,10 @@ def get_eligible_operations_assignees(
         )
     )
 
-    users = session.execute(stmt).scalars().all()
+    users = session.execute(stmt).scalars().unique().all()
     eligible: List[User] = []
     for u in users:
-        if is_disallowed_ops_assignee(u):
+        if is_disallowed_ops_assignee(u, session=session):
             continue
         dept_name = u.department.department_name.lower() if u.department else ""
         dept_code = u.department.department_code.upper() if u.department else ""
@@ -836,15 +845,26 @@ def get_eligible_operations_assignees(
             eligible.append(u)
         elif permissions.has_permission(session, u, "OPERATIONS", "view"):
             eligible.append(u)
+        elif permissions.is_super_admin_user(session, u):
+            eligible.append(u)
 
-    # If the user requesting is Super Admin or has ALL scope, allow Super Admin in the list.
-    # Regular operations employees will NOT see Super Admin in their assignee list (they cannot reassign to Super Admin).
-    if user and permissions.is_super_admin_user(session, user):
-        if user not in eligible:
-            eligible.insert(0, user)
+    # Strictly deduplicate by canonical user_id while preserving order
+    seen_ids = set()
+    deduped: List[User] = []
+    for u in eligible:
+        if u.user_id not in seen_ids:
+            seen_ids.add(u.user_id)
+            deduped.append(u)
 
-    # Sort by first_name, last_name (preserving Super Admin at the top if present)
-    return eligible
+    # Sort: Super Admins at top, then alphabetical by first_name, last_name
+    deduped.sort(
+        key=lambda u: (
+            0 if permissions.is_super_admin_user(session, u) else 1,
+            (u.first_name or "").lower(),
+            (u.last_name or "").lower(),
+        )
+    )
+    return deduped
 
 
 def assign_task(
@@ -865,8 +885,8 @@ def assign_task(
     if not assignee or assignee.account_status != "ACTIVE":
         raise ValueError(f"Target assignee with ID '{assignee_user_id}' is not an active employee.")
 
-    # Validation: target assignee cannot be from Sales, Admin, or Director roles, UNLESS they are Super Admin
-    if is_disallowed_ops_assignee(assignee) and not permissions.is_super_admin_user(session, assignee):
+    # Validation: target assignee cannot be from Sales, Admin, or Director roles unless authorized
+    if is_disallowed_ops_assignee(assignee, session=session):
         raise ValueError(
             "Task cannot be assigned to Sales, Administration, or Director personnel. "
             "Please select an eligible Operations team member."
@@ -953,15 +973,25 @@ def reassign_task(
         raise ValueError(f"Target assignee with ID '{new_assignee_user_id}' is not an active employee.")
 
     # Validation: target assignee cannot be from Sales, Admin, or Director roles.
-    # Operations employees cannot assign or reassign tasks to Super Admin/Directors.
-    # Super Admin however has all rights to assign/reassign to anyone including themselves or operations employees.
+    # Operations employees cannot reassign tasks to Super Admin unless authorized and target has Operations role.
     is_actor_super = permissions.is_super_admin_user(session, reassigned_by)
     is_target_super = permissions.is_super_admin_user(session, new_assignee)
 
-    if not is_actor_super and is_target_super:
+    actor_can_assign = (
+        is_actor_super
+        or permissions.has_permission(session, reassigned_by, "OPERATION_TASK_ASSIGNMENT", "reassign")
+        or permissions.has_permission(session, reassigned_by, "OPERATION_TASK_ASSIGNMENT", "assign")
+        or permissions.has_permission(session, reassigned_by, "OPERATIONS", "reassign")
+        or permissions.has_permission(session, reassigned_by, "OPERATIONS", "edit")
+        or permissions.has_permission(session, reassigned_by, "ADMIN_ACCESS", "view")
+        or permissions.has_permission(session, reassigned_by, "SALES_MY_ORDERS", "read")
+    )
+    target_has_ops = permissions.has_permission(session, new_assignee, "OPERATIONS", "view")
+
+    if not is_actor_super and is_target_super and not (actor_can_assign and target_has_ops):
         raise ValueError("Operations employees cannot reassign tasks to Super Admin.")
 
-    if is_disallowed_ops_assignee(new_assignee) and not is_target_super:
+    if is_disallowed_ops_assignee(new_assignee, session=session):
         raise ValueError(
             "Task cannot be assigned to Sales, Administration, or Director personnel. "
             "Please select an eligible Operations team member."

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from sqlalchemy import func, or_, select, text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from app.models.company import Company
 from app.models.department import Department
@@ -509,6 +509,25 @@ def is_super_admin_user(session: Optional[Session], user: Optional[User]) -> boo
     emp_code = getattr(user, "employee_code", None)
     if isinstance(emp_code, str) and emp_code.strip().upper() in ("CG0001", "GC0001"):
         if isinstance(first_name, str) and first_name.strip().lower() in ("super", "admin"):
+            return True
+
+    # Database RBAC verification: check if user possesses the canonical Super Admin permission grant
+    s = session or (object_session(user) if hasattr(user, "_sa_instance_state") else None)
+    if s is not None and hasattr(user, "user_id"):
+        stmt = (
+            select(UserModulePermission)
+            .join(Module, UserModulePermission.module_id == Module.module_id)
+            .where(
+                UserModulePermission.user_id == user.user_id,
+                Module.module_code == "ADMIN_ACCESS",
+                UserModulePermission.status == "ACTIVE",
+                UserModulePermission.data_scope == "ALL",
+                UserModulePermission.can_view.is_(True),
+                UserModulePermission.can_edit.is_(True),
+            )
+        )
+        active_sa_perm = s.execute(stmt).scalars().first()
+        if active_sa_perm and is_permission_active_and_valid(active_sa_perm):
             return True
 
     return False
@@ -1326,6 +1345,7 @@ def save_user_permissions_bundle(
     accounts_has_any_view = False
 
     # 3. Validate and apply permissions
+    target_is_super = is_super_admin_user(session, target_user)
     processed_module_ids: Set[uuid.UUID] = set()
     for perm_in in payload.permissions:
         code = perm_in.page_code.strip().upper()
@@ -1378,7 +1398,7 @@ def save_user_permissions_bundle(
             can_assign=perm_in.can_assign if "assign" in supported else False,
             can_reassign=perm_in.can_reassign if "reassign" in supported else False,
             can_export=perm_in.can_export if "export" in supported else False,
-            data_scope=perm_in.data_scope,
+            data_scope="ALL" if target_is_super else perm_in.data_scope,
             status=perm_in.status,
             granted_by_user_id=actor_user.user_id,
             is_bootstrap=True,
@@ -1400,7 +1420,7 @@ def save_user_permissions_bundle(
             can_assign=False,
             can_reassign=False,
             can_export=False,
-            data_scope="COMPANY",
+            data_scope="ALL" if target_is_super else "COMPANY",
             status="ACTIVE" if admin_has_any_view else "INACTIVE",
             granted_by_user_id=actor_user.user_id,
             is_bootstrap=True,
@@ -1420,7 +1440,7 @@ def save_user_permissions_bundle(
             can_assign=False,
             can_reassign=False,
             can_export=False,
-            data_scope="SELF",
+            data_scope="ALL" if target_is_super else "SELF",
             status="ACTIVE" if sales_has_any_view else "INACTIVE",
             granted_by_user_id=actor_user.user_id,
             is_bootstrap=True,
@@ -1440,7 +1460,7 @@ def save_user_permissions_bundle(
             can_assign=False,
             can_reassign=False,
             can_export=False,
-            data_scope="SELF",
+            data_scope="ALL" if target_is_super else "SELF",
             status="ACTIVE" if operations_has_any_view else "INACTIVE",
             granted_by_user_id=actor_user.user_id,
             is_bootstrap=True,
@@ -1460,7 +1480,7 @@ def save_user_permissions_bundle(
             can_assign=False,
             can_reassign=False,
             can_export=False,
-            data_scope="COMPANY",
+            data_scope="ALL" if target_is_super else "COMPANY",
             status="ACTIVE" if accounts_has_any_view else "INACTIVE",
             granted_by_user_id=actor_user.user_id,
             is_bootstrap=True,
