@@ -318,7 +318,7 @@ def get_current_user_modules(
     session: Session = Depends(get_db),
 ) -> List[AccessibleModuleRead]:
     """Return navigation hierarchy and permission flags for the authenticated user."""
-    return permissions.get_accessible_modules(session, current_user.user_id)
+    return permissions.get_accessible_modules(session, current_user)
 
 
 @router.get(
@@ -333,7 +333,7 @@ def get_current_user_effective_permissions(
     session: Session = Depends(get_db),
 ) -> UserEffectivePermissionsResponse:
     """Return effective permission slugs map and accessible pages for the authenticated user."""
-    return permissions.get_user_effective_permissions_bundle(session, current_user.user_id)
+    return permissions.get_user_effective_permissions_bundle(session, current_user)
 
 
 @router.post(

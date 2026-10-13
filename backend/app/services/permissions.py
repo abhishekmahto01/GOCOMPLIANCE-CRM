@@ -2,7 +2,7 @@
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session
@@ -468,6 +468,9 @@ def is_super_admin_user(session: Optional[Session], user: Optional[User]) -> boo
     """Check whether an authenticated user is a Super Admin who has global unrestricted rights."""
     if not user or getattr(user, "account_status", None) != "ACTIVE":
         return False
+    # If the user context is an impersonated session, the actor MUST NOT inherit Super Admin bypass!
+    if getattr(user, "_is_impersonated", False):
+        return False
     is_sa = getattr(user, "is_super_admin", False)
     if is_sa is True:
         return True
@@ -763,10 +766,16 @@ def resolve_data_scope_context(
 
 def get_accessible_modules(
     session: Session,
-    user_id: uuid.UUID,
+    user_or_id: Union[User, uuid.UUID],
 ) -> List[AccessibleModuleRead]:
     """Retrieve all accessible modules for a user formatted for navigation and UI authorization."""
-    user = session.get(User, user_id)
+    if isinstance(user_or_id, User):
+        user = user_or_id
+        user_id = user.user_id
+    else:
+        user_id = user_or_id
+        user = session.get(User, user_id)
+
     if not user or user.account_status != "ACTIVE":
         return []
 
@@ -822,6 +831,9 @@ def get_accessible_modules(
     parents_to_add: Set[uuid.UUID] = set()
     for mod_id in accessible_module_ids:
         mod = modules_by_id.get(mod_id)
+        # Only navigable child modules/pages should pull parent navigation modules into visibility
+        if not mod or not mod.is_navigation:
+            continue
         curr = mod
         while curr and curr.parent_module_id:
             parent = modules_by_id.get(curr.parent_module_id)
@@ -1314,6 +1326,7 @@ def save_user_permissions_bundle(
     accounts_has_any_view = False
 
     # 3. Validate and apply permissions
+    processed_module_ids: Set[uuid.UUID] = set()
     for perm_in in payload.permissions:
         code = perm_in.page_code.strip().upper()
         if code not in PAGE_CATALOG_CONFIG:
@@ -1351,6 +1364,8 @@ def save_user_permissions_bundle(
         if not target_module:
             raise ValueError(f"Module record for page code '{code}' not found in database.")
 
+        processed_module_ids.add(target_module.module_id)
+
         grant_or_update_permission(
             session=session,
             user_id=target_user_id,
@@ -1370,7 +1385,9 @@ def save_user_permissions_bundle(
         )
 
     # 4. Sync parent module (ADMIN, SALES, OPERATIONS, ACCOUNTS) navigation view
+    handled_parent_module_ids: Set[uuid.UUID] = set()
     if parent_mods.get("ADMIN"):
+        handled_parent_module_ids.add(parent_mods["ADMIN"].module_id)
         grant_or_update_permission(
             session=session,
             user_id=target_user_id,
@@ -1390,6 +1407,7 @@ def save_user_permissions_bundle(
         )
 
     if parent_mods.get("SALES"):
+        handled_parent_module_ids.add(parent_mods["SALES"].module_id)
         grant_or_update_permission(
             session=session,
             user_id=target_user_id,
@@ -1409,6 +1427,7 @@ def save_user_permissions_bundle(
         )
 
     if parent_mods.get("OPERATIONS"):
+        handled_parent_module_ids.add(parent_mods["OPERATIONS"].module_id)
         grant_or_update_permission(
             session=session,
             user_id=target_user_id,
@@ -1428,6 +1447,7 @@ def save_user_permissions_bundle(
         )
 
     if parent_mods.get("ACCOUNTS"):
+        handled_parent_module_ids.add(parent_mods["ACCOUNTS"].module_id)
         grant_or_update_permission(
             session=session,
             user_id=target_user_id,
@@ -1445,6 +1465,27 @@ def save_user_permissions_bundle(
             granted_by_user_id=actor_user.user_id,
             is_bootstrap=True,
         )
+
+    # 5. Revoke / deactivate any orphaned or unmanaged module permissions
+    # Any existing UserModulePermission for target_user_id not in processed_module_ids or handled_parent_module_ids
+    # represents a legacy, orphaned, or unmanaged module grant that must NOT remain active.
+    all_managed_module_ids = processed_module_ids | handled_parent_module_ids
+    existing_unmanaged_perms = session.execute(
+        select(UserModulePermission).where(
+            UserModulePermission.user_id == target_user_id,
+            UserModulePermission.module_id.not_in(all_managed_module_ids),
+        )
+    ).scalars().all()
+    for unmanaged_perm in existing_unmanaged_perms:
+        unmanaged_perm.can_view = False
+        unmanaged_perm.can_create = False
+        unmanaged_perm.can_edit = False
+        unmanaged_perm.can_delete = False
+        unmanaged_perm.can_approve = False
+        unmanaged_perm.can_assign = False
+        unmanaged_perm.can_reassign = False
+        unmanaged_perm.can_export = False
+        unmanaged_perm.status = "INACTIVE"
 
     session.flush()
 
@@ -1616,14 +1657,20 @@ def copy_user_permissions(
 
 def get_user_effective_permissions_bundle(
     session: Session,
-    user_id: uuid.UUID,
+    user_or_id: Union[User, uuid.UUID],
 ) -> UserEffectivePermissionsResponse:
     """Return effective permission slugs map and accessible pages for current user."""
-    user = session.get(User, user_id)
+    if isinstance(user_or_id, User):
+        user = user_or_id
+        user_id = user.user_id
+    else:
+        user_id = user_or_id
+        user = session.get(User, user_id)
+
     if not user:
         raise ValueError(f"User with ID '{user_id}' not found")
 
-    accessible_modules = get_accessible_modules(session, user_id)
+    accessible_modules = get_accessible_modules(session, user)
     accessible_by_code = {m.module_code: m for m in accessible_modules}
 
     slug_map: Dict[str, bool] = {}

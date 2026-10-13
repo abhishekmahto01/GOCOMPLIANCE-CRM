@@ -22,17 +22,20 @@ import { PublicRoute } from './components/auth/PublicRoute';
 import { AdminLayout } from './components/admin/AdminLayout';
 import { AdminIndexRedirect } from './components/admin/AdminIndexRedirect';
 import { SalesLayout } from './components/sales/SalesLayout';
+import { SalesIndexRedirect } from './components/sales/SalesIndexRedirect';
 import { SalesDashboardPage } from './pages/SalesDashboardPage';
 import { SalesEntryPage } from './pages/SalesEntryPage';
 import { SalesRegisterPage } from './pages/SalesRegisterPage';
 
 import { OperationsLayout } from './components/operations/OperationsLayout';
+import { OperationsIndexRedirect } from './components/operations/OperationsIndexRedirect';
 import { OperationsDashboardPage } from './pages/operations/OperationsDashboardPage';
 import { MyTasksPage } from './pages/operations/MyTasksPage';
 import { UnassignedOrdersPage } from './pages/operations/UnassignedOrdersPage';
 import { TaskAssignmentPage } from './pages/operations/TaskAssignmentPage';
 
 import { AccountsLayout } from './components/accounts/AccountsLayout';
+import { AccountsIndexRedirect } from './components/accounts/AccountsIndexRedirect';
 import { AccountsDashboardPage } from './pages/accounts/AccountsDashboardPage';
 import { AccountsEntriesPage } from './pages/accounts/AccountsEntriesPage';
 import { ImpersonationBanner } from './components/common/ImpersonationBanner';
@@ -109,7 +112,7 @@ export const App: React.FC = () => {
               </ProtectedRoute>
             }
           >
-            <Route index element={<Navigate to="/sales/dashboard" replace />} />
+            <Route index element={<SalesIndexRedirect />} />
             <Route
               path="dashboard"
               element={
@@ -169,7 +172,7 @@ export const App: React.FC = () => {
               </ProtectedRoute>
             }
           >
-            <Route index element={<Navigate to="/operations/dashboard" replace />} />
+            <Route index element={<OperationsIndexRedirect />} />
             <Route
               path="dashboard"
               element={
@@ -253,7 +256,7 @@ export const App: React.FC = () => {
               </ProtectedRoute>
             }
           >
-            <Route index element={<AccountsDashboardPage />} />
+            <Route index element={<AccountsIndexRedirect />} />
             <Route
               path="dashboard"
               element={

@@ -190,6 +190,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const startImpersonation = async (employeeCode: string): Promise<ImpersonationMetadata> => {
     setIsLoading(true);
+    setUser(null);
+    setModules([]);
+    setPermissionError(null);
     try {
       const response = await startImpersonationApi(employeeCode);
       setImpersonation(response.impersonation);
@@ -202,6 +205,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const returnToAdmin = async (): Promise<void> => {
     setIsLoading(true);
+    setUser(null);
+    setModules([]);
+    setPermissionError(null);
     try {
       await returnToAdminApi();
       setImpersonation(null);

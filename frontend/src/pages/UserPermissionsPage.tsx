@@ -79,7 +79,7 @@ const ACTION_DISPLAY_CONFIG: Record<string, { label: string; activeColor: string
 };
 
 export const UserPermissionsPage: React.FC = () => {
-  const { hasPermission } = useAuth();
+  const { hasPermission, user: currentAuthUser, refreshUserProfile } = useAuth();
   const canManageAccess =
     hasPermission('ADMIN', 'view') ||
     hasPermission('ADMIN_ACCESS', 'view') ||
@@ -476,6 +476,9 @@ export const UserPermissionsPage: React.FC = () => {
         message: `Permissions for ${updated.employee_code} (${updated.first_name} ${updated.last_name}) saved successfully!`,
         type: 'success',
       });
+      if (currentAuthUser && currentAuthUser.user_id === selectedUserId) {
+        await refreshUserProfile();
+      }
     } catch (err) {
       setToast({
         message: `Failed to save permissions: ${extractErrorMessage(err)}`,
@@ -501,6 +504,9 @@ export const UserPermissionsPage: React.FC = () => {
       setIsCopyModalOpen(false);
       setCopySourceUserId('');
       await fetchEmployeePermissions(selectedUserId);
+      if (currentAuthUser && currentAuthUser.user_id === selectedUserId) {
+        await refreshUserProfile();
+      }
     } catch (err) {
       setToast({
         message: `Copy failed: ${extractErrorMessage(err)}`,

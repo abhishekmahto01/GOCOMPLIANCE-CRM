@@ -477,3 +477,52 @@ def test_token_refresh_during_impersonation_preserves_impersonation_claims(
     assert status_data["impersonation"]["actor_employee_code"] == "CG0001"
 
 
+def test_impersonated_employee_never_inherits_super_admin_and_uses_target_permissions(
+    client: TestClient, impersonation_test_data, monkeypatch, db_session: Session
+):
+    """Verify impersonated normal employee strictly does not inherit Super Admin privileges, has is_super_admin=False, and sees target modules only."""
+    monkeypatch.setattr(settings, "ENABLE_ADMIN_IMPERSONATION", True)
+    admin = impersonation_test_data["admin"]
+    sales_emp = impersonation_test_data["sales_emp"]
+    admin_token = create_access_token(user_id=admin.user_id, token_version=admin.token_version)
+
+    # 1. Super Admin checking /auth/me has is_super_admin=True
+    admin_me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {admin_token}"})
+    assert admin_me.status_code == status.HTTP_200_OK
+    assert admin_me.json()["is_super_admin"] is True
+
+    # 2. Admin starts impersonation of Rohan (sales employee)
+    start_resp = client.post(
+        "/api/auth/impersonate",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"employee_code": "CG0004"},
+    )
+    assert start_resp.status_code == status.HTTP_200_OK
+    imp_token = start_resp.json()["access_token"]
+
+    # 3. Impersonated token on /auth/me returns is_super_admin=False
+    imp_me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {imp_token}"})
+    assert imp_me.status_code == status.HTTP_200_OK
+    imp_me_data = imp_me.json()
+    assert imp_me_data["employee_code"] == "CG0004"
+    assert imp_me_data["is_super_admin"] is False
+
+    # 4. Impersonated user calling /auth/me/modules gets target employee modules (not all 31 modules)
+    modules_resp = client.get("/api/auth/me/modules", headers={"Authorization": f"Bearer {imp_token}"})
+    assert modules_resp.status_code == status.HTTP_200_OK
+    imp_modules = modules_resp.json()
+    # A genuine super admin gets all seeded modules (>= 20), whereas sales_emp without grants gets 0
+    assert len(imp_modules) < 20
+
+    # 5. Normal login for Rohan produces the same permissions
+    normal_sales_token = create_access_token(user_id=sales_emp.user_id, token_version=sales_emp.token_version)
+    normal_me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {normal_sales_token}"})
+    assert normal_me.status_code == status.HTTP_200_OK
+    assert normal_me.json()["is_super_admin"] is False
+
+    normal_modules_resp = client.get("/api/auth/me/modules", headers={"Authorization": f"Bearer {normal_sales_token}"})
+    assert normal_modules_resp.status_code == status.HTTP_200_OK
+    assert [m["module_code"] for m in normal_modules_resp.json()] == [m["module_code"] for m in imp_modules]
+
+
+

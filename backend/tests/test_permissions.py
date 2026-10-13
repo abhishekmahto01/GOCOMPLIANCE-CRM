@@ -646,3 +646,180 @@ def test_is_super_admin_user_strict_rbac() -> None:
     )
     assert is_super_admin_user(None, genuine_super_admin_by_email) is True
 
+
+def test_is_super_admin_impersonated_user_never_inherits_super_admin() -> None:
+    """Verify is_super_admin_user returns False when user._is_impersonated is True, blocking privilege fallback."""
+    from app.services.permissions import is_super_admin_user
+
+    impersonated_super = MagicMock(
+        spec=User,
+        account_status="ACTIVE",
+        first_name="Super",
+        last_name="Admin",
+        official_email="superadmin@gocompliances.com",
+        employee_code="GC0001",
+        is_super_admin=True,
+        role_type="SUPER_ADMIN",
+        _is_impersonated=True,
+    )
+    assert is_super_admin_user(None, impersonated_super) is False
+
+
+def test_permission_revocation_all_modules_to_operations_only(db_session: Session) -> None:
+    """Verify transitioning an employee from All Modules to Operations only revokes unmanaged and deselected grants."""
+    from datetime import date
+    from sqlalchemy import select
+    from app.models.company import Company
+    from app.models.department import Department
+    from app.models.designation import Designation
+    from app.models.module import Module
+    from app.models.user_module_permission import UserModulePermission
+    from app.schemas.permission import PageActionPermission, UserPermissionsSaveRequest
+    from app.scripts.seed_modules import seed_modules
+    from app.services.permissions import (
+        PAGE_CATALOG_CONFIG,
+        get_accessible_modules,
+        grant_or_update_permission,
+        save_user_permissions_bundle,
+    )
+
+    seed_modules(db_session)
+
+    # Create company, department, designation
+    import random, string
+    suffix = "".join(random.choices(string.ascii_uppercase, k=6))
+    comp = Company(
+        company_id=uuid.uuid4(),
+        company_code=f"GC_{suffix}",
+        company_name=f"GoCompliance Test {suffix}",
+        employee_code_prefix="GC",
+        status="ACTIVE",
+    )
+    dept = Department(department_id=uuid.uuid4(), department_code=f"RD_{suffix}", department_name=f"R&D {suffix}", status="ACTIVE")
+    desig = Designation(designation_id=uuid.uuid4(), designation_code=f"ENG_{suffix}", designation_name=f"Engineer {suffix}", level_rank=3, status="ACTIVE")
+    db_session.add_all([comp, dept, desig])
+    db_session.flush()
+
+    actor_admin = User(
+        user_id=uuid.uuid4(),
+        employee_code="GC0001",
+        official_email="superadmin@gocompliances.com",
+        first_name="Super",
+        last_name="Admin",
+        mobile_number="+919876543210",
+        date_of_joining=date(2024, 1, 1),
+        employment_type="FULL_TIME",
+        company_id=comp.company_id,
+        department_id=dept.department_id,
+        designation_id=desig.designation_id,
+        account_status="ACTIVE",
+        must_change_password=False,
+        password_hash="testhash",
+    )
+
+    target_emp = User(
+        user_id=uuid.uuid4(),
+        employee_code="GC0007",
+        official_email="research.rnd.gc@gmail.com",
+        first_name="Abhishek",
+        last_name="Kumar",
+        mobile_number="+919876543211",
+        date_of_joining=date(2024, 1, 1),
+        employment_type="FULL_TIME",
+        company_id=comp.company_id,
+        department_id=dept.department_id,
+        designation_id=desig.designation_id,
+        account_status="ACTIVE",
+        must_change_password=False,
+        password_hash="testhash",
+    )
+    db_session.add_all([actor_admin, target_emp])
+    db_session.flush()
+
+    # Step 1: Initially grant ALL modules (including ACCOUNTS_PAYMENT_REGISTER legacy submodule)
+    all_active_mods = db_session.execute(select(Module).where(Module.status == "ACTIVE")).scalars().all()
+    for mod in all_active_mods:
+        grant_or_update_permission(
+            session=db_session,
+            user_id=target_emp.user_id,
+            module_id=mod.module_id,
+            can_view=True,
+            can_create=True,
+            can_edit=True,
+            can_delete=True,
+            can_approve=True,
+            can_assign=True,
+            can_reassign=True,
+            can_export=True,
+            data_scope="COMPANY",
+            status="ACTIVE",
+            granted_by_user_id=actor_admin.user_id,
+        )
+    db_session.flush()
+
+    # Verify initially has access to all 4 parent modules
+    initial_accessible = get_accessible_modules(db_session, target_emp.user_id)
+    initial_codes = {m.module_code for m in initial_accessible}
+    assert "ADMIN" in initial_codes
+    assert "SALES" in initial_codes
+    assert "OPERATIONS" in initial_codes
+    assert "ACCOUNTS" in initial_codes
+
+    # Step 2: Admin subsequently updates permissions to OPERATIONS only
+    ops_only_permissions = []
+    for page_code, page_cfg in PAGE_CATALOG_CONFIG.items():
+        is_ops = page_cfg["module_code"] == "OPERATIONS"
+        supported = set(page_cfg["supported_actions"])
+        ops_only_permissions.append(
+            PageActionPermission(
+                page_code=page_code,
+                can_view=is_ops,
+                can_create=is_ops and ("write" in supported or "create" in supported),
+                can_edit=is_ops and ("update" in supported or "edit" in supported),
+                can_delete=is_ops and ("delete" in supported),
+                can_assign=is_ops and ("assign" in supported),
+                can_reassign=is_ops and ("reassign" in supported),
+                can_export=is_ops and ("export" in supported),
+                can_approve=is_ops and ("approve" in supported),
+                data_scope="COMPANY",
+                status="ACTIVE",
+            )
+        )
+
+    save_payload = UserPermissionsSaveRequest(
+        permissions=ops_only_permissions,
+        user_settings=None,
+    )
+    save_user_permissions_bundle(
+        session=db_session,
+        actor_user=actor_admin,
+        target_user_id=target_emp.user_id,
+        payload=save_payload,
+    )
+
+    # Step 3: Verify get_accessible_modules returns ONLY Operations modules!
+    updated_accessible = get_accessible_modules(db_session, target_emp.user_id)
+    updated_codes = {m.module_code for m in updated_accessible}
+
+    assert "OPERATIONS" in updated_codes
+    assert "ADMIN" not in updated_codes
+    assert "SALES" not in updated_codes
+    assert "ACCOUNTS" not in updated_codes
+    assert "ACCOUNTS_DASHBOARD" not in updated_codes
+    assert "ACCOUNTS_ENTRIES" not in updated_codes
+    assert "ACCOUNTS_PAYMENT_REGISTER" not in updated_codes
+
+    # Step 4: Verify unmanaged legacy submodule was deactivated
+    legacy_acc = db_session.execute(
+        select(UserModulePermission)
+        .join(Module, UserModulePermission.module_id == Module.module_id)
+        .where(
+            UserModulePermission.user_id == target_emp.user_id,
+            Module.module_code == "ACCOUNTS_PAYMENT_REGISTER",
+        )
+    ).scalar_one_or_none()
+    if legacy_acc:
+        assert legacy_acc.can_view is False
+        assert legacy_acc.status == "INACTIVE"
+
+

@@ -525,5 +525,154 @@ describe('Permission-based Module Visibility & Authorization', () => {
     expect(screen.queryByRole('heading', { name: 'Sales' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Operations' })).not.toBeInTheDocument();
   });
+
+  // 15. Employee with Operations-only permissions (Abhishek Kumar transition scenario)
+  it('strictly displays ONLY Operations card when an employee has Operations-only permissions', async () => {
+    const abhishekOpsUser: CurrentUser = {
+      user_id: 'usr-abhishek-0007',
+      employee_code: 'GC0007',
+      first_name: 'Abhishek',
+      last_name: 'Kumar',
+      official_email: 'research.rnd.gc@gmail.com',
+      mobile_number: '+919876543211',
+      company_id: 'comp-1',
+      department_id: 'dept-rd',
+      designation_id: 'desig-lead',
+      account_status: 'ACTIVE',
+      must_change_password: false,
+      is_super_admin: false,
+    };
+
+    const opsOnlyModules: AccessibleModule[] = [
+      {
+        module_id: 'mod-ops-root',
+        module_code: 'OPERATIONS',
+        module_name: 'Operations',
+        display_order: 30,
+        is_navigation: true,
+        can_view: true,
+        can_create: false,
+        can_edit: false,
+        can_delete: false,
+        can_approve: false,
+        data_scope: 'SELF',
+      },
+      {
+        module_id: 'mod-ops-dash',
+        module_code: 'OPERATION_DASHBOARD',
+        module_name: 'Operation Dashboard',
+        display_order: 10,
+        is_navigation: true,
+        can_view: true,
+        can_create: false,
+        can_edit: false,
+        can_delete: false,
+        can_approve: false,
+        can_export: true,
+        data_scope: 'SELF',
+      },
+      {
+        module_id: 'mod-ops-mytasks',
+        module_code: 'OPERATION_MY_TASKS',
+        module_name: 'My Assigned Tasks',
+        display_order: 20,
+        is_navigation: true,
+        can_view: true,
+        can_create: false,
+        can_edit: true,
+        can_delete: false,
+        can_approve: false,
+        data_scope: 'SELF',
+      },
+    ];
+
+    vi.spyOn(authApi, 'getCurrentUserApi').mockResolvedValue(abhishekOpsUser);
+    vi.spyOn(authApi, 'getAccessibleModulesApi').mockResolvedValue(opsOnlyModules);
+
+    renderWithProviders();
+
+    await screen.findByRole('heading', { name: 'Operations' });
+    const moduleHeadings = screen.getAllByRole('heading', { level: 3 });
+    expect(moduleHeadings).toHaveLength(1);
+    expect(moduleHeadings[0].textContent).toBe('Operations');
+    expect(screen.queryByRole('heading', { name: 'Admin' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Sales' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Accounts' })).not.toBeInTheDocument();
+  });
+
+  // 16. Impersonated employee never inherits Super Admin module cards
+  it('ensures impersonating an employee with Operations-only permissions never inherits Super Admin cards', async () => {
+    const impersonatedEmployee: CurrentUser = {
+      user_id: 'usr-abhishek-0007',
+      employee_code: 'GC0007',
+      first_name: 'Abhishek',
+      last_name: 'Kumar',
+      official_email: 'research.rnd.gc@gmail.com',
+      mobile_number: '+919876543211',
+      company_id: 'comp-1',
+      department_id: 'dept-rd',
+      designation_id: 'desig-lead',
+      account_status: 'ACTIVE',
+      must_change_password: false,
+      is_super_admin: false,
+    };
+
+    const opsOnlyModules: AccessibleModule[] = [
+      {
+        module_id: 'mod-ops-root',
+        module_code: 'OPERATIONS',
+        module_name: 'Operations',
+        display_order: 30,
+        is_navigation: true,
+        can_view: true,
+        can_create: false,
+        can_edit: false,
+        can_delete: false,
+        can_approve: false,
+        data_scope: 'SELF',
+      },
+      {
+        module_id: 'mod-ops-dash',
+        module_code: 'OPERATION_DASHBOARD',
+        module_name: 'Operation Dashboard',
+        display_order: 10,
+        is_navigation: true,
+        can_view: true,
+        can_create: false,
+        can_edit: false,
+        can_delete: false,
+        can_approve: false,
+        can_export: true,
+        data_scope: 'SELF',
+      },
+    ];
+
+    vi.spyOn(authApi, 'getCurrentUserApi').mockResolvedValue(impersonatedEmployee);
+    vi.spyOn(authApi, 'getAccessibleModulesApi').mockResolvedValue(opsOnlyModules);
+    vi.spyOn(authApi, 'getImpersonationStatusApi').mockResolvedValue({
+      is_impersonated: true,
+      impersonation: {
+        session_id: 'session-uuid-1',
+        actor_admin_id: 'admin-uuid',
+        actor_employee_code: 'GC0001',
+        actor_name: 'Super Admin',
+        target_user_id: 'usr-abhishek-0007',
+        target_employee_code: 'GC0007',
+        target_name: 'Abhishek Kumar',
+        expires_at: '2026-10-13T16:00:00Z',
+      },
+    });
+
+    renderWithProviders();
+
+    await screen.findByRole('heading', { name: 'Operations' });
+    const moduleHeadings = screen.getAllByRole('heading', { level: 3 });
+    expect(moduleHeadings).toHaveLength(1);
+    expect(moduleHeadings[0].textContent).toBe('Operations');
+    // None of the other modules leak
+    expect(screen.queryByRole('heading', { name: 'Admin' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Sales' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Accounts' })).not.toBeInTheDocument();
+  });
 });
 
