@@ -243,6 +243,16 @@ INITIAL_MODULES: List[Dict[str, Optional[object]]] = [
         "status": "ACTIVE",
     },
     {
+        "module_code": "OPERATION_REPORTS",
+        "module_name": "Operation Reports",
+        "parent_code": "OPERATIONS",
+        "route": "/operations/reports",
+        "description": "Operations reports and completion metrics",
+        "display_order": 80,
+        "is_navigation": True,
+        "status": "ACTIVE",
+    },
+    {
         "module_code": "ACCOUNTS",
         "module_name": "Accounts",
         "parent_code": None,

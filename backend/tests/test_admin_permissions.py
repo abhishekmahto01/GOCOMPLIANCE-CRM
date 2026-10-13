@@ -358,9 +358,16 @@ def test_copy_user_permissions_service(
             user_agent="TestAgent",
         )
         assert mock_save.called
+        assert res.copied_count == 14
         assert res.source_user_id == standard_employee.user_id
         assert res.target_user_id == target_user.user_id
         assert mock_db.commit.called
+
+        # Verify saved permissions are sanitized
+        save_call_payload = mock_save.call_args.kwargs["payload"]
+        dashboard_perm = next(p for p in save_call_payload.permissions if p.page_code == "SALES_DASHBOARD")
+        assert dashboard_perm.can_create is False
+        assert dashboard_perm.can_delete is False
 
 
 def test_effective_permissions_bundle_and_slugs(

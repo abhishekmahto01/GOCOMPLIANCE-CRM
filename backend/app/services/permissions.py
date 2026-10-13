@@ -1144,20 +1144,21 @@ def get_user_permissions_bundle(
 
     # Assemble page action permissions for all configured catalog pages
     page_permissions: List[PageActionPermission] = []
-    for page_code in PAGE_CATALOG_CONFIG.keys():
+    for page_code, page_config in PAGE_CATALOG_CONFIG.items():
+        supported = set(page_config.get("supported_actions", []))
         perm_row = perms_by_code.get(page_code)
         if perm_row and perm_row.status == "ACTIVE":
             page_permissions.append(
                 PageActionPermission(
                     page_code=page_code,
-                    can_view=perm_row.can_view,
-                    can_create=perm_row.can_create,
-                    can_edit=perm_row.can_edit,
-                    can_delete=perm_row.can_delete,
-                    can_assign=perm_row.can_assign,
-                    can_reassign=perm_row.can_reassign,
-                    can_export=perm_row.can_export,
-                    can_approve=perm_row.can_approve,
+                    can_view=bool(perm_row.can_view),
+                    can_create=bool(perm_row.can_create) if ("write" in supported or "create" in supported) else False,
+                    can_edit=bool(perm_row.can_edit) if ("update" in supported or "edit" in supported) else False,
+                    can_delete=bool(perm_row.can_delete) if "delete" in supported else False,
+                    can_assign=bool(perm_row.can_assign) if "assign" in supported else False,
+                    can_reassign=bool(perm_row.can_reassign) if "reassign" in supported else False,
+                    can_export=bool(perm_row.can_export) if "export" in supported else False,
+                    can_approve=bool(perm_row.can_approve) if "approve" in supported else False,
                     data_scope=perm_row.data_scope,
                     status=perm_row.status,
                 )
@@ -1272,12 +1273,39 @@ def save_user_permissions_bundle(
     needed_codes = set(PAGE_CATALOG_CONFIG.keys()) | {"ADMIN", "SALES", "OPERATIONS", "ACCOUNTS"}
     missing_codes = needed_codes - set(mod_by_code.keys())
     if missing_codes:
-        from app.scripts.seed_modules import seed_modules
+        from app.scripts.seed_modules import get_deterministic_module_uuid, seed_modules
         seed_modules(session)
         active_modules = session.execute(
             select(Module).where(Module.status == "ACTIVE")
         ).scalars().all()
         mod_by_code = {m.module_code: m for m in active_modules}
+
+        # If any catalog code is still missing, dynamically create it on-demand
+        still_missing = needed_codes - set(mod_by_code.keys())
+        if still_missing:
+            for m_code in still_missing:
+                if m_code in PAGE_CATALOG_CONFIG:
+                    cfg = PAGE_CATALOG_CONFIG[m_code]
+                    p_code = cfg.get("module_code")
+                    p_mod = mod_by_code.get(p_code)
+                    p_id = p_mod.module_id if p_mod else None
+                    new_m = Module(
+                        module_id=get_deterministic_module_uuid(m_code),
+                        module_code=m_code,
+                        module_name=cfg.get("page_name", m_code),
+                        parent_module_id=p_id,
+                        route=cfg.get("route"),
+                        description=f"{cfg.get('page_name', m_code)} page module",
+                        display_order=cfg.get("display_order", 90),
+                        is_navigation=True,
+                        status="ACTIVE",
+                    )
+                    session.add(new_m)
+            session.flush()
+            active_modules = session.execute(
+                select(Module).where(Module.status == "ACTIVE")
+            ).scalars().all()
+            mod_by_code = {m.module_code: m for m in active_modules}
 
     # Also resolve parent module IDs (ADMIN, SALES, OPERATIONS, ACCOUNTS)
     parent_codes = {"ADMIN", "SALES", "OPERATIONS", "ACCOUNTS"}
@@ -1473,13 +1501,85 @@ def copy_user_permissions(
     # Capture before-state of target
     before_detail = get_user_permissions_bundle(session, target_user_id)
     before_state = before_detail.model_dump(mode="json")
+    target_perms = {p.page_code: p for p in before_detail.permissions}
 
     # Fetch source permissions for configured catalog pages
     source_detail = get_user_permissions_bundle(session, source_user_id)
     source_perms = {p.page_code: p for p in source_detail.permissions}
 
+    # Catalog pages under Sales and Operations modules
+    sales_ops_codes = {
+        code for code, cfg in PAGE_CATALOG_CONFIG.items()
+        if cfg.get("module_code") in ("SALES", "OPERATIONS")
+    }
+
+    # Construct merged permissions payload:
+    # Sales & Operation pages are copied from source (clamped to supported actions)
+    # Other modules (e.g. ADMIN, ACCOUNTS) are preserved from target's existing permissions
+    merged_permissions: List[PageActionPermission] = []
+    copied_count = 0
+
+    for page_code in PAGE_CATALOG_CONFIG.keys():
+        cfg = PAGE_CATALOG_CONFIG[page_code]
+        supported = set(cfg.get("supported_actions", []))
+        if page_code in sales_ops_codes:
+            source_p = source_perms.get(page_code)
+            if source_p:
+                merged_permissions.append(
+                    PageActionPermission(
+                        page_code=page_code,
+                        can_view=source_p.can_view,
+                        can_create=source_p.can_create if ("write" in supported or "create" in supported) else False,
+                        can_edit=source_p.can_edit if ("update" in supported or "edit" in supported) else False,
+                        can_delete=source_p.can_delete if "delete" in supported else False,
+                        can_assign=source_p.can_assign if "assign" in supported else False,
+                        can_reassign=source_p.can_reassign if "reassign" in supported else False,
+                        can_export=source_p.can_export if "export" in supported else False,
+                        can_approve=source_p.can_approve if "approve" in supported else False,
+                        data_scope=source_p.data_scope,
+                        status=source_p.status,
+                    )
+                )
+            else:
+                merged_permissions.append(
+                    PageActionPermission(
+                        page_code=page_code,
+                        can_view=False,
+                        can_create=False,
+                        can_edit=False,
+                        can_delete=False,
+                        can_assign=False,
+                        can_reassign=False,
+                        can_export=False,
+                        can_approve=False,
+                        data_scope="SELF",
+                        status="ACTIVE",
+                    )
+                )
+            copied_count += 1
+        else:
+            target_p = target_perms.get(page_code)
+            if target_p:
+                merged_permissions.append(target_p)
+            else:
+                merged_permissions.append(
+                    PageActionPermission(
+                        page_code=page_code,
+                        can_view=False,
+                        can_create=False,
+                        can_edit=False,
+                        can_delete=False,
+                        can_assign=False,
+                        can_reassign=False,
+                        can_export=False,
+                        can_approve=False,
+                        data_scope="SELF",
+                        status="ACTIVE",
+                    )
+                )
+
     save_payload = UserPermissionsSaveRequest(
-        permissions=list(source_perms.values()),
+        permissions=merged_permissions,
         user_settings=None,
     )
 
@@ -1511,7 +1611,7 @@ def copy_user_permissions(
 
     return CopyPermissionsResponse(
         message=f"Successfully copied permissions from {source_user.employee_code} to {target_user.employee_code}.",
-        copied_count=len(source_perms),
+        copied_count=copied_count,
         source_user_id=source_user_id,
         target_user_id=target_user_id,
     )
