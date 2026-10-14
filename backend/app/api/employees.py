@@ -35,10 +35,19 @@ def create_employee_endpoint(
     session: Session = Depends(get_db),
 ) -> EmployeeRead:
     """Create a new employee in the CRM under the target company/department/designation."""
+    scope_ctx = permissions.resolve_data_scope_context(session, current_user, "ADMIN_EMPLOYEES")
+    if not permissions.is_super_admin_user(session, current_user) and scope_ctx.scope != "ALL":
+        if employee_in.company_id != current_user.company_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied. Cannot create employee for another company.",
+            )
     try:
-        user = user_service.create_user(session, employee_in)
+        user = user_service.create_user(session, employee_in, current_user=current_user)
         loaded = user_service.get_employee_by_id(session, user.user_id)
         return user_service.serialize_employee_read(loaded or user)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     except ValueError as exc:
         err_msg = str(exc)
         if "already registered" in err_msg:
@@ -152,8 +161,10 @@ def update_employee_endpoint(
         )
 
     try:
-        updated_user = user_service.update_employee(session, user, update_data)
+        updated_user = user_service.update_employee(session, user, update_data, current_user=current_user)
         return user_service.serialize_employee_read(updated_user)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     except ValueError as exc:
         err_msg = str(exc)
         if "already registered" in err_msg:
@@ -191,8 +202,10 @@ def update_employee_status_endpoint(
         )
 
     try:
-        updated_user = user_service.update_employee_status(session, user, status_in.account_status)
+        updated_user = user_service.update_employee_status(session, user, status_in.account_status, current_user=current_user)
         return user_service.serialize_employee_read(updated_user)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 

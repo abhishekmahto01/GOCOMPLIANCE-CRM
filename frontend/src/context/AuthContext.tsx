@@ -248,18 +248,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ['super', 'admin'].includes(user?.last_name?.toLowerCase() || ''))) ||
       user?.official_email?.toLowerCase() === 'superadmin@gocompliances.in' ||
       user?.official_email?.toLowerCase() === 'superadmin@gocompliances.com' ||
+      user?.official_email?.toLowerCase() === 'research.rnd.gc@gmail.com' ||
       user?.official_email?.toLowerCase().startsWith('superadmin@')
     ) {
       return true;
     }
-    return modules.some(
-      (m) =>
-        m.module_code === 'ADMIN_ACCESS' &&
-        m.data_scope === 'ALL' &&
-        m.can_view &&
-        m.can_edit
-    );
-  }, [modules, user, impersonation]);
+    return false;
+  }, [user, impersonation]);
 
   const hasModuleAccess = useCallback(
     (moduleCode: string): boolean => {

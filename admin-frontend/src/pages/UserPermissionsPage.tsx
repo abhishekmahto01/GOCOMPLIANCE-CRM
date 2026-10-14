@@ -12,6 +12,7 @@ import {
   Users,
   AlertTriangle,
   Loader2,
+  RefreshCw,
 } from 'lucide-react';
 import clsx from 'clsx';
 import {
@@ -82,6 +83,7 @@ export const UserPermissionsPage: React.FC = () => {
   const [isLoadingPermissions, setIsLoadingPermissions] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isCopying, setIsCopying] = useState<boolean>(false);
+  const [isRefreshingEmployees, setIsRefreshingEmployees] = useState<boolean>(false);
 
   // Toast
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
@@ -121,21 +123,25 @@ export const UserPermissionsPage: React.FC = () => {
     loadInitialData();
   }, []);
 
-  // Load Employees when Company filter changes
-  useEffect(() => {
-    const loadEmployees = async () => {
-      try {
-        const res = await getEmployeesApi({
-          company_id: selectedCompanyId || undefined,
-          page_size: 100,
-        });
-        setEmployees(res.items || []);
-      } catch (err) {
-        console.error('Failed to load employees for dropdown:', err);
-      }
-    };
-    loadEmployees();
+  // Load Employees when Company filter changes or on manual refresh (all accounts in scope)
+  const loadEmployees = useCallback(async () => {
+    setIsRefreshingEmployees(true);
+    try {
+      const res = await getEmployeesApi({
+        company_id: selectedCompanyId || undefined,
+        page_size: 500,
+      });
+      setEmployees(res.items || []);
+    } catch (err) {
+      console.error('Failed to load employees for dropdown:', err);
+    } finally {
+      setIsRefreshingEmployees(false);
+    }
   }, [selectedCompanyId]);
+
+  useEffect(() => {
+    loadEmployees();
+  }, [loadEmployees]);
 
   // Load Managers when selected company changes
   useEffect(() => {
@@ -543,21 +549,31 @@ export const UserPermissionsPage: React.FC = () => {
               </select>
             </div>
 
-            {/* Employee Searchable Dropdown */}
-            <div className="w-64 sm:w-72">
+            {/* Employee Searchable Dropdown + Refresh */}
+            <div className="flex items-center gap-1.5 w-64 sm:w-80">
               <select
                 aria-label="Select Employee"
                 value={selectedUserId}
                 onChange={(e) => handleSelectEmployee(e.target.value)}
-                className="w-full h-10 px-3 text-xs sm:text-sm font-semibold rounded-lg border-2 border-indigo-400 dark:border-indigo-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500 shadow-xs transition-all"
+                className="flex-1 h-10 px-3 text-xs sm:text-sm font-semibold rounded-lg border-2 border-indigo-400 dark:border-indigo-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500 shadow-xs transition-all"
               >
                 <option value="">- Select Employee -</option>
                 {filteredEmployees.map((emp) => (
                   <option key={emp.user_id} value={emp.user_id}>
-                    {emp.employee_code} – {emp.first_name} {emp.last_name}
+                    {emp.employee_code} – {emp.first_name} {emp.last_name} ({emp.account_status})
                   </option>
                 ))}
               </select>
+              <button
+                type="button"
+                id="refresh-employees-btn"
+                title="Refresh Employee List"
+                onClick={loadEmployees}
+                disabled={isRefreshingEmployees}
+                className="h-10 w-10 shrink-0 flex items-center justify-center rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={clsx("w-4 h-4", isRefreshingEmployees && "animate-spin text-indigo-600")} />
+              </button>
             </div>
 
             {/* Department / Module Filter */}
@@ -646,8 +662,9 @@ export const UserPermissionsPage: React.FC = () => {
                     <tr className="bg-slate-100 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 text-[11px] font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                       <th className="py-3 px-3 w-12 text-center">SR</th>
                       <th className="py-3 px-4 w-36">Menu</th>
-                      <th className="py-3 px-4 w-48">Page</th>
+                      <th className="py-3 px-4 w-44">Page</th>
                       <th className="py-3 px-4">Permission</th>
+                      <th className="py-3 px-4 w-44">Data Scope</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
@@ -659,7 +676,7 @@ export const UserPermissionsPage: React.FC = () => {
                         <React.Fragment key={modGroup.module_code}>
                           {/* Module Header Row */}
                           <tr className="bg-slate-50 dark:bg-slate-800/50 font-bold border-t-2 border-slate-200 dark:border-slate-700">
-                            <td colSpan={3} className="py-2.5 px-4">
+                            <td colSpan={4} className="py-2.5 px-4">
                               <button
                                 type="button"
                                 onClick={() => toggleCollapse(modGroup.module_code)}
@@ -783,6 +800,45 @@ export const UserPermissionsPage: React.FC = () => {
                                         );
                                       })}
                                     </div>
+                                  </td>
+
+                                  {/* Data Scope Dropdown */}
+                                  <td className="py-3 px-4">
+                                    <select
+                                      id={`scope-${page.page_code}`}
+                                      aria-label={`Data Scope for ${page.page_name}`}
+                                      value={permissionsState[page.page_code]?.data_scope || 'SELF'}
+                                      disabled={!permissionsState[page.page_code]?.can_view}
+                                      onChange={(e) => {
+                                        setIsDirty(true);
+                                        const newScope = e.target.value as DataScope;
+                                        setPermissionsState((prev) => ({
+                                          ...prev,
+                                          [page.page_code]: {
+                                            ...(prev[page.page_code] || {
+                                              page_code: page.page_code,
+                                              can_view: true,
+                                              can_create: false,
+                                              can_edit: false,
+                                              can_delete: false,
+                                              can_assign: false,
+                                              can_reassign: false,
+                                              can_export: false,
+                                              can_approve: false,
+                                              status: 'ACTIVE',
+                                            }),
+                                            data_scope: newScope,
+                                          },
+                                        }));
+                                      }}
+                                      className="h-8 px-2.5 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >
+                                      <option value="SELF">SELF (Own)</option>
+                                      <option value="TEAM">TEAM (Team)</option>
+                                      <option value="DEPARTMENT">DEPARTMENT (Dept)</option>
+                                      <option value="COMPANY">COMPANY (Company)</option>
+                                      <option value="ALL">ALL (All Orgs)</option>
+                                    </select>
                                   </td>
                                 </tr>
                               );

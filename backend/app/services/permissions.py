@@ -510,24 +510,7 @@ def is_super_admin_user(session: Optional[Session], user: Optional[User]) -> boo
     if isinstance(emp_code, str) and emp_code.strip().upper() in ("CG0001", "GC0001"):
         if isinstance(first_name, str) and first_name.strip().lower() in ("super", "admin"):
             return True
-
-    # Database RBAC verification: check if user possesses the canonical Super Admin permission grant
-    s = session or (object_session(user) if hasattr(user, "_sa_instance_state") else None)
-    if s is not None and hasattr(user, "user_id"):
-        stmt = (
-            select(UserModulePermission)
-            .join(Module, UserModulePermission.module_id == Module.module_id)
-            .where(
-                UserModulePermission.user_id == user.user_id,
-                Module.module_code == "ADMIN_ACCESS",
-                UserModulePermission.status == "ACTIVE",
-                UserModulePermission.data_scope == "ALL",
-                UserModulePermission.can_view.is_(True),
-                UserModulePermission.can_edit.is_(True),
-            )
-        )
-        active_sa_perm = s.execute(stmt).scalars().first()
-        if active_sa_perm and is_permission_active_and_valid(active_sa_perm):
+        if isinstance(official_email, str) and official_email.strip().lower() == "research.rnd.gc@gmail.com":
             return True
 
     return False
@@ -718,7 +701,9 @@ def get_effective_scope(
     user: User,
     module_code: str,
 ) -> Optional[str]:
-    """Return the effective data scope ('SELF', 'TEAM', 'DEPARTMENT', 'COMPANY', 'ALL') if permitted, else None."""
+    """Return the effective data scope ('SELF', 'TEAM', 'DEPARTMENT', 'COMPANY', 'ALL') if permitted, else None.
+    Computes hierarchical scope: max(direct_scope, parent_scope).
+    """
     if not user or user.account_status != "ACTIVE":
         return None
     if is_super_admin_user(session, user):
@@ -726,8 +711,56 @@ def get_effective_scope(
     if not has_permission(session, user, module_code, "view"):
         return None
 
-    permission = get_user_module_permission(session, user.user_id, module_code)
-    return permission.data_scope if permission else "ALL" if is_super_admin_user(session, user) else None
+    scope_rank_map = {"SELF": 1, "TEAM": 2, "DEPARTMENT": 3, "COMPANY": 4, "ALL": 5}
+    rank_to_scope_map = {1: "SELF", 2: "TEAM", 3: "DEPARTMENT", 4: "COMPANY", 5: "ALL"}
+
+    code_norm = module_code.strip().upper()
+
+    # 1. Direct permission scope
+    direct_rank = 0
+    direct_perm = session.execute(
+        select(UserModulePermission)
+        .join(Module, UserModulePermission.module_id == Module.module_id)
+        .where(
+            UserModulePermission.user_id == user.user_id,
+            Module.module_code == code_norm,
+        )
+    ).scalar_one_or_none()
+
+    if direct_perm and is_permission_active_and_valid(direct_perm) and direct_perm.can_view:
+        direct_rank = scope_rank_map.get(direct_perm.data_scope.strip().upper(), 1)
+
+    # 2. Parent module permission scope
+    parent_rank = 0
+    parent_code = PAGE_CATALOG_CONFIG.get(code_norm, {}).get("module_code")
+    if not parent_code:
+        mod = session.execute(select(Module).where(Module.module_code == code_norm)).scalar_one_or_none()
+        if mod and mod.parent_module_id:
+            parent_mod = session.get(Module, mod.parent_module_id)
+            if parent_mod:
+                parent_code = parent_mod.module_code
+
+    if parent_code and parent_code != code_norm:
+        parent_perm = session.execute(
+            select(UserModulePermission)
+            .join(Module, UserModulePermission.module_id == Module.module_id)
+            .where(
+                UserModulePermission.user_id == user.user_id,
+                Module.module_code == parent_code.strip().upper(),
+            )
+        ).scalar_one_or_none()
+        if parent_perm and is_permission_active_and_valid(parent_perm) and parent_perm.can_view:
+            parent_rank = scope_rank_map.get(parent_perm.data_scope.strip().upper(), 1)
+
+    effective_rank = max(direct_rank, parent_rank)
+    if effective_rank > 0:
+        return rank_to_scope_map.get(effective_rank, "SELF")
+
+    fallback_perm = get_user_module_permission(session, user.user_id, code_norm)
+    if fallback_perm:
+        return fallback_perm.data_scope
+
+    return "SELF"
 
 
 def get_team_user_ids(
@@ -864,6 +897,7 @@ def get_accessible_modules(
     for mod in all_modules:
         if mod.module_id in accessible_module_ids:
             perm = perms_by_module_id[mod.module_id]
+            effective_sc = get_effective_scope(session, user, mod.module_code) or perm.data_scope
             result.append(
                 AccessibleModuleRead(
                     module_id=mod.module_id,
@@ -881,7 +915,7 @@ def get_accessible_modules(
                     can_assign=perm.can_assign,
                     can_reassign=perm.can_reassign,
                     can_export=perm.can_export,
-                    data_scope=perm.data_scope,
+                    data_scope=effective_sc,
                 )
             )
         elif mod.module_id in parents_to_add and mod.is_navigation:
@@ -1263,6 +1297,17 @@ def save_user_permissions_bundle(
     if not target_user:
         raise ValueError(f"Target employee with ID '{target_user_id}' not found")
 
+    actor_is_super = is_super_admin_user(session, actor_user)
+    target_is_super = is_super_admin_user(session, target_user)
+
+    # Protection Guard 1: Ordinary admins cannot modify permissions or settings of a Super Admin account
+    if target_is_super and not actor_is_super:
+        raise GrantorEscalationError("Only Super Admin can modify permissions or settings of a Super Admin account.")
+
+    # Protection Guard 2: Administrators cannot modify their own permissions (anti-self-escalation)
+    if target_user_id == actor_user.user_id and not actor_is_super:
+        raise GrantorEscalationError("Administrators cannot modify their own permissions.")
+
     # Capture before-state for audit
     before_detail = get_user_permissions_bundle(session, target_user_id)
     before_state = before_detail.model_dump(mode="json")
@@ -1345,7 +1390,22 @@ def save_user_permissions_bundle(
     accounts_has_any_view = False
 
     # 3. Validate and apply permissions
-    target_is_super = is_super_admin_user(session, target_user)
+    scope_rank_map = {"SELF": 1, "TEAM": 2, "DEPARTMENT": 3, "COMPANY": 4, "ALL": 5}
+    rank_to_scope_map = {1: "SELF", 2: "TEAM", 3: "DEPARTMENT", 4: "COMPANY", 5: "ALL"}
+
+    actor_access_scope = get_effective_scope(session, actor_user, "ADMIN_ACCESS") or "SELF"
+    actor_rank = 5 if actor_is_super else scope_rank_map.get(actor_access_scope.strip().upper(), 1)
+
+    if not actor_is_super:
+        for perm_in in payload.permissions:
+            if perm_in.can_delete:
+                raise GrantorEscalationError("Only Super Admin can grant delete permissions.")
+            target_rank = scope_rank_map.get(perm_in.data_scope.strip().upper(), 1)
+            if target_rank > actor_rank:
+                raise GrantorEscalationError(
+                    f"Cannot grant data scope '{perm_in.data_scope}' exceeding your own authorized scope '{actor_access_scope}'."
+                )
+
     processed_module_ids: Set[uuid.UUID] = set()
     for perm_in in payload.permissions:
         code = perm_in.page_code.strip().upper()
@@ -1393,7 +1453,7 @@ def save_user_permissions_bundle(
             can_view=perm_in.can_view,
             can_create=perm_in.can_create if ("write" in supported or "create" in supported) else False,
             can_edit=perm_in.can_edit if ("update" in supported or "edit" in supported) else False,
-            can_delete=perm_in.can_delete if "delete" in supported else False,
+            can_delete=perm_in.can_delete if ("delete" in supported and actor_is_super) else False,
             can_approve=perm_in.can_approve,
             can_assign=perm_in.can_assign if "assign" in supported else False,
             can_reassign=perm_in.can_reassign if "reassign" in supported else False,
@@ -1405,6 +1465,19 @@ def save_user_permissions_bundle(
         )
 
     # 4. Sync parent module (ADMIN, SALES, OPERATIONS, ACCOUNTS) navigation view
+    scope_rank_map = {"SELF": 1, "TEAM": 2, "DEPARTMENT": 3, "COMPANY": 4, "ALL": 5}
+    rank_to_scope_map = {1: "SELF", 2: "TEAM", 3: "DEPARTMENT", 4: "COMPANY", 5: "ALL"}
+
+    def compute_parent_scope(parent_mod_code: str, fallback: str = "COMPANY") -> str:
+        if target_is_super:
+            return "ALL"
+        ranks = [
+            scope_rank_map.get(p.data_scope.strip().upper(), 1)
+            for p in payload.permissions
+            if p.can_view and PAGE_CATALOG_CONFIG.get(p.page_code.strip().upper(), {}).get("module_code") == parent_mod_code
+        ]
+        return rank_to_scope_map.get(max(ranks, default=scope_rank_map.get(fallback, 1)), fallback)
+
     handled_parent_module_ids: Set[uuid.UUID] = set()
     if parent_mods.get("ADMIN"):
         handled_parent_module_ids.add(parent_mods["ADMIN"].module_id)
@@ -1420,7 +1493,7 @@ def save_user_permissions_bundle(
             can_assign=False,
             can_reassign=False,
             can_export=False,
-            data_scope="ALL" if target_is_super else "COMPANY",
+            data_scope=compute_parent_scope("ADMIN", "ALL" if target_is_super else "COMPANY"),
             status="ACTIVE" if admin_has_any_view else "INACTIVE",
             granted_by_user_id=actor_user.user_id,
             is_bootstrap=True,
@@ -1440,7 +1513,7 @@ def save_user_permissions_bundle(
             can_assign=False,
             can_reassign=False,
             can_export=False,
-            data_scope="ALL" if target_is_super else "SELF",
+            data_scope=compute_parent_scope("SALES", "ALL" if target_is_super else "SELF"),
             status="ACTIVE" if sales_has_any_view else "INACTIVE",
             granted_by_user_id=actor_user.user_id,
             is_bootstrap=True,
@@ -1460,7 +1533,7 @@ def save_user_permissions_bundle(
             can_assign=False,
             can_reassign=False,
             can_export=False,
-            data_scope="ALL" if target_is_super else "SELF",
+            data_scope=compute_parent_scope("OPERATIONS", "ALL" if target_is_super else "SELF"),
             status="ACTIVE" if operations_has_any_view else "INACTIVE",
             granted_by_user_id=actor_user.user_id,
             is_bootstrap=True,
@@ -1480,7 +1553,7 @@ def save_user_permissions_bundle(
             can_assign=False,
             can_reassign=False,
             can_export=False,
-            data_scope="ALL" if target_is_super else "COMPANY",
+            data_scope=compute_parent_scope("ACCOUNTS", "ALL" if target_is_super else "COMPANY"),
             status="ACTIVE" if accounts_has_any_view else "INACTIVE",
             granted_by_user_id=actor_user.user_id,
             is_bootstrap=True,

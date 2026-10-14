@@ -173,7 +173,7 @@ def copy_user_permissions_endpoint(
             ip_address=client_ip,
             user_agent=user_agent,
         )
-    except permissions.PermissionDeniedError as exc:
+    except (permissions.PermissionDeniedError, permissions.GrantorEscalationError) as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     except ValueError as exc:
         err_msg = str(exc)

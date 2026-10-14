@@ -31,7 +31,7 @@ from app.models.service import ServiceMaster
 from app.models.user import User
 from app.models.user_module_permission import UserModulePermission
 from app.services import permissions, user_service
-from app.services.permissions import grant_or_update_permission, is_super_admin_user
+from app.services.permissions import get_effective_scope, grant_or_update_permission, is_super_admin_user
 from app.services.operation_service import get_eligible_operations_assignees, is_disallowed_ops_assignee
 from app.services.sales_service import confirm_sales_order, create_sales_order
 from app.schemas.sales_order import SalesOrderCreate
@@ -610,16 +610,23 @@ def test_8_normal_users_remain_limited_to_authorized_modules(
     assert res_perm.status_code == 403
 
 
-def test_9_fresh_login_reflects_super_admin_status(
+def test_9_fresh_login_reflects_director_admin_status(
     client: TestClient, db_session: Session, env_fixture: dict
 ):
-    """VERIFICATION 9: Newly authenticated token for Muskan evaluates is_super_admin_user=True."""
+    """VERIFICATION 9: Newly authenticated token for Muskan evaluates is_super_admin_user=False while retaining full Admin permissions."""
     f = env_fixture
 
-    # Database level check
-    assert is_super_admin_user(db_session, f["muskan"]) is True
+    # Super Admin account check: authentic Super Admin is True
+    assert is_super_admin_user(db_session, f["super_admin"]) is True
 
-    # Token-based request returns super admin capabilities
+    # Database level check: Muskan is Director / Admin, NOT Super Admin
+    assert is_super_admin_user(db_session, f["muskan"]) is False
+
+    # Effective data scope on ADMIN_EMPLOYEES is ALL
+    scope = get_effective_scope(db_session, f["muskan"], "ADMIN_EMPLOYEES")
+    assert scope == "ALL"
+
+    # Token-based request returns permissions for employee management
     muskan_headers = auth_header(f["muskan"])
     perm_res = client.get("/api/auth/me/permissions", headers=muskan_headers)
     assert perm_res.status_code == 200

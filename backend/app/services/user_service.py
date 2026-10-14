@@ -104,7 +104,46 @@ def validate_user_cross_company_integrity(
             raise ValueError(f"Reporting manager '{manager.first_name} {manager.last_name}' is not in ACTIVE status")
 
 
-def create_user(session: Session, user_in: UserCreate) -> User:
+def is_super_admin_designation(session: Session, designation_id: Optional[uuid.UUID]) -> bool:
+    """Check if the designation belongs to the Super Admin role."""
+    if not designation_id:
+        return False
+    from app.models.designation import Designation
+    desig = session.get(Designation, designation_id)
+    if not desig:
+        return False
+    name = getattr(desig, "designation_name", "").lower()
+    code = getattr(desig, "designation_code", "").upper()
+    return "super admin" in name or "super administrator" in name or code == "SUPER_ADMIN"
+
+
+def is_super_admin_identity(
+    session: Session,
+    email: Optional[str] = None,
+    first_name: Optional[str] = None,
+    last_name: Optional[str] = None,
+    designation_id: Optional[uuid.UUID] = None,
+) -> bool:
+    """Check whether candidate user attributes match reserved Super Admin identity or designation."""
+    if designation_id and is_super_admin_designation(session, designation_id):
+        return True
+    if email:
+        em = email.strip().lower()
+        if em in (
+            "admin@gocompliances.in",
+            "admin@gocompliances.com",
+            "superadmin@gocompliances.in",
+            "superadmin@gocompliances.com",
+            "research.rnd.gc@gmail.com",
+        ) or em.startswith("superadmin@"):
+            return True
+    if first_name and last_name:
+        if first_name.strip().lower() == "super" and last_name.strip().lower() == "admin":
+            return True
+    return False
+
+
+def create_user(session: Session, user_in: UserCreate, current_user: Optional[User] = None) -> User:
     """Atomically validate, generate employee code, and create a new User record.
 
     If trial password mode is enabled in configuration, provisions hashed initial password.
@@ -120,13 +159,25 @@ def create_user(session: Session, user_in: UserCreate) -> User:
     Args:
         session: Active SQLAlchemy session.
         user_in: Validated UserCreate schema.
+        current_user: Optional authenticated caller User instance.
 
     Returns:
         The newly created User model instance.
 
     Raises:
         ValueError: If cross-company validation fails or duplicate email exists.
+        PermissionError: If non-super-admin tries to assign Super Admin designation.
     """
+    if current_user is not None and not permissions.is_super_admin_user(session, current_user):
+        if is_super_admin_identity(
+            session,
+            email=user_in.official_email,
+            first_name=user_in.first_name,
+            last_name=user_in.last_name,
+            designation_id=user_in.designation_id,
+        ):
+            raise PermissionError("Only Super Admin can assign the Super Admin designation or reserved credentials.")
+
     try:
         # Step 1: Cross-company validation
         validate_user_cross_company_integrity(
@@ -288,6 +339,9 @@ def initialize_trial_login(
     ):
         raise PermissionError("Access denied. Employee is outside your authorized data scope.")
 
+    if permissions.is_super_admin_user(session, target_user) and not permissions.is_super_admin_user(session, current_user):
+        raise PermissionError("Only Super Admin can initialize credentials for a Super Admin account.")
+
     if target_user.account_status != "ACTIVE":
         raise ValueError(
             f"Cannot initialize login credentials for employee with '{target_user.account_status}' status. Employee must be ACTIVE."
@@ -346,6 +400,9 @@ def reset_employee_password(
         target_user.user_id, target_user.company_id, target_user.department_id
     ):
         raise PermissionError("Access denied. Employee is outside your authorized data scope.")
+
+    if permissions.is_super_admin_user(session, target_user) and not permissions.is_super_admin_user(session, current_user):
+        raise PermissionError("Only Super Admin can reset credentials for a Super Admin account.")
 
     if target_user.account_status != "ACTIVE":
         raise ValueError(
@@ -477,6 +534,7 @@ def update_employee(
     session: Session,
     target_user: User,
     update_data: UserUpdate,
+    current_user: Optional[User] = None,
 ) -> User:
     """Partially update an existing employee record with validation and hierarchy cycle prevention.
 
@@ -484,13 +542,28 @@ def update_employee(
         session: Active SQLAlchemy session.
         target_user: User instance to update.
         update_data: UserUpdate schema payload.
+        current_user: Optional authenticated caller User instance.
 
     Returns:
         The refreshed User instance.
 
     Raises:
         ValueError: For validation failures (duplicate email, circular hierarchy, cross-company mismatch).
+        PermissionError: If non-super-admin tries to modify Super Admin account or assign Super Admin designation.
     """
+    if current_user is not None and not permissions.is_super_admin_user(session, current_user):
+        if permissions.is_super_admin_user(session, target_user):
+            raise PermissionError("Only Super Admin can modify the Super Admin account.")
+
+        if is_super_admin_identity(
+            session,
+            email=update_data.official_email,
+            first_name=update_data.first_name,
+            last_name=update_data.last_name,
+            designation_id=update_data.designation_id,
+        ):
+            raise PermissionError("Only Super Admin can assign the Super Admin designation or reserved credentials.")
+
     try:
         # Check company immutability
         if update_data.company_id is not None and update_data.company_id != target_user.company_id:
@@ -578,6 +651,7 @@ def update_employee_status(
     session: Session,
     target_user: User,
     new_status: str,
+    current_user: Optional[User] = None,
 ) -> User:
     """Update employee account operational status.
 
@@ -587,13 +661,19 @@ def update_employee_status(
         session: Active SQLAlchemy session.
         target_user: User instance to update.
         new_status: Target status ('PENDING', 'ACTIVE', 'INACTIVE', 'SUSPENDED').
+        current_user: Optional authenticated caller User instance.
 
     Returns:
         The refreshed User instance.
 
     Raises:
         ValueError: If status is invalid.
+        PermissionError: If non-super-admin tries to alter Super Admin account status.
     """
+    if current_user is not None and permissions.is_super_admin_user(session, target_user):
+        if not permissions.is_super_admin_user(session, current_user):
+            raise PermissionError("Only Super Admin can alter a Super Admin account status.")
+
     status_norm = new_status.strip().upper()
     if status_norm not in ALLOWED_ACCOUNT_STATUSES:
         raise ValueError(
