@@ -499,8 +499,6 @@ def is_super_admin_user(session: Optional[Session], user: Optional[User]) -> boo
     if isinstance(official_email, str):
         em = official_email.strip().lower()
         if em in (
-            "admin@gocompliances.in",
-            "admin@gocompliances.com",
             "superadmin@gocompliances.in",
             "superadmin@gocompliances.com",
         ) or em.startswith("superadmin@"):
@@ -1398,8 +1396,6 @@ def save_user_permissions_bundle(
 
     if not actor_is_super:
         for perm_in in payload.permissions:
-            if perm_in.can_delete:
-                raise GrantorEscalationError("Only Super Admin can grant delete permissions.")
             target_rank = scope_rank_map.get(perm_in.data_scope.strip().upper(), 1)
             if target_rank > actor_rank:
                 raise GrantorEscalationError(
@@ -1453,7 +1449,7 @@ def save_user_permissions_bundle(
             can_view=perm_in.can_view,
             can_create=perm_in.can_create if ("write" in supported or "create" in supported) else False,
             can_edit=perm_in.can_edit if ("update" in supported or "edit" in supported) else False,
-            can_delete=perm_in.can_delete if ("delete" in supported and actor_is_super) else False,
+            can_delete=perm_in.can_delete if "delete" in supported else False,
             can_approve=perm_in.can_approve,
             can_assign=perm_in.can_assign if "assign" in supported else False,
             can_reassign=perm_in.can_reassign if "reassign" in supported else False,

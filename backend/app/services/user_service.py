@@ -130,8 +130,6 @@ def is_super_admin_identity(
     if email:
         em = email.strip().lower()
         if em in (
-            "admin@gocompliances.in",
-            "admin@gocompliances.com",
             "superadmin@gocompliances.in",
             "superadmin@gocompliances.com",
             "research.rnd.gc@gmail.com",
@@ -718,12 +716,22 @@ def delete_employee(
     if target_user.user_id == current_user.user_id:
         raise ValueError("Super Admin cannot delete their own account")
 
-    if target_user.employee_code in ("CG0001", "GC0001") or target_user.official_email in (
-        "admin@gocompliances.com",
-        "superadmin@gocompliances.com",
-        "admin@gocompliances.in",
-        "superadmin@gocompliances.in",
-    ):
+    is_primary_super = (
+        target_user.employee_code in ("CG0001", "GC0001")
+        or (
+            target_user.official_email
+            and (
+                target_user.official_email.strip().lower()
+                in (
+                    "superadmin@gocompliances.com",
+                    "superadmin@gocompliances.in",
+                    "research.rnd.gc@gmail.com",
+                )
+                or target_user.official_email.strip().lower().startswith("superadmin@")
+            )
+        )
+    )
+    if is_primary_super:
         raise ValueError("Primary Super Admin account cannot be deleted")
 
     # Check for sales orders closed by this salesperson

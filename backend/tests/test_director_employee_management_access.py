@@ -449,7 +449,7 @@ def test_direct_api_requests_cannot_bypass_privilege_restrictions(
     )
     assert escalate_email_res.status_code == 403
 
-    # C. Muskan cannot grant can_delete: True to anyone
+    # C. Muskan can grant and revoke action permissions (including can_delete) for ordinary employees
     grant_delete_res = client.put(
         f"/api/admin/users/{f['emp_co1'].user_id}/permissions",
         json={
@@ -459,7 +459,7 @@ def test_direct_api_requests_cannot_bypass_privilege_restrictions(
                     "can_view": True,
                     "can_create": False,
                     "can_edit": False,
-                    "can_delete": True,  # Non-super-admin cannot grant delete
+                    "can_delete": True,
                     "can_assign": False,
                     "can_reassign": False,
                     "can_export": False,
@@ -471,7 +471,59 @@ def test_direct_api_requests_cannot_bypass_privilege_restrictions(
         },
         headers=muskan_headers,
     )
-    assert grant_delete_res.status_code == 403
+    assert grant_delete_res.status_code == 200
+    perms_dict = {p["page_code"]: p for p in grant_delete_res.json()["permissions"]}
+    assert perms_dict["SALES_MY_ORDERS"]["can_delete"] is True
+
+    # C2. Ordinary employee with admin@gocompliances.com (like Mansi) is NOT treated as Super Admin and can be managed
+    mansi_user = User(
+        user_id=uuid.uuid4(),
+        employee_code="GC0099",
+        company_id=f["co1"].company_id,
+        department_id=f["dept_admin"].department_id,
+        designation_id=f["desig_spec"].designation_id,
+        first_name="Mansi",
+        last_name="Singhal",
+        official_email="admin@gocompliances.com",
+        mobile_number="+919876543999",
+        date_of_joining=date(2025, 2, 1),
+        employment_type="FULL_TIME",
+        account_status="ACTIVE",
+    )
+    db_session.add(mansi_user)
+    db_session.flush()
+
+    assert not is_super_admin_user(db_session, mansi_user)
+
+    mansi_perm_res = client.put(
+        f"/api/admin/users/{mansi_user.user_id}/permissions",
+        json={
+            "user_settings": {
+                "is_active": True,
+                "is_hod": True,
+                "is_reporting_manager": True,
+            },
+            "permissions": [
+                {
+                    "page_code": "SALES_MY_ORDERS",
+                    "can_view": True,
+                    "can_create": False,
+                    "can_edit": True,
+                    "can_delete": False,
+                    "can_assign": False,
+                    "can_reassign": False,
+                    "can_export": True,
+                    "can_approve": False,
+                    "data_scope": "COMPANY",
+                    "status": "ACTIVE",
+                }
+            ],
+        },
+        headers=muskan_headers,
+    )
+    assert mansi_perm_res.status_code == 200
+    assert mansi_perm_res.json()["is_hod"] is True
+    assert mansi_perm_res.json()["is_reporting_manager"] is True
 
     # D. Restricted admin cannot grant a scope higher than their own (e.g. ALL when grantor has COMPANY)
     restricted_headers = auth_header(f["restricted_admin"])
