@@ -65,7 +65,7 @@ def create_employee_endpoint(
 )
 def list_employees_endpoint(
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
-    page_size: int = Query(20, ge=1, le=100, description="Items per page (max 100)"),
+    page_size: int = Query(20, ge=1, le=1000, description="Items per page (max 1000)"),
     search: Optional[str] = Query(None, description="Search by employee code, name, or official email"),
     company_id: Optional[uuid.UUID] = Query(None, description="Filter by company ID"),
     department_id: Optional[uuid.UUID] = Query(None, description="Filter by department ID"),

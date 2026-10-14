@@ -215,6 +215,12 @@ describe('Frontend UserPermissionsPage Component', () => {
         company_name: 'Gocompliances',
         employee_code_prefix: 'CG',
       },
+      {
+        company_id: '33333333-3333-3333-3333-333333333333',
+        company_code: 'ENTERPERNERSHIP',
+        company_name: 'Enterpernership',
+        employee_code_prefix: 'EP',
+      },
     ]);
     vi.spyOn(lookupApi, 'getLookupManagersApi').mockResolvedValue([
       {
@@ -385,6 +391,153 @@ describe('Frontend UserPermissionsPage Component', () => {
 
     await waitFor(() => {
       expect(screen.getByText('403 - Access Forbidden')).toBeInTheDocument();
+    });
+  });
+
+  it('displays distinct API error state with Retry button when employee fetch fails and retries successfully', async () => {
+    let shouldFail = true;
+    vi.spyOn(employeesApi, 'getEmployeesApi').mockImplementation(async () => {
+      if (shouldFail) {
+        throw new Error('Network failure: 500 Internal Server Error');
+      }
+      return mockEmployeeList;
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/admin/access']}>
+        <AuthProvider>
+          <UserPermissionsPage />
+        </AuthProvider>
+      </MemoryRouter>
+    );
+
+    // Verify error state appears
+    await waitFor(() => {
+      expect(screen.getByText('Failed to Load Employees')).toBeInTheDocument();
+      expect(screen.getAllByText(/Network failure: 500/i).length).toBeGreaterThan(0);
+      expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    });
+
+    // Dropdown shows error option
+    expect(screen.getByRole('option', { name: 'Error loading employees' })).toBeInTheDocument();
+
+    // Now set shouldFail to false so retry succeeds
+    shouldFail = false;
+
+    // Click Retry
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() => {
+      expect(screen.queryByText('Failed to Load Employees')).not.toBeInTheDocument();
+      expect(screen.getByText('No Employee Selected')).toBeInTheDocument();
+      expect(screen.getAllByText(/CG0002 – Rohit Verma/i).length).toBeGreaterThan(0);
+    });
+  });
+
+  it('displays No Matching Employees state when filtered company has no employees', async () => {
+    vi.spyOn(employeesApi, 'getEmployeesApi').mockResolvedValue({
+      items: [],
+      page: 1,
+      page_size: 100,
+      total: 0,
+      pages: 0,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/admin/access']}>
+        <AuthProvider>
+          <UserPermissionsPage />
+        </AuthProvider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('No Matching Employees')).toBeInTheDocument();
+      expect(screen.getByText(/No employees match the selected company filter/i)).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole('option', { name: 'No matching employees' })).toBeInTheDocument();
+  });
+
+  it('guards unsaved permission edits when company filter changes or when refresh is clicked', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm');
+
+    render(
+      <MemoryRouter initialEntries={['/admin/access']}>
+        <AuthProvider>
+          <UserPermissionsPage />
+        </AuthProvider>
+      </MemoryRouter>
+    );
+
+    // Select employee
+    const employeeSelect = await screen.findByLabelText('Select Employee');
+    fireEvent.change(employeeSelect, {
+      target: { value: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' },
+    });
+
+    await screen.findByText('Create Confirmed Order');
+
+    // Make an edit to mark dirty (click WRITE button on Create Confirmed Order)
+    const writeBtn = screen.getByRole('button', { name: /WRITE/i });
+    fireEvent.click(writeBtn);
+    expect(screen.getByText(/You have unsaved changes/i)).toBeInTheDocument();
+
+    // Try changing company filter - user cancels
+    confirmSpy.mockReturnValueOnce(false);
+    const companySelect = screen.getByLabelText('Filter by Company');
+    fireEvent.change(companySelect, {
+      target: { value: '33333333-3333-3333-3333-333333333333' },
+    });
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('unsaved permission changes'));
+    // Remains selected
+    expect(employeeSelect).toHaveValue('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+
+    // Try refresh button - user cancels
+    confirmSpy.mockReturnValueOnce(false);
+    const refreshBtn = screen.getByTitle('Refresh Employee List');
+    fireEvent.click(refreshBtn);
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('unsaved permission changes'));
+    expect(employeeSelect).toHaveValue('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+
+    confirmSpy.mockRestore();
+  });
+
+  it('clears stale selected employee when company filter excludes the employee', async () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/access']}>
+        <AuthProvider>
+          <UserPermissionsPage />
+        </AuthProvider>
+      </MemoryRouter>
+    );
+
+    // Select Rohit in Company 22222222-2222-2222-2222-222222222222
+    const employeeSelect = await screen.findByLabelText('Select Employee');
+    fireEvent.change(employeeSelect, {
+      target: { value: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' },
+    });
+
+    await screen.findByText('Sales Dashboard');
+
+    // Mock API returning empty for different company
+    vi.spyOn(employeesApi, 'getEmployeesApi').mockResolvedValue({
+      items: [],
+      page: 1,
+      page_size: 100,
+      total: 0,
+      pages: 0,
+    });
+
+    // Change company to Enterpernership (company 33333333) without dirty state
+    const companySelect = screen.getByLabelText('Filter by Company');
+    fireEvent.change(companySelect, {
+      target: { value: '33333333-3333-3333-3333-333333333333' },
+    });
+
+    await waitFor(() => {
+      expect(employeeSelect).toHaveValue('');
+      expect(screen.getByText('No Matching Employees')).toBeInTheDocument();
     });
   });
 });

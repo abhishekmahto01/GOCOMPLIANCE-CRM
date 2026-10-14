@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   ShieldCheck,
@@ -11,6 +11,8 @@ import {
   MapPin,
   Users,
   AlertTriangle,
+  AlertCircle,
+  UserX,
   Loader2,
   CheckCircle2,
   XCircle,
@@ -121,6 +123,7 @@ export const UserPermissionsPage: React.FC = () => {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isCopying, setIsCopying] = useState<boolean>(false);
   const [isRefreshingEmployees, setIsRefreshingEmployees] = useState<boolean>(false);
+  const [employeeError, setEmployeeError] = useState<string | null>(null);
 
   // Toast feedback
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -163,14 +166,57 @@ export const UserPermissionsPage: React.FC = () => {
   // Load employees when company filter changes or on manual refresh (all accounts in scope)
   const loadEmployees = useCallback(async () => {
     setIsRefreshingEmployees(true);
+    setEmployeeError(null);
     try {
+      const cleanCompanyId =
+        selectedCompanyId && selectedCompanyId.trim() && selectedCompanyId !== 'ALL' && selectedCompanyId !== 'all'
+          ? selectedCompanyId.trim()
+          : undefined;
+
       const res = await getEmployeesApi({
-        company_id: selectedCompanyId || undefined,
-        page_size: 500,
+        company_id: cleanCompanyId,
+        page_size: 100,
       });
-      setEmployees(res.items || []);
+
+      const items = Array.isArray(res) ? res : Array.isArray(res?.items) ? res.items : [];
+      let allItems = [...items];
+
+      // Handle pagination if total exceeds page_size
+      if (res && typeof res === 'object' && 'pages' in res && (res.pages ?? 1) > 1 && (res.total ?? 0) > items.length) {
+        for (let p = 2; p <= res.pages; p++) {
+          const nextRes = await getEmployeesApi({
+            company_id: cleanCompanyId,
+            page: p,
+            page_size: 100,
+          });
+          const nextItems = Array.isArray(nextRes)
+            ? nextRes
+            : Array.isArray(nextRes?.items)
+            ? nextRes.items
+            : [];
+          allItems = allItems.concat(nextItems);
+        }
+      }
+
+      // Deduplicate employees by canonical user_id
+      const seen = new Set<string>();
+      const uniqueEmps: Employee[] = [];
+      for (const emp of allItems) {
+        if (emp && emp.user_id && !seen.has(emp.user_id)) {
+          seen.add(emp.user_id);
+          uniqueEmps.push(emp);
+        }
+      }
+
+      setEmployees(uniqueEmps);
     } catch (err) {
       console.error('Failed to load employees for dropdown:', err);
+      const msg = extractErrorMessage(err);
+      setEmployeeError(msg);
+      setToast({
+        message: `Failed to load employees: ${msg}`,
+        type: 'error',
+      });
     } finally {
       setIsRefreshingEmployees(false);
     }
@@ -179,6 +225,64 @@ export const UserPermissionsPage: React.FC = () => {
   useEffect(() => {
     loadEmployees();
   }, [loadEmployees]);
+
+  // Handle company filter change with unsaved edits guard
+  const handleCompanyChange = (newCompanyId: string) => {
+    if (isDirty) {
+      const confirmChange = window.confirm(
+        'You have unsaved permission changes. Changing company filter will discard them. Proceed?'
+      );
+      if (!confirmChange) return;
+    }
+    setSelectedCompanyId(newCompanyId);
+    setSelectedUserId('');
+    setCurrentUserDetail(null);
+    setPermissionsState({});
+    setIsDirty(false);
+  };
+
+  // Handle refresh button click with unsaved edits guard
+  const handleRefreshClick = () => {
+    if (isDirty) {
+      const confirmRefresh = window.confirm(
+        'You have unsaved permission changes. Refreshing will discard unsaved edits. Proceed?'
+      );
+      if (!confirmRefresh) return;
+    }
+    loadEmployees();
+    if (selectedUserId) {
+      fetchEmployeePermissions(selectedUserId);
+    }
+  };
+
+  // Clear stale selected-employee state when it is no longer valid
+  useEffect(() => {
+    if (selectedUserId && employees.length > 0 && !isRefreshingEmployees) {
+      const stillValid = employees.some(
+        (e) => e.user_id === selectedUserId && (!selectedCompanyId || e.company_id === selectedCompanyId)
+      );
+      if (!stillValid) {
+        setSelectedUserId('');
+        setCurrentUserDetail(null);
+        setPermissionsState({});
+        setIsDirty(false);
+      }
+    }
+  }, [employees, selectedCompanyId, selectedUserId, isRefreshingEmployees]);
+
+  // Reset state when logged-in account switches to prevent cross-account cache reuse
+  const currentAuthId = currentAuthUser?.user_id;
+  const prevAuthIdRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (prevAuthIdRef.current && currentAuthId && prevAuthIdRef.current !== currentAuthId) {
+      setSelectedUserId('');
+      setCurrentUserDetail(null);
+      setPermissionsState({});
+      setIsDirty(false);
+      setEmployeeError(null);
+    }
+    prevAuthIdRef.current = currentAuthId;
+  }, [currentAuthId]);
 
   // Load managers lookup
   useEffect(() => {
@@ -260,6 +364,7 @@ export const UserPermissionsPage: React.FC = () => {
 
   // Selected employee metadata object
   const selectedEmployeeObj = useMemo(() => {
+    if (!selectedUserId) return null;
     return employees.find((e) => e.user_id === selectedUserId) || currentUserDetail;
   }, [employees, selectedUserId, currentUserDetail]);
 
@@ -476,6 +581,13 @@ export const UserPermissionsPage: React.FC = () => {
 
       const updated = await saveUserPermissionsApi(selectedUserId, payload);
       setCurrentUserDetail(updated);
+
+      // Re-map saved permissions to matrix state
+      const permMap: Record<string, PageActionPermission> = {};
+      (updated.permissions || []).forEach((p) => {
+        permMap[p.page_code] = { ...p };
+      });
+      setPermissionsState(permMap);
       setIsDirty(false);
       setToast({
         message: `Permissions for ${updated.employee_code} (${updated.first_name} ${updated.last_name}) saved successfully!`,
@@ -614,10 +726,7 @@ export const UserPermissionsPage: React.FC = () => {
               <select
                 aria-label="Filter by Company"
                 value={selectedCompanyId}
-                onChange={(e) => {
-                  setSelectedCompanyId(e.target.value);
-                  setSelectedUserId('');
-                }}
+                onChange={(e) => handleCompanyChange(e.target.value)}
                 className="w-full h-10 px-3 text-xs sm:text-sm font-medium rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition-all"
               >
                 <option value="">-- All Companies --</option>
@@ -635,9 +744,18 @@ export const UserPermissionsPage: React.FC = () => {
                 aria-label="Select Employee"
                 value={selectedUserId}
                 onChange={(e) => handleSelectEmployee(e.target.value)}
-                className="flex-1 h-10 px-3 text-xs sm:text-sm font-bold rounded-xl border-2 border-blue-500 dark:border-blue-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-xs transition-all"
+                disabled={isRefreshingEmployees}
+                className="flex-1 h-10 px-3 text-xs sm:text-sm font-bold rounded-xl border-2 border-blue-500 dark:border-blue-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-xs transition-all disabled:opacity-60"
               >
-                <option value="">- Select Employee -</option>
+                {isRefreshingEmployees ? (
+                  <option value="">Loading employees...</option>
+                ) : employeeError ? (
+                  <option value="">Error loading employees</option>
+                ) : filteredEmployees.length === 0 ? (
+                  <option value="">No matching employees</option>
+                ) : (
+                  <option value="">- Select Employee -</option>
+                )}
                 {filteredEmployees.map((emp) => (
                   <option key={emp.user_id} value={emp.user_id}>
                     {emp.employee_code} – {emp.first_name} {emp.last_name} ({emp.account_status})
@@ -648,7 +766,7 @@ export const UserPermissionsPage: React.FC = () => {
                 type="button"
                 id="refresh-employees-btn"
                 title="Refresh Employee List"
-                onClick={loadEmployees}
+                onClick={handleRefreshClick}
                 disabled={isRefreshingEmployees}
                 className="h-10 w-10 shrink-0 flex items-center justify-center rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all cursor-pointer disabled:opacity-50"
               >
@@ -719,10 +837,41 @@ export const UserPermissionsPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Column: Permission Matrix Table */}
         <div className="lg:col-span-8 space-y-6">
-          {isLoadingCatalog || isLoadingPermissions ? (
+          {employeeError ? (
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-rose-200 dark:border-rose-900/60 p-12 text-center space-y-4">
+              <div className="w-16 h-16 rounded-2xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto border border-rose-100 dark:border-rose-900">
+                <AlertCircle className="w-8 h-8" />
+              </div>
+              <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">
+                Failed to Load Employees
+              </h3>
+              <p className="text-xs text-rose-600 dark:text-rose-400 max-w-sm mx-auto">
+                {employeeError}
+              </p>
+              <button
+                type="button"
+                onClick={loadEmployees}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
+              >
+                Retry
+              </button>
+            </div>
+          ) : isLoadingCatalog || isLoadingPermissions ? (
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-12 flex flex-col items-center justify-center gap-3 text-slate-400">
               <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
               <p className="text-sm font-medium">Loading permissions catalog...</p>
+            </div>
+          ) : !isRefreshingEmployees && filteredEmployees.length === 0 ? (
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-12 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 flex items-center justify-center mx-auto mb-4 border border-slate-200 dark:border-slate-700">
+                <UserX className="w-8 h-8" />
+              </div>
+              <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">
+                No Matching Employees
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto mt-1">
+                No employees match the selected company filter. Try selecting &apos;-- All Companies --&apos; or adding employees.
+              </p>
             </div>
           ) : !selectedUserId ? (
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-12 text-center">
@@ -744,9 +893,8 @@ export const UserPermissionsPage: React.FC = () => {
                     <tr className="bg-slate-100/90 dark:bg-slate-800/90 border-b border-slate-200 dark:border-slate-700 text-[11px] font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                       <th className="py-3 px-3 w-12 text-center">SR</th>
                       <th className="py-3 px-4 w-36">Module</th>
-                      <th className="py-3 px-4 w-44">Page</th>
+                      <th className="py-3 px-4 w-48">Page</th>
                       <th className="py-3 px-4">Permissions</th>
-                      <th className="py-3 px-4 w-44">Data Scope</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
@@ -758,7 +906,7 @@ export const UserPermissionsPage: React.FC = () => {
                         <React.Fragment key={modGroup.module_code}>
                           {/* Module Header Row */}
                           <tr className="bg-slate-50 dark:bg-slate-800/50 font-bold border-t-2 border-slate-200 dark:border-slate-700">
-                            <td colSpan={4} className="py-2.5 px-4">
+                            <td colSpan={3} className="py-2.5 px-4">
                               <button
                                 type="button"
                                 onClick={() => toggleCollapse(modGroup.module_code)}
@@ -881,45 +1029,6 @@ export const UserPermissionsPage: React.FC = () => {
                                         );
                                       })}
                                     </div>
-                                  </td>
-
-                                  {/* Data Scope Dropdown */}
-                                  <td className="py-3 px-4">
-                                    <select
-                                      id={`scope-${page.page_code}`}
-                                      aria-label={`Data Scope for ${page.page_name}`}
-                                      value={permissionsState[page.page_code]?.data_scope || 'SELF'}
-                                      disabled={!permissionsState[page.page_code]?.can_view}
-                                      onChange={(e) => {
-                                        setIsDirty(true);
-                                        const newScope = e.target.value as DataScope;
-                                        setPermissionsState((prev) => ({
-                                          ...prev,
-                                          [page.page_code]: {
-                                            ...(prev[page.page_code] || {
-                                              page_code: page.page_code,
-                                              can_view: true,
-                                              can_create: false,
-                                              can_edit: false,
-                                              can_delete: false,
-                                              can_assign: false,
-                                              can_reassign: false,
-                                              can_export: false,
-                                              can_approve: false,
-                                              status: 'ACTIVE',
-                                            }),
-                                            data_scope: newScope,
-                                          },
-                                        }));
-                                      }}
-                                      className="h-8 px-2.5 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
-                                    >
-                                      <option value="SELF">SELF (Own)</option>
-                                      <option value="TEAM">TEAM (Team)</option>
-                                      <option value="DEPARTMENT">DEPARTMENT (Dept)</option>
-                                      <option value="COMPANY">COMPANY (Company)</option>
-                                      <option value="ALL">ALL (All Orgs)</option>
-                                    </select>
                                   </td>
                                 </tr>
                               );
