@@ -23,6 +23,14 @@ interface KpiCardProps {
   isInverseTrend?: boolean; // For outstanding, increase is negative
 }
 
+const getValueFontSize = (val: string) => {
+  const len = val?.length || 0;
+  if (len > 13) return 'text-base sm:text-lg xl:text-lg 2xl:text-xl';
+  if (len > 10) return 'text-lg sm:text-xl xl:text-xl 2xl:text-2xl';
+  if (len > 7) return 'text-xl sm:text-2xl xl:text-2xl 2xl:text-[26px]';
+  return 'text-2xl sm:text-3xl xl:text-[26px] 2xl:text-3xl';
+};
+
 const KpiCard: React.FC<KpiCardProps> = ({
   title,
   metric,
@@ -37,21 +45,28 @@ const KpiCard: React.FC<KpiCardProps> = ({
     <ArrowDownRight className="w-3.5 h-3.5 shrink-0" />
   );
 
+  const displayValue = metric.formatted_value || '0';
+
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 shadow-xs border border-slate-200/80 dark:border-slate-800 transition-all hover:shadow-md flex flex-col justify-between">
-      <div className="flex items-start justify-between gap-3">
-        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{title}</span>
-        <div className={`p-2.5 rounded-xl shrink-0 ${iconBgClass}`}>{icon}</div>
+    <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-4.5 shadow-xs border border-slate-200/80 dark:border-slate-800 transition-all hover:shadow-md flex flex-col justify-between min-w-0 overflow-hidden">
+      <div className="flex items-start justify-between gap-2">
+        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 truncate" title={title}>
+          {title}
+        </span>
+        <div className={`p-2 sm:p-2.5 rounded-xl shrink-0 ${iconBgClass}`}>{icon}</div>
       </div>
 
-      <div className="mt-3">
-        <div className="text-2xl sm:text-[26px] font-bold text-slate-900 dark:text-white tracking-tight">
-          {metric.formatted_value}
+      <div className="mt-3 min-w-0">
+        <div
+          className={`font-bold text-slate-900 dark:text-white tracking-tight truncate ${getValueFontSize(displayValue)}`}
+          title={displayValue}
+        >
+          {displayValue}
         </div>
 
-        <div className="mt-2.5 flex items-center gap-1.5 text-xs">
+        <div className="mt-2.5 flex items-center gap-1.5 text-xs min-w-0">
           <span
-            className={`inline-flex items-center gap-0.5 font-semibold ${
+            className={`inline-flex items-center gap-0.5 font-semibold shrink-0 ${
               isPositive
                 ? 'text-emerald-600 dark:text-emerald-400'
                 : 'text-rose-600 dark:text-rose-400'
@@ -60,7 +75,10 @@ const KpiCard: React.FC<KpiCardProps> = ({
             {trendArrow}
             {Math.abs(metric.percentage_change)}%
           </span>
-          <span className="text-slate-400 dark:text-slate-500 font-medium">
+          <span
+            className="text-slate-400 dark:text-slate-500 font-medium truncate"
+            title={metric.comparison_label || 'vs last month'}
+          >
             {metric.comparison_label || 'vs last month'}
           </span>
         </div>

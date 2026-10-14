@@ -44,14 +44,30 @@ interface ActiveEditCell {
 }
 
 function formatInr(val: number | string | null | undefined): string {
-  const num = typeof val === 'number' ? val : parseFloat(String(val ?? 0));
+  if (val === null || val === undefined) return '₹0';
+  let num: number;
+  if (typeof val === 'number') {
+    num = val;
+  } else {
+    const cleaned = String(val).replace(/[^0-9.-]/g, '');
+    num = parseFloat(cleaned);
+  }
   const safeNum = isNaN(num) ? 0 : num;
+  const hasDecimals = safeNum % 1 !== 0;
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: hasDecimals ? 2 : 0,
   }).format(safeNum);
 }
+
+const getBlockValueFontSize = (val: string) => {
+  const len = val?.length || 0;
+  if (len > 13) return 'text-xs sm:text-sm xl:text-[13px] 2xl:text-sm';
+  if (len > 10) return 'text-sm sm:text-base xl:text-[14px] 2xl:text-base';
+  return 'text-base sm:text-lg xl:text-base 2xl:text-lg';
+};
 
 function renderPaymentBadge(status: string) {
   const s = status?.toUpperCase() || '';
@@ -455,77 +471,107 @@ export const AccountsEntriesPage: React.FC = () => {
       </div>
 
       {/* Aggregate Financial Metrics Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2.5 sm:gap-3">
         {/* Total Orders */}
-        <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
-          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+        <div className="p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs min-w-0 overflow-hidden flex flex-col justify-between">
+          <span className="text-[10px] sm:text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate block" title="Total Orders">
             Total Orders
           </span>
-          <div className="mt-1 text-lg font-bold text-slate-900 dark:text-white">
+          <div className="mt-1 text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight truncate" title={String(summary?.total_orders || 0)}>
             {summary?.total_orders || 0}
           </div>
         </div>
 
         {/* Total Amount */}
-        <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
-          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-            Total Amount
-          </span>
-          <div className="mt-1 text-lg font-bold text-slate-900 dark:text-white">
-            {summary?.formatted_total_amount || formatInr(0)}
-          </div>
-        </div>
+        {(() => {
+          const val = summary ? formatInr(summary.total_amount ?? summary.formatted_total_amount) : formatInr(0);
+          return (
+            <div className="p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs min-w-0 overflow-hidden flex flex-col justify-between">
+              <span className="text-[10px] sm:text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate block" title="Total Amount">
+                Total Amount
+              </span>
+              <div className={`mt-1 font-bold text-slate-900 dark:text-white tracking-tight truncate ${getBlockValueFontSize(val)}`} title={val}>
+                {val}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Advance Amount */}
-        <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
-          <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-            Advance Amount
-          </span>
-          <div className="mt-1 text-lg font-bold text-emerald-600 dark:text-emerald-400">
-            {summary?.formatted_total_advance || formatInr(0)}
-          </div>
-        </div>
+        {(() => {
+          const val = summary ? formatInr(summary.total_advance ?? summary.formatted_total_advance) : formatInr(0);
+          return (
+            <div className="p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs min-w-0 overflow-hidden flex flex-col justify-between">
+              <span className="text-[10px] sm:text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider truncate block" title="Advance Amount">
+                Advance Amount
+              </span>
+              <div className={`mt-1 font-bold text-emerald-600 dark:text-emerald-400 tracking-tight truncate ${getBlockValueFontSize(val)}`} title={val}>
+                {val}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Pending Amount */}
-        <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
-          <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
-            Pending Amount
-          </span>
-          <div className="mt-1 text-lg font-bold text-amber-600 dark:text-amber-400">
-            {summary?.formatted_total_pending || formatInr(0)}
-          </div>
-        </div>
+        {(() => {
+          const val = summary ? formatInr(summary.total_pending ?? summary.formatted_total_pending) : formatInr(0);
+          return (
+            <div className="p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs min-w-0 overflow-hidden flex flex-col justify-between">
+              <span className="text-[10px] sm:text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider truncate block" title="Pending Amount">
+                Pending Amount
+              </span>
+              <div className={`mt-1 font-bold text-amber-600 dark:text-amber-400 tracking-tight truncate ${getBlockValueFontSize(val)}`} title={val}>
+                {val}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Govt Fees */}
-        <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
-          <span className="text-[11px] font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wider">
-            Govt Fees
-          </span>
-          <div className="mt-1 text-lg font-bold text-purple-600 dark:text-purple-400">
-            {summary?.formatted_total_govt_fees || formatInr(0)}
-          </div>
-        </div>
+        {(() => {
+          const val = summary ? formatInr(summary.total_govt_fees ?? summary.formatted_total_govt_fees) : formatInr(0);
+          return (
+            <div className="p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs min-w-0 overflow-hidden flex flex-col justify-between">
+              <span className="text-[10px] sm:text-[11px] font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wider truncate block" title="Govt Fees">
+                Govt Fees
+              </span>
+              <div className={`mt-1 font-bold text-purple-600 dark:text-purple-400 tracking-tight truncate ${getBlockValueFontSize(val)}`} title={val}>
+                {val}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Incidental Cost */}
-        <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
-          <span className="text-[11px] font-semibold text-orange-600 dark:text-orange-400 uppercase tracking-wider">
-            Incidental Cost
-          </span>
-          <div className="mt-1 text-lg font-bold text-orange-600 dark:text-orange-400">
-            {summary?.formatted_total_incidental_cost || formatInr(0)}
-          </div>
-        </div>
+        {(() => {
+          const val = summary ? formatInr(summary.total_incidental_cost ?? summary.formatted_total_incidental_cost) : formatInr(0);
+          return (
+            <div className="p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs min-w-0 overflow-hidden flex flex-col justify-between">
+              <span className="text-[10px] sm:text-[11px] font-semibold text-orange-600 dark:text-orange-400 uppercase tracking-wider truncate block" title="Incidental Cost">
+                Incidental Cost
+              </span>
+              <div className={`mt-1 font-bold text-orange-600 dark:text-orange-400 tracking-tight truncate ${getBlockValueFontSize(val)}`} title={val}>
+                {val}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Estimated Profit */}
-        <div className="col-span-2 sm:col-span-1 p-3.5 rounded-2xl bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-transparent dark:from-emerald-950/30 dark:via-slate-900 border border-emerald-200 dark:border-emerald-800 shadow-xs">
-          <span className="text-[11px] font-bold text-emerald-800 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1">
-            <Sparkles className="w-3 h-3" />
-            Estimated Profit
-          </span>
-          <div className="mt-1 text-lg font-black text-emerald-700 dark:text-emerald-400">
-            {summary?.formatted_total_profits || formatInr(0)}
-          </div>
-        </div>
+        {(() => {
+          const val = summary ? formatInr(summary.total_profits ?? summary.formatted_total_profits) : formatInr(0);
+          return (
+            <div className="col-span-2 sm:col-span-1 p-3 rounded-2xl bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-transparent dark:from-emerald-950/30 dark:via-slate-900 border border-emerald-200 dark:border-emerald-800 shadow-xs min-w-0 overflow-hidden flex flex-col justify-between">
+              <span className="text-[10px] sm:text-[11px] font-bold text-emerald-800 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1 truncate" title="Estimated Profit">
+                <Sparkles className="w-3 h-3 shrink-0" />
+                <span className="truncate">Estimated Profit</span>
+              </span>
+              <div className={`mt-1 font-black text-emerald-700 dark:text-emerald-400 tracking-tight truncate ${getBlockValueFontSize(val)}`} title={val}>
+                {val}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Filter & Search Toolbar */}
