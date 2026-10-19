@@ -358,6 +358,7 @@ def get_operations_dashboard_data(
         )
     )
     base_query = _apply_operations_scope(base_query, user, context)
+    base_query = base_query.where(OperationApplication.deleted_at.is_(None))
     if company_id:
         if context.scope in ("COMPANY", "DEPARTMENT") and company_id != context.company_id:
             base_query = base_query.where(OperationApplication.company_id == uuid.uuid4())
@@ -550,6 +551,9 @@ def get_operations_tasks(
     else:
         stmt = _apply_operations_scope(stmt, user, context)
 
+    # Exclude soft-deleted tasks
+    stmt = stmt.where(OperationApplication.deleted_at.is_(None))
+
     # Dynamic filters
     if company_id:
         if not my_tasks_only and context.scope in ("COMPANY", "DEPARTMENT") and company_id != context.company_id:
@@ -740,7 +744,7 @@ def get_operation_application_detail(
     )
 
     app = session.execute(stmt).scalar_one_or_none()
-    if not app:
+    if not app or app.deleted_at is not None:
         raise ApplicationNotFoundError(f"Operation application with ID '{application_id}' not found.")
 
     # Scoping check
@@ -878,7 +882,7 @@ def assign_task(
 ) -> OperationApplication:
     """Assign an unassigned or existing application to an operations employee."""
     app = session.get(OperationApplication, application_id)
-    if not app:
+    if not app or app.deleted_at is not None:
         raise ApplicationNotFoundError(f"Operation application with ID '{application_id}' not found.")
 
     assignee = session.get(User, assignee_user_id)
@@ -965,7 +969,7 @@ def reassign_task(
 ) -> OperationApplication:
     """Reassign an existing assigned application to a different operations employee."""
     app = session.get(OperationApplication, application_id)
-    if not app:
+    if not app or app.deleted_at is not None:
         raise ApplicationNotFoundError(f"Operation application with ID '{application_id}' not found.")
 
     new_assignee = session.get(User, new_assignee_user_id)
@@ -1075,7 +1079,7 @@ def update_application_status(
 ) -> OperationApplication:
     """Transition application status validating state machine rules."""
     app = session.get(OperationApplication, application_id)
-    if not app:
+    if not app or app.deleted_at is not None:
         raise ApplicationNotFoundError(f"Operation application with ID '{application_id}' not found.")
 
     old_status = app.application_status
@@ -1137,6 +1141,9 @@ def update_document_status(
     doc = session.get(ApplicationDocument, app_doc_id)
     if not doc:
         raise ValueError(f"Application document with ID '{app_doc_id}' not found.")
+    parent_app = session.get(OperationApplication, doc.application_id)
+    if parent_app and parent_app.deleted_at is not None:
+        raise ValueError("Cannot update documents for a deleted task.")
 
     old_status = doc.status
     doc.status = new_status
@@ -1189,7 +1196,7 @@ def add_operation_remark(
     if not app:
         raise ApplicationNotFoundError(f"Operation application with ID '{application_id}' not found.")
 
-    if app.application_status == "CANCELLED":
+    if app.application_status == "CANCELLED" or app.deleted_at is not None:
         raise ValueError("Cannot add remarks to a cancelled or deleted task.")
 
     # Access control:

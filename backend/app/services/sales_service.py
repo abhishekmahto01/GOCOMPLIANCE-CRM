@@ -21,6 +21,7 @@ from app.models.operation_application import (
     OperationApplication,
 )
 from app.models.sales_order import SalesOrder
+from app.models.sales_order_audit_log import SalesOrderAuditLog
 from app.models.service import ServiceMaster, ServiceRequiredDocument
 from app.models.user import User
 from app.schemas.sales_dashboard import (
@@ -67,6 +68,45 @@ class SalesOrderPermissionError(Exception):
 class SalesOrderDeletionError(Exception):
     """Raised when a sales order cannot be deleted due to business rules (e.g. Operations completed)."""
     pass
+
+
+def is_canonical_super_admin(session: Optional[Session], user: Optional[User]) -> bool:
+    """Enforce strict canonical SUPER_ADMIN role check.
+
+    Requirements:
+    - Must be an active user.
+    - Never relies on employee names or employee codes (e.g. CG0001, GC0001).
+    - Never relies on frontend flags or role supplied in request.
+    - During impersonation (user._is_impersonated is True), uses the effective
+      authenticated user's permissions and strictly denies Super Admin override.
+    - Authenticated canonical SUPER_ADMIN is identified by:
+        * user.is_super_admin is True, or
+        * user.role_type == 'SUPER_ADMIN', or
+        * user.designation.designation_code == 'SUPER_ADMIN', or
+        * user.designation.designation_name contains 'super admin'
+    """
+    if not user or getattr(user, "account_status", None) != "ACTIVE":
+        return False
+    if getattr(user, "_is_impersonated", False):
+        return False
+    if getattr(user, "is_super_admin", False) is True:
+        return True
+    role_type = getattr(user, "role_type", None)
+    if isinstance(role_type, str) and role_type.strip().upper() == "SUPER_ADMIN":
+        return True
+    desig = getattr(user, "designation", None)
+    if desig is None and session and getattr(user, "designation_id", None):
+        desig = session.get(Designation, user.designation_id)
+    if desig:
+        dcode = getattr(desig, "designation_code", "")
+        if isinstance(dcode, str) and dcode.strip().upper() == "SUPER_ADMIN":
+            return True
+        dname = getattr(desig, "designation_name", "")
+        if isinstance(dname, str):
+            low = dname.lower()
+            if "super admin" in low or "super administrator" in low:
+                return True
+    return False
 
 
 def is_sales_department_employee(u: Optional[User]) -> bool:
@@ -764,21 +804,27 @@ def delete_sales_order(
     session: Session,
     order_id: uuid.UUID,
     current_user: User,
+    deletion_reason: Optional[str] = None,
 ) -> SalesOrderDetailRead:
-    """Safely soft-delete a sales order and atomically cancel any non-completed Operations task.
+    """Safely soft-delete a sales order and handle linked Operations task.
 
     Business Rules:
     - Salesperson can delete only their own authorized sales entry (within data scope).
     - Super Admin and Director/Admin can delete entries they are authorized to manage.
     - An entry may be deleted while unassigned or assigned but not completed.
-    - If Operations task is COMPLETED/APPROVED, deletion is strictly blocked for all roles with message:
+    - If Operations task is COMPLETED/APPROVED, deletion is strictly blocked for non-Super Admin roles with message:
       'This entry cannot be deleted because Operations has completed the task.'
+    - Super Admin can override this restriction and soft-delete the entry:
+        * Requires a non-empty deletion reason.
+        * Preserves the original task status (e.g. APPROVED/COMPLETED) and assignee.
+        * Soft deletes both order and task without physical deletion.
+        * Hides them from normal lists, search, dashboards, exports, and notifications.
     - Checks live Operations status on the server in the current transaction.
-    - Atomically cancels the Operations application and removes assignee so it disappears from active task lists.
-    - Preserves order number in database for audit trail.
+    - Operation is atomic and safe to retry without duplicate side effects.
+    - Creates immutable audit record tracking actor, previous status, reason, and timestamps.
     """
     order = session.get(SalesOrder, order_id)
-    if not order or order.confirmation_status == "CANCELLED":
+    if not order:
         raise SalesOrderNotFoundError(f"Sales order with ID '{order_id}' not found.")
 
     # 1. Check RBAC Permission & Data Scope
@@ -793,51 +839,106 @@ def delete_sales_order(
     if not scope_ctx.is_user_permitted(order.salesperson_user_id, order.company_id):
         raise SalesOrderPermissionError("You are not authorized to delete this sales order.")
 
-    # 2. Check live Operations task status at deletion time
     app = session.execute(
         select(OperationApplication).where(OperationApplication.sales_order_id == order.order_id)
     ).scalar_one_or_none()
 
-    if app:
-        if app.application_status in ("APPROVED", "COMPLETED"):
-            raise SalesOrderDeletionError("This entry cannot be deleted because Operations has completed the task.")
+    # Safe to retry / Idempotent: If already deleted, return DTO immediately without duplicate side effects
+    if order.confirmation_status == "CANCELLED":
+        return _build_deleted_sales_order_read(order, app)
 
-    # 3. Soft delete order & cancel application atomically within transaction
+    # 2. Check live Operations task status at deletion time
+    is_super = is_canonical_super_admin(session, current_user)
+    is_ops_completed = bool(app and app.application_status in ("APPROVED", "COMPLETED"))
+    is_ops_progressed = bool(app and app.application_status not in ("UNASSIGNED", "ASSIGNED", "CANCELLED"))
+
+    if is_ops_completed and not is_super:
+        raise SalesOrderDeletionError("This entry cannot be deleted because Operations has completed the task.")
+
+    now = datetime.now(timezone.utc)
+    clean_reason = deletion_reason.strip() if (deletion_reason and deletion_reason.strip()) else None
+
+    # Super Admin override on completed or progressed task requires deletion reason
+    is_override = is_super and (is_ops_completed or is_ops_progressed)
+    if is_override and not clean_reason:
+        raise SalesOrderDeletionError("A deletion reason is required to delete this entry.")
+
+    prev_order_status = order.confirmation_status
+    prev_app_status = app.application_status if app else "NONE"
+    prev_assignee_id = app.assigned_to_user_id if app else None
+
+    # 3. Apply soft-delete mutation
     order.confirmation_status = "CANCELLED"
-    order.updated_at = datetime.now(timezone.utc)
+    order.deleted_at = now
+    order.deleted_by = current_user.user_id
+    order.deletion_reason = clean_reason
+    order.updated_at = now
 
     if app:
-        prev_assignee_id = app.assigned_to_user_id
-        prev_status = app.application_status
+        app.deleted_at = now
+        app.deleted_by = current_user.user_id
+        app.deletion_reason = clean_reason
+        app.updated_at = now
 
-        app.application_status = "CANCELLED"
-        app.assigned_to_user_id = None
-        app.updated_at = datetime.now(timezone.utc)
-
-        if prev_assignee_id:
-            unassign_history = ApplicationAssignmentHistory(
+        if is_override:
+            # PRESERVE ORIGINAL TASK STATUS AND ASSIGNEE
+            # Do NOT overwrite app.application_status or app.assigned_to_user_id
+            activity = ApplicationActivityLog(
                 application_id=app.application_id,
-                previous_assignee_user_id=prev_assignee_id,
-                new_assignee_user_id=None,
-                assigned_by_user_id=current_user.user_id,
-                reason=f"Sales entry '{order.order_number}' deleted by {current_user.first_name} {current_user.last_name}.",
-                assigned_at=datetime.now(timezone.utc),
+                actor_user_id=current_user.user_id,
+                action_type="TASK_SOFT_DELETED",
+                old_value=f"Status:{prev_app_status}|Assignee:{prev_assignee_id}",
+                new_value=f"SoftDeleted|Status:{prev_app_status}|Assignee:{prev_assignee_id}",
+                comment=f"Linked sales order '{order.order_number}' soft-deleted by Super Admin ({current_user.first_name} {current_user.last_name}). Reason: {clean_reason}",
+                created_at=now,
             )
-            session.add(unassign_history)
+            session.add(activity)
+        else:
+            # Normal eligible deletion: cancel application and clear active assignee
+            app.application_status = "CANCELLED"
+            app.assigned_to_user_id = None
 
-        activity = ApplicationActivityLog(
-            application_id=app.application_id,
-            actor_user_id=current_user.user_id,
-            action_type="APPLICATION_CANCELLED",
-            old_value=f"Status:{prev_status}|Assignee:{prev_assignee_id}",
-            new_value="Status:CANCELLED|Assignee:None",
-            comment=f"Sales order '{order.order_number}' deleted by {current_user.first_name} {current_user.last_name}.",
-            created_at=datetime.now(timezone.utc),
-        )
-        session.add(activity)
+            if prev_assignee_id:
+                unassign_history = ApplicationAssignmentHistory(
+                    application_id=app.application_id,
+                    previous_assignee_user_id=prev_assignee_id,
+                    new_assignee_user_id=None,
+                    assigned_by_user_id=current_user.user_id,
+                    reason=f"Sales entry '{order.order_number}' deleted by {current_user.first_name} {current_user.last_name}.",
+                    assigned_at=now,
+                )
+                session.add(unassign_history)
+
+            activity = ApplicationActivityLog(
+                application_id=app.application_id,
+                actor_user_id=current_user.user_id,
+                action_type="APPLICATION_CANCELLED",
+                old_value=f"Status:{prev_app_status}|Assignee:{prev_assignee_id}",
+                new_value="Status:CANCELLED|Assignee:None",
+                comment=f"Sales order '{order.order_number}' deleted by {current_user.first_name} {current_user.last_name}.",
+                created_at=now,
+            )
+            session.add(activity)
+
+    # 4. Record audit event (Requirement 6)
+    audit = SalesOrderAuditLog(
+        sales_order_id=order.order_id,
+        actor_user_id=current_user.user_id,
+        action_type="SUPER_ADMIN_OVERRIDE_DELETE" if is_override else "SOFT_DELETE",
+        linked_task_id=app.application_id if app else None,
+        previous_status=f"order:{prev_order_status}|task:{prev_app_status}",
+        deletion_reason=clean_reason,
+        created_at=now,
+    )
+    session.add(audit)
 
     session.flush()
 
+    return _build_deleted_sales_order_read(order, app)
+
+
+def _build_deleted_sales_order_read(order: SalesOrder, app: Optional[OperationApplication]) -> SalesOrderDetailRead:
+    """Helper to serialize deleted SalesOrder to SalesOrderDetailRead DTO."""
     c_name = order.client.client_name if order.client else "—"
     c_phone = order.client.contact_phone if order.client else "—"
     s_name = order.service.service_name if order.service else "—"
@@ -847,6 +948,12 @@ def delete_sales_order(
 
     app_id = app.application_id if app else None
     app_num = app.application_number if app else None
+    assigned_name = (
+        f"{app.assigned_to.first_name} {app.assigned_to.last_name}".strip()
+        if (app and app.assigned_to)
+        else "Unassigned"
+    )
+    assigned_code = app.assigned_to.employee_code if (app and app.assigned_to) else None
 
     return SalesOrderDetailRead(
         s_no=1,
@@ -875,6 +982,9 @@ def delete_sales_order(
         notes=order.notes,
         remarks=order.notes,
         gst_invoice_required=getattr(order, "gst_invoice_required", False),
+        deleted_at=order.deleted_at,
+        deleted_by=order.deleted_by,
+        deletion_reason=order.deletion_reason,
         created_at=order.created_at,
         updated_at=order.updated_at,
         client_name=c_name,
@@ -883,13 +993,13 @@ def delete_sales_order(
         service_code=s_code,
         salesperson_name=sp_name,
         salesperson_code=sp_code,
-        assigned_to_user_id=None,
-        assigned_to_name="Unassigned",
-        assigned_to_code=None,
+        assigned_to_user_id=app.assigned_to_user_id if app else None,
+        assigned_to_name=assigned_name,
+        assigned_to_code=assigned_code,
         work_status="CANCELLED",
         application_id=app_id,
         application_number=app_num,
-        operation_status="CANCELLED",
+        operation_status=app.application_status if app else "CANCELLED",
     )
 
 
@@ -1091,7 +1201,10 @@ def _apply_sales_filters(
 
     # 2. Exclude soft-deleted/cancelled orders unless explicitly included
     if not include_cancelled:
-        query = query.where(SalesOrder.confirmation_status != "CANCELLED")
+        query = query.where(
+            SalesOrder.confirmation_status != "CANCELLED",
+            SalesOrder.deleted_at.is_(None),
+        )
 
     # 3. Date Range
     if start_date:

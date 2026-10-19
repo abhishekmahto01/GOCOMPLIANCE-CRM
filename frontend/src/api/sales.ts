@@ -193,9 +193,13 @@ export async function updateSalesOrderApi(
  * Safely delete a Sales Order and cancel its linked Operations task.
  */
 export async function deleteSalesOrderApi(
-  orderId: string
+  orderId: string,
+  payload?: { reason?: string }
 ): Promise<SalesRegisterItem> {
-  const response = await apiClient.delete<SalesRegisterItem>(`/sales/orders/${orderId}`);
+  const response = await apiClient.delete<SalesRegisterItem>(`/sales/orders/${orderId}`, {
+    data: payload,
+    params: payload?.reason ? { reason: payload.reason } : undefined,
+  });
   return response.data;
 }
 

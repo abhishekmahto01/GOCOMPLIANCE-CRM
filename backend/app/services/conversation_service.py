@@ -203,7 +203,10 @@ def get_user_authorized_orders_subquery(session: Session, user: User):
         or permissions.is_super_admin_user(session, user)
     )
     if is_super:
-        return select(SalesOrder.order_id).where(SalesOrder.confirmation_status != "CANCELLED")
+        return select(SalesOrder.order_id).where(
+            SalesOrder.confirmation_status != "CANCELLED",
+            SalesOrder.deleted_at.is_(None),
+        )
 
     desig_name = (user.designation.designation_name.lower() if user.designation and user.designation.designation_name else "")
     desig_code = (user.designation.designation_code.upper() if user.designation and user.designation.designation_code else "")
@@ -223,6 +226,7 @@ def get_user_authorized_orders_subquery(session: Session, user: User):
         return select(SalesOrder.order_id).where(
             SalesOrder.company_id == user.company_id,
             SalesOrder.confirmation_status != "CANCELLED",
+            SalesOrder.deleted_at.is_(None),
         )
 
     module_conditions = []
@@ -276,7 +280,8 @@ def get_user_authorized_orders_subquery(session: Session, user: User):
         ops_conds.append(
             SalesOrder.order_id.in_(
                 select(OperationApplication.sales_order_id).where(
-                    OperationApplication.assigned_to_user_id == user.user_id
+                    OperationApplication.assigned_to_user_id == user.user_id,
+                    OperationApplication.deleted_at.is_(None),
                 )
             )
         )
@@ -299,7 +304,8 @@ def get_user_authorized_orders_subquery(session: Session, user: User):
                 ops_conds.append(
                     SalesOrder.order_id.in_(
                         select(OperationApplication.sales_order_id).where(
-                            OperationApplication.assigned_to_user_id.in_(ops_ctx.team_user_ids)
+                            OperationApplication.assigned_to_user_id.in_(ops_ctx.team_user_ids),
+                            OperationApplication.deleted_at.is_(None),
                         )
                     )
                 )
@@ -344,6 +350,7 @@ def get_user_authorized_orders_subquery(session: Session, user: User):
     return select(SalesOrder.order_id).where(
         SalesOrder.company_id == user.company_id,
         SalesOrder.confirmation_status != "CANCELLED",
+        SalesOrder.deleted_at.is_(None),
         or_(*module_conditions),
     )
 
@@ -454,7 +461,7 @@ def get_task_conversation(
         .first()
     )
 
-    if not order or order.confirmation_status == "CANCELLED":
+    if not order or order.confirmation_status == "CANCELLED" or order.deleted_at is not None:
         raise ConversationNotFoundError(f"Sales order with ID '{order_id}' not found.")
 
     can_read, can_post, reason = check_conversation_access(session, user, order)
@@ -588,7 +595,7 @@ def post_conversation_message(
         raise ValueError("Message text cannot be empty or whitespace only.")
 
     order = session.get(SalesOrder, order_id)
-    if not order or order.confirmation_status == "CANCELLED":
+    if not order or order.confirmation_status == "CANCELLED" or order.deleted_at is not None:
         raise ConversationNotFoundError(f"Sales order with ID '{order_id}' not found.")
 
     can_read, can_post, reason = check_conversation_access(session, user, order)

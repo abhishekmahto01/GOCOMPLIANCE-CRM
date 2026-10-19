@@ -946,6 +946,132 @@ describe('Sales Entry & Sales Register Module Tests', () => {
       expect(document.body.textContent).toContain('This entry cannot be deleted because Operations has completed the task.');
     });
   });
+
+  it('blocks deletion and disables button for non-super-admin when operations task is completed', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(authApi, 'getCurrentUserApi').mockResolvedValue({
+      ...mockUser,
+      is_super_admin: false,
+    });
+    vi.spyOn(salesApi, 'getSalesRegisterApi').mockResolvedValue({
+      ...mockRegisterData,
+      items: [
+        {
+          ...mockRegisterData.items[0],
+          operation_status: 'APPROVED',
+          work_status: 'APPROVED',
+        },
+      ],
+    });
+
+    render(
+      <ThemeProvider>
+        <AuthProvider>
+          <MemoryRouter initialEntries={['/sales/register']}>
+            <Routes>
+              <Route path="/sales" element={<SalesLayout />}>
+                <Route path="register" element={<SalesRegisterPage />} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
+      </ThemeProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /sales register/i })).toBeInTheDocument();
+    });
+
+    const deleteButtons = screen.getAllByRole('button', { name: /Delete/i });
+    await user.click(deleteButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Delete Sales Entry: SO-2026-0001/i)).toBeInTheDocument();
+    });
+
+    // Blocker banner is shown
+    expect(screen.getByText('Cannot Delete Entry')).toBeInTheDocument();
+    expect(screen.getByText(/This entry cannot be deleted because Operations has completed the task/i)).toBeInTheDocument();
+
+    // Confirm Delete button is disabled
+    const confirmDeleteBtn = screen.getByRole('button', { name: /^Delete Entry$/i });
+    expect(confirmDeleteBtn).toBeDisabled();
+  });
+
+  it('allows super-admin to override completed task with required reason', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(authApi, 'getCurrentUserApi').mockResolvedValue({
+      ...mockUser,
+      is_super_admin: true,
+    });
+    vi.spyOn(salesApi, 'getSalesRegisterApi').mockResolvedValue({
+      ...mockRegisterData,
+      items: [
+        {
+          ...mockRegisterData.items[0],
+          operation_status: 'APPROVED',
+          work_status: 'APPROVED',
+        },
+      ],
+    });
+    const deleteSpy = vi.spyOn(salesApi, 'deleteSalesOrderApi').mockResolvedValue({
+      ...mockRegisterData.items[0],
+      confirmation_status: 'CANCELLED',
+      work_status: 'CANCELLED',
+    });
+
+    render(
+      <ThemeProvider>
+        <AuthProvider>
+          <MemoryRouter initialEntries={['/sales/register']}>
+            <Routes>
+              <Route path="/sales" element={<SalesLayout />}>
+                <Route path="register" element={<SalesRegisterPage />} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
+      </ThemeProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /sales register/i })).toBeInTheDocument();
+    });
+
+    const deleteButtons = screen.getAllByRole('button', { name: /Delete/i });
+    await user.click(deleteButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Delete Sales Entry: SO-2026-0001/i)).toBeInTheDocument();
+    });
+
+    // Soft-delete warning banner is shown instead of blocker
+    expect(screen.queryByText('Cannot Delete Entry')).not.toBeInTheDocument();
+    expect(screen.getByText(/Soft-Delete Warning \(Super Admin Override\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/hidden from normal lists, search, dashboards, exports, and unread notifications/i)).toBeInTheDocument();
+
+    // Reason is required
+    const reasonInput = screen.getByPlaceholderText(/Enter required reason for soft-deleting/i);
+    expect(reasonInput).toBeInTheDocument();
+
+    // Delete button disabled before reason is entered
+    const confirmDeleteBtn = screen.getByRole('button', { name: /^Delete Entry$/i });
+    expect(confirmDeleteBtn).toBeDisabled();
+
+    // Type deletion reason
+    await user.type(reasonInput, 'Client requested cancellation after approval');
+    expect(confirmDeleteBtn).toBeEnabled();
+
+    // Click confirm delete
+    await user.click(confirmDeleteBtn);
+
+    await waitFor(() => {
+      expect(deleteSpy).toHaveBeenCalledWith(
+        mockRegisterData.items[0].order_id,
+        { reason: 'Client requested cancellation after approval' }
+      );
+    });
+  });
 });
 
 

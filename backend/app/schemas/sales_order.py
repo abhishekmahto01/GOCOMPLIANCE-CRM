@@ -111,6 +111,12 @@ class SalesOrderUpdate(BaseModel):
         return self
 
 
+class SalesOrderDeleteRequest(BaseModel):
+    """Schema for soft-deleting a sales order."""
+
+    reason: Optional[str] = Field(None, max_length=1000, description="Business justification for soft-deleting the order")
+
+
 class SalesOrderRead(BaseModel):
     """Lightweight read schema for Sales Order."""
 
@@ -137,6 +143,9 @@ class SalesOrderRead(BaseModel):
     reimbursement_note: Optional[str] = None
     notes: Optional[str] = None
     gst_invoice_required: bool = False
+    deleted_at: Optional[datetime] = None
+    deleted_by: Optional[uuid.UUID] = None
+    deletion_reason: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

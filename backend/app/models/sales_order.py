@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from app.models.company import Company
     from app.models.operation_application import OperationApplication
     from app.models.payment_transaction import PaymentTransaction
+    from app.models.sales_order_audit_log import SalesOrderAuditLog
     from app.models.service import ServiceMaster
     from app.models.task_conversation import TaskConversationMessage
     from app.models.user import User
@@ -272,6 +273,31 @@ class SalesOrder(Base):
         comment="Timestamp when order record was last updated (UTC)",
     )
 
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+        comment="Timestamp when order record was soft-deleted (UTC)",
+    )
+
+    deleted_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "user_master.user_id",
+            ondelete="SET NULL",
+            name="fk_sales_order_deleted_by",
+        ),
+        nullable=True,
+        index=True,
+        comment="Foreign key referencing user who soft-deleted the order",
+    )
+
+    deletion_reason: Mapped[Optional[str]] = mapped_column(
+        String(1000),
+        nullable=True,
+        comment="Required or provided deletion justification reason",
+    )
+
     # Relationships
     company: Mapped["Company"] = relationship(
         "Company",
@@ -330,6 +356,18 @@ class SalesOrder(Base):
         back_populates="sales_order",
         cascade="all, delete-orphan",
         order_by="TaskConversationMessage.created_at.asc()",
+    )
+
+    deleted_by_user: Mapped[Optional["User"]] = relationship(
+        "User",
+        foreign_keys=[deleted_by],
+    )
+
+    audit_logs: Mapped[List["SalesOrderAuditLog"]] = relationship(
+        "SalesOrderAuditLog",
+        back_populates="sales_order",
+        cascade="all, delete-orphan",
+        order_by="SalesOrderAuditLog.created_at.asc()",
     )
 
     def __repr__(self) -> str:

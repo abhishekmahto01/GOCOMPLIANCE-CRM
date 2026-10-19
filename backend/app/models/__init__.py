@@ -21,6 +21,7 @@ from app.models.payment_transaction import PaymentTransaction
 from app.models.permission_audit import PermissionAuditLog
 from app.models.refresh_token import RefreshToken
 from app.models.sales_order import SalesOrder
+from app.models.sales_order_audit_log import SalesOrderAuditLog
 from app.models.service import ServiceMaster, ServiceRequiredDocument
 from app.models.task_conversation import TaskConversationMessage
 from app.models.task_conversation_read import TaskConversationReadState
@@ -49,6 +50,7 @@ __all__ = [
     "PermissionAuditLog",
     "RefreshToken",
     "SalesOrder",
+    "SalesOrderAuditLog",
     "ServiceMaster",
     "ServiceRequiredDocument",
     "TaskConversationMessage",

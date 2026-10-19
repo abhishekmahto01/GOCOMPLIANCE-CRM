@@ -1,6 +1,6 @@
 """Comprehensive integration tests for Sales Register, Entry Form, Calculations, and RBAC scoping."""
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -12,10 +12,12 @@ from app.models.client import ClientMaster
 from app.models.company import Company
 from app.models.department import Department
 from app.models.designation import Designation
+from app.models.impersonation_session import ImpersonationSession
 from app.models.module import Module
 from app.models.operation_application import OperationApplication
 from app.models.operations_coordinator_config import OperationsCoordinatorConfig
 from app.models.sales_order import SalesOrder
+from app.models.sales_order_audit_log import SalesOrderAuditLog
 from app.models.service import ServiceMaster, ServiceRequiredDocument
 from app.models.user import User
 from app.models.user_module_permission import UserModulePermission
@@ -2059,6 +2061,190 @@ def test_sales_order_location_crud_and_search(
     assert len(items) >= 1
     assert any(i["order_id"] == order1["order_id"] for i in items)
     assert all(i["order_id"] != order2["order_id"] for i in items)
+
+
+def test_super_admin_soft_delete_override_completed_task_flow(
+    client: TestClient, db_session: Session, sales_fixture: dict
+):
+    """Verify that only canonical SUPER_ADMIN can soft-delete an entry with completed Operations task,
+    requiring a deletion reason, preserving task status in DB, creating audit records, and idempotency."""
+    f = sales_fixture
+    rep1_headers = auth_headers(f["rep1"])
+    mgr_headers = auth_headers(f["manager"])
+    admin_headers = auth_headers(f["karishma"])
+
+    # Create canonical Super Admin user with SUPER_ADMIN designation
+    desig_sa = Designation(
+        designation_code="SUPER_ADMIN",
+        designation_name="Super Administrator",
+        level_rank=1,
+        status="ACTIVE",
+    )
+    db_session.add(desig_sa)
+    db_session.flush()
+
+    super_admin = User(
+        employee_code="GC_SA99",
+        company_id=f["company"].company_id,
+        department_id=f["dept_ops"].department_id,
+        designation_id=desig_sa.designation_id,
+        first_name="Global",
+        last_name="SuperAdmin",
+        official_email="superadmin.override@gocompliance.test",
+        mobile_number="+919888899991",
+        account_status="ACTIVE",
+        date_of_joining=date(2023, 1, 1),
+        employment_type="FULL_TIME",
+        must_change_password=False,
+    )
+    db_session.add(super_admin)
+    db_session.commit()
+    sa_headers = auth_headers(super_admin)
+
+    # 1. Create order
+    create_resp = client.post(
+        "/api/sales/orders",
+        json={
+            "client_name": "Completed Override Corp",
+            "contact_no": "+919888877777",
+            "service_id": str(f["srv1"].service_id),
+            "lead_source": "WEBSITE",
+            "order_date": "2025-02-25",
+            "order_value": 120000.0,
+            "amount_received": 60000.0,
+            "govt_fees": 20000.0,
+            "incidental_cost": 5000.0,
+            "auto_confirm": True,
+            "assignee_user_id": str(f["mansi"].user_id),
+        },
+        headers=rep1_headers,
+    )
+    assert create_resp.status_code == 201
+    order_id = create_resp.json()["order_id"]
+
+    # 2. Operations marks task as APPROVED
+    app = db_session.query(OperationApplication).filter(OperationApplication.sales_order_id == uuid.UUID(order_id)).first()
+    assert app is not None
+    app.application_status = "APPROVED"
+    db_session.commit()
+
+    # 3. Non-Super Admin roles cannot delete even with reason
+    rep_del = client.request("DELETE", f"/api/sales/orders/{order_id}", json={"reason": "Attempting override"}, headers=rep1_headers)
+    assert rep_del.status_code == 400
+    assert rep_del.json()["detail"] == "This entry cannot be deleted because Operations has completed the task."
+
+    mgr_del = client.request("DELETE", f"/api/sales/orders/{order_id}", json={"reason": "Manager override"}, headers=mgr_headers)
+    assert mgr_del.status_code == 400
+    assert mgr_del.json()["detail"] == "This entry cannot be deleted because Operations has completed the task."
+
+    admin_del = client.request("DELETE", f"/api/sales/orders/{order_id}", json={"reason": "Admin override"}, headers=admin_headers)
+    assert admin_del.status_code == 400
+    assert admin_del.json()["detail"] == "This entry cannot be deleted because Operations has completed the task."
+
+    # 4. Impersonated session cannot bypass (effective user permissions apply)
+    imp_session = ImpersonationSession(
+        session_id=uuid.uuid4(),
+        actor_admin_id=super_admin.user_id,
+        target_user_id=f["rep1"].user_id,
+        impersonation_token_jti=uuid.uuid4().hex,
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+        is_active=True,
+    )
+    db_session.add(imp_session)
+    db_session.commit()
+
+    imp_token = create_access_token(
+        user_id=f["rep1"].user_id,
+        token_version=f["rep1"].token_version,
+        is_impersonated=True,
+        impersonation_session_id=imp_session.session_id,
+        actor_admin_id=super_admin.user_id,
+    )
+    imp_headers = {"Authorization": f"Bearer {imp_token}"}
+    imp_del = client.request("DELETE", f"/api/sales/orders/{order_id}", json={"reason": "Impersonated override"}, headers=imp_headers)
+    assert imp_del.status_code == 400
+    assert imp_del.json()["detail"] == "This entry cannot be deleted because Operations has completed the task."
+
+    # 5. Super Admin calling without reason is rejected
+    sa_no_reason = client.delete(f"/api/sales/orders/{order_id}", headers=sa_headers)
+    assert sa_no_reason.status_code == 400
+    assert sa_no_reason.json()["detail"] == "A deletion reason is required to delete this entry."
+
+    # 6. Super Admin calling with reason succeeds
+    override_reason = "Customer cancelled project following regulatory policy change"
+    sa_del = client.request(
+        "DELETE",
+        f"/api/sales/orders/{order_id}",
+        json={"reason": override_reason},
+        headers=sa_headers,
+    )
+    assert sa_del.status_code == 200
+    del_data = sa_del.json()
+    assert del_data["work_status"] == "CANCELLED"
+    assert del_data["operation_status"] == "APPROVED"
+    assert del_data["deleted_at"] is not None
+    assert del_data["deleted_by"] == str(super_admin.user_id)
+    assert del_data["deletion_reason"] == override_reason
+
+    # 7. Verify DB state: task status is preserved, soft delete fields recorded
+    db_session.refresh(app)
+    order_in_db = db_session.query(SalesOrder).filter(SalesOrder.order_id == uuid.UUID(order_id)).first()
+    assert order_in_db.confirmation_status == "CANCELLED"
+    assert order_in_db.deleted_at is not None
+    assert order_in_db.deleted_by == super_admin.user_id
+    assert order_in_db.deletion_reason == override_reason
+
+    assert app.application_status == "APPROVED"  # PRESERVED!
+    assert app.assigned_to_user_id == f["mansi"].user_id  # PRESERVED!
+    assert app.deleted_at is not None
+    assert app.deleted_by == super_admin.user_id
+    assert app.deletion_reason == override_reason
+
+    # 8. Verify audit log entry
+    audit_logs = db_session.query(SalesOrderAuditLog).filter(SalesOrderAuditLog.sales_order_id == uuid.UUID(order_id)).all()
+    assert len(audit_logs) == 1
+    log = audit_logs[0]
+    assert log.actor_user_id == super_admin.user_id
+    assert log.action_type == "SUPER_ADMIN_OVERRIDE_DELETE"
+    assert log.linked_task_id == app.application_id
+    assert log.previous_status == "order:CONFIRMED|task:APPROVED"
+    assert log.deletion_reason == override_reason
+    assert log.created_at is not None
+
+    # 9. Idempotency: Repeating delete returns 200 OK without duplicate audit logs or side effects
+    repeat_del = client.request(
+        "DELETE",
+        f"/api/sales/orders/{order_id}",
+        json={"reason": override_reason},
+        headers=sa_headers,
+    )
+    assert repeat_del.status_code == 200
+    audit_logs_after = db_session.query(SalesOrderAuditLog).filter(SalesOrderAuditLog.sales_order_id == uuid.UUID(order_id)).all()
+    assert len(audit_logs_after) == 1  # No duplicate audit log!
+
+    # 10. Hidden from operational views
+    # Detail returns 404
+    get_order = client.get(f"/api/sales/orders/{order_id}", headers=sa_headers)
+    assert get_order.status_code == 404
+
+    # Normal register does not include it
+    reg_res = client.get("/api/sales/register", headers=sa_headers)
+    assert reg_res.status_code == 200
+    assert not any(i["order_id"] == order_id for i in reg_res.json()["items"])
+
+    # Task detail returns 404
+    get_task = client.get(f"/api/operations/tasks/{app.application_id}", headers=sa_headers)
+    assert get_task.status_code == 404
+
+    # Operations task list does not include it
+    ops_list = client.get("/api/operations/tasks", headers=sa_headers)
+    assert ops_list.status_code == 200
+    assert not any(t["application_id"] == str(app.application_id) for t in ops_list.json()["items"])
+
+    # Unread summary excludes it
+    unread_res = client.get("/api/conversations/unread-summary", headers=sa_headers)
+    assert unread_res.status_code == 200
+    assert order_id not in unread_res.json()["unread_orders"]
 
 
 

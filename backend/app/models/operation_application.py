@@ -187,6 +187,31 @@ class OperationApplication(Base):
         comment="Timestamp when application record was last updated (UTC)",
     )
 
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+        comment="Timestamp when linked sales order was soft-deleted (UTC)",
+    )
+
+    deleted_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "user_master.user_id",
+            ondelete="SET NULL",
+            name="fk_op_app_deleted_by",
+        ),
+        nullable=True,
+        index=True,
+        comment="Foreign key referencing user who soft-deleted the linked sales order",
+    )
+
+    deletion_reason: Mapped[Optional[str]] = mapped_column(
+        String(1000),
+        nullable=True,
+        comment="Required or provided deletion justification reason",
+    )
+
     # Relationships
     sales_order: Mapped["SalesOrder"] = relationship(
         "SalesOrder",
@@ -218,6 +243,11 @@ class OperationApplication(Base):
         "User",
         foreign_keys=[assigned_by_user_id],
         back_populates="applications_assigned_by",
+    )
+
+    deleted_by_user: Mapped[Optional["User"]] = relationship(
+        "User",
+        foreign_keys=[deleted_by],
     )
 
     documents: Mapped[List["ApplicationDocument"]] = relationship(

@@ -478,7 +478,7 @@ def get_task_conversation_by_application(
     session: Session = Depends(get_db),
 ):
     app = session.get(OperationApplication, application_id)
-    if not app:
+    if not app or app.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Task with ID '{application_id}' not found.")
     try:
         return conversation_service.get_task_conversation(
@@ -508,7 +508,7 @@ def post_task_conversation_by_application(
     session: Session = Depends(get_db),
 ):
     app = session.get(OperationApplication, application_id)
-    if not app:
+    if not app or app.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Task with ID '{application_id}' not found.")
     try:
         msg = conversation_service.post_conversation_message(

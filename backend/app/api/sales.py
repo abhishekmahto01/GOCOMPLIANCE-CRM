@@ -18,6 +18,7 @@ from app.schemas.sales_order import (
     SalesOrderAssignRequest,
     SalesOrderConfirmResponse,
     SalesOrderCreate,
+    SalesOrderDeleteRequest,
     SalesOrderDetailRead,
     SalesOrderRead,
     SalesOrderUpdate,
@@ -407,7 +408,7 @@ def get_order_detail(
 ) -> SalesOrderDetailRead:
     """Get single sales order details."""
     order = session.get(SalesOrder, order_id)
-    if not order or order.confirmation_status == "CANCELLED":
+    if not order or order.confirmation_status == "CANCELLED" or order.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sales order not found.")
 
     scope_ctx = permissions.resolve_data_scope_context(session, current_user, "SALES_MY_ORDERS")
@@ -519,12 +520,20 @@ def update_order(
 )
 def delete_order(
     order_id: uuid.UUID,
+    payload: Optional[SalesOrderDeleteRequest] = None,
+    reason: Optional[str] = Query(None, description="Optional deletion reason query parameter"),
     current_user: User = Depends(get_current_active_user),
     session: Session = Depends(get_db),
 ) -> SalesOrderDetailRead:
     """Delete a sales order and cancel linked operations application atomically."""
+    deletion_reason = payload.reason if (payload and payload.reason) else reason
     try:
-        result = sales_service.delete_sales_order(session, order_id, current_user)
+        result = sales_service.delete_sales_order(
+            session=session,
+            order_id=order_id,
+            current_user=current_user,
+            deletion_reason=deletion_reason,
+        )
         session.commit()
         return result
     except sales_service.SalesOrderNotFoundError as exc:
