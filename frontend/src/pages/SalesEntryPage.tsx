@@ -22,6 +22,7 @@ import {
   MapPin,
   MessageSquare,
   Building2,
+  UploadCloud,
 } from 'lucide-react';
 import { getSalesFormOptionsApi, createSalesEntryApi } from '../api/sales';
 import { extractErrorMessage } from '../api/client';
@@ -31,6 +32,7 @@ import type {
   SalesEntryFormData,
 } from '../types/sales';
 import { Button } from '../components/ui/button';
+import { BulkSalesImportModal } from '../components/sales/BulkSalesImportModal';
 
 interface OutletContextType {
   addToast?: (type: 'success' | 'error' | 'info', title: string, message: string) => void;
@@ -102,6 +104,9 @@ export const SalesEntryPage: React.FC = () => {
 
   // Client Autocomplete State
   const [isClientDropdownOpen, setIsClientDropdownOpen] = useState<boolean>(false);
+
+  // Bulk Sales Import Modal State
+  const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
 
   const {
     register,
@@ -359,6 +364,16 @@ export const SalesEntryPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2.5">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setIsImportModalOpen(true)}
+            leftIcon={<UploadCloud className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
+            className="border-emerald-300 dark:border-emerald-700 bg-emerald-50/70 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100/80 font-semibold shadow-2xs"
+          >
+            Import Excel/CSV
+          </Button>
           <Link to="/sales/register">
             <Button variant="outline" size="sm" leftIcon={<FileSpreadsheet className="w-4 h-4" />}>
               Sales Register
@@ -1014,6 +1029,16 @@ export const SalesEntryPage: React.FC = () => {
           </div>
         </div>
       </form>
+
+      {/* Bulk Sales Import Modal */}
+      <BulkSalesImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onSuccess={() => {
+          setIsImportModalOpen(false);
+          navigate('/sales/register');
+        }}
+      />
     </div>
   );
 };

@@ -9,6 +9,7 @@ import {
   PlusCircle,
   Table2,
   PanelLeftClose,
+  UploadCloud,
 } from 'lucide-react';
 import { BrandLogo } from '../auth/BrandLogo';
 import { useTheme } from '../../context/ThemeContext';
@@ -152,13 +153,26 @@ export const SalesSidebar: React.FC<SalesSidebarProps> = ({
               <Link
                 to="/sales/register"
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
-                  isSalesRegisterActive
+                  isSalesRegisterActive && !location.search.includes('import=true')
                     ? 'bg-blue-600 text-white shadow-xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30'
                 }`}
               >
                 <Table2 className="w-3.5 h-3.5" />
                 <span>Sales Register</span>
+              </Link>
+
+              {/* Bulk Sales Import */}
+              <Link
+                to="/sales/register?import=true"
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
+                  location.search.includes('import=true')
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'
+                }`}
+              >
+                <UploadCloud className="w-3.5 h-3.5" />
+                <span>Import Excel/CSV</span>
               </Link>
             </div>
           )}

@@ -4,10 +4,13 @@ import {
   Users,
   AlertTriangle,
   RotateCcw,
+  UploadCloud,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getSalesDashboardApi, exportSalesDashboardCsvApi } from '../api/sales';
 import { extractErrorMessage } from '../api/client';
+import { Button } from '../components/ui/button';
+import { BulkSalesImportModal } from '../components/sales/BulkSalesImportModal';
 import type {
   SalesDashboardResponse,
   SalesDashboardFilterParams,
@@ -52,6 +55,7 @@ export const SalesDashboardPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState<boolean>(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
 
   const addToastRef = React.useRef(outletCtx?.addToast);
   useEffect(() => {
@@ -156,8 +160,17 @@ export const SalesDashboardPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Scope / Role Pill */}
-        <div className="flex items-center gap-2 self-start sm:self-center">
+        {/* Header Actions & Scope */}
+        <div className="flex items-center gap-2.5 self-start sm:self-center flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsImportModalOpen(true)}
+            leftIcon={<UploadCloud className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />}
+          >
+            Import Excel/CSV
+          </Button>
+
           <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/70 dark:border-blue-800/60 text-xs font-semibold text-blue-700 dark:text-blue-300 shadow-2xs">
             <Users className="w-3.5 h-3.5" />
             <span>
@@ -278,6 +291,16 @@ export const SalesDashboardPage: React.FC = () => {
           />
         </div>
       )}
+
+      {/* Bulk Sales Import Modal */}
+      <BulkSalesImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onSuccess={() => {
+          loadDashboard();
+        }}
+        addToast={outletCtx?.addToast}
+      />
     </div>
   );
 };

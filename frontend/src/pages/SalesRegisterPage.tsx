@@ -20,6 +20,7 @@ import {
   Trash2,
   MapPin,
   MessageSquare,
+  UploadCloud,
 } from 'lucide-react';
 import {
   getSalesRegisterApi,
@@ -38,6 +39,7 @@ import type {
 } from '../types/sales';
 import { Button } from '../components/ui/button';
 import { Modal } from '../components/ui/modal';
+import { BulkSalesImportModal } from '../components/sales/BulkSalesImportModal';
 import { TaskConversationModal } from '../components/conversation/TaskConversationModal';
 import { CompanyFilterTabs } from '../components/common/CompanyFilterTabs';
 import { CompanyBadge } from '../components/common/CompanyBadge';
@@ -211,6 +213,9 @@ export const SalesRegisterPage: React.FC = () => {
   const [conversationOrderId, setConversationOrderId] = useState<string | null>(null);
   const [isConversationOpen, setIsConversationOpen] = useState<boolean>(false);
 
+  // Bulk Sales Import Modal State
+  const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
+
   const handleOpenConversation = (orderId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setConversationOrderId(orderId);
@@ -225,6 +230,13 @@ export const SalesRegisterPage: React.FC = () => {
       setIsConversationOpen(true);
     }
   }, [openConversationParam]);
+
+  // Open bulk import modal from URL query parameter if present (e.g. from sidebar link)
+  useEffect(() => {
+    if (searchParams.get('import') === 'true' || searchParams.get('open_import') === 'true') {
+      setIsImportModalOpen(true);
+    }
+  }, [searchParams]);
 
   // Sync state with URL params
   const syncUrl = useCallback(
@@ -636,6 +648,16 @@ export const SalesRegisterPage: React.FC = () => {
             leftIcon={<Download className="w-4 h-4" />}
           >
             Export CSV
+          </Button>
+
+          <Button
+            variant="outline"
+            size="md"
+            onClick={() => setIsImportModalOpen(true)}
+            leftIcon={<UploadCloud className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
+            className="border-emerald-300 dark:border-emerald-700 bg-emerald-50/70 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100/80 font-semibold shadow-2xs"
+          >
+            Import Excel/CSV
           </Button>
 
           <Link to="/sales/entry">
@@ -2051,6 +2073,16 @@ export const SalesRegisterPage: React.FC = () => {
         }}
         orderId={conversationOrderId}
         onMessagePosted={loadRegister}
+      />
+
+      {/* Bulk Sales Import Modal */}
+      <BulkSalesImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onSuccess={() => {
+          loadRegister();
+        }}
+        addToast={outletCtx?.addToast}
       />
     </div>
   );

@@ -6,6 +6,8 @@ export interface ModalProps {
   onClose: () => void;
   title: string;
   description?: string;
+  maxWidth?: string;
+  className?: string;
   children: React.ReactNode;
 }
 
@@ -14,6 +16,8 @@ export const Modal: React.FC<ModalProps> = ({
   onClose,
   title,
   description,
+  maxWidth = 'max-w-lg',
+  className = '',
   children,
 }) => {
   useEffect(() => {
@@ -31,7 +35,7 @@ export const Modal: React.FC<ModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
       <div
-        className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden transform transition-all"
+        className={`relative w-full ${maxWidth} bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-800 overflow-hidden transform transition-all ${className}`}
         role="dialog"
         aria-modal="true"
       >

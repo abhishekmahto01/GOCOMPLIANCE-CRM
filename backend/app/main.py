@@ -16,6 +16,7 @@ from app.api import (
     lookup,
     operations,
     sales,
+    sales_import,
 )
 from app.core.config import settings
 
@@ -81,6 +82,10 @@ app.include_router(
 )
 app.include_router(
     sales.router,
+    prefix=settings.API_PREFIX,
+)
+app.include_router(
+    sales_import.router,
     prefix=settings.API_PREFIX,
 )
 app.include_router(
