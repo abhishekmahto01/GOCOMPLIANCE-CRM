@@ -80,6 +80,7 @@ def is_canonical_super_admin(session: Optional[Session], user: Optional[User]) -
     - During impersonation (user._is_impersonated is True), uses the effective
       authenticated user's permissions and strictly denies Super Admin override.
     - Authenticated canonical SUPER_ADMIN is identified by:
+        * permissions.is_super_admin_user is True, or
         * user.is_super_admin is True, or
         * user.role_type == 'SUPER_ADMIN', or
         * user.designation.designation_code == 'SUPER_ADMIN', or
@@ -89,8 +90,11 @@ def is_canonical_super_admin(session: Optional[Session], user: Optional[User]) -
         return False
     if getattr(user, "_is_impersonated", False):
         return False
+    if permissions.is_super_admin_user(session, user):
+        return True
     if getattr(user, "is_super_admin", False) is True:
         return True
+
     role_type = getattr(user, "role_type", None)
     if isinstance(role_type, str) and role_type.strip().upper() == "SUPER_ADMIN":
         return True

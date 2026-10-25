@@ -30,6 +30,7 @@ import {
   updateSalesOrderApi,
   deleteSalesOrderApi,
 } from '../api/sales';
+import { updateOperationTaskStatusApi } from '../api/operations';
 import { extractErrorMessage } from '../api/client';
 import type {
   SalesRegisterItem,
@@ -206,6 +207,13 @@ export const SalesRegisterPage: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteReason, setDeleteReason] = useState<string>('');
+
+  // Super Admin Status Override Modal State
+  const [statusOverrideOrder, setStatusOverrideOrder] = useState<SalesRegisterItem | null>(null);
+  const [statusOverrideTarget, setStatusOverrideTarget] = useState<string>('IN_PROGRESS');
+  const [statusOverrideComment, setStatusOverrideComment] = useState<string>('');
+  const [isOverridingStatus, setIsOverridingStatus] = useState<boolean>(false);
+  const [statusOverrideError, setStatusOverrideError] = useState<string | null>(null);
 
   const { unreadSummary, refreshUnreadSummary } = useRemarkNotification();
 
@@ -606,6 +614,36 @@ export const SalesRegisterPage: React.FC = () => {
     }
   };
 
+  // Submit Work Status Override (Super Admin)
+  const handleStatusOverrideSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!statusOverrideOrder || !statusOverrideOrder.application_id) return;
+    setIsOverridingStatus(true);
+    setStatusOverrideError(null);
+    try {
+      await updateOperationTaskStatusApi(statusOverrideOrder.application_id, {
+        new_status: statusOverrideTarget,
+        comment: statusOverrideComment.trim() || undefined,
+      });
+      outletCtx.addToast?.(
+        'success',
+        'Status Updated',
+        `Order ${statusOverrideOrder.order_number} task status transitioned to ${statusOverrideTarget.replace(/_/g, ' ')}.`
+      );
+      setStatusOverrideOrder(null);
+      setStatusOverrideComment('');
+      await loadRegister();
+      await refreshUnreadSummary?.();
+    } catch (err) {
+      console.error('Status override error:', err);
+      const msg = extractErrorMessage(err);
+      setStatusOverrideError(msg);
+      outletCtx.addToast?.('error', 'Status Update Failed', msg);
+    } finally {
+      setIsOverridingStatus(false);
+    }
+  };
+
   const operationsAssignees = useMemo(() => {
     const raw = formOptions?.operations_assignees || [];
     const seen = new Set<string>();
@@ -621,8 +659,8 @@ export const SalesRegisterPage: React.FC = () => {
   return (
     <div className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto w-full space-y-6">
       {/* Top Header & Quick Actions */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-1">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+        <div className="space-y-1 max-w-2xl">
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-400">
               Sales Ledger & Operations Handoff
@@ -634,18 +672,19 @@ export const SalesRegisterPage: React.FC = () => {
             </span>
             Sales Register
           </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
             Official ledger showing conversion dates, client locations, fee breakdowns, profit balances, and operations statuses.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap sm:flex-nowrap self-start xl:self-center">
           <Button
             variant="outline"
             size="md"
             onClick={handleExportCsv}
             isLoading={isExporting}
             leftIcon={<Download className="w-4 h-4" />}
+            className="whitespace-nowrap"
           >
             Export CSV
           </Button>
@@ -655,17 +694,17 @@ export const SalesRegisterPage: React.FC = () => {
             size="md"
             onClick={() => setIsImportModalOpen(true)}
             leftIcon={<UploadCloud className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
-            className="border-emerald-300 dark:border-emerald-700 bg-emerald-50/70 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100/80 font-semibold shadow-2xs"
+            className="border-emerald-300 dark:border-emerald-700 bg-emerald-50/70 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100/80 font-semibold shadow-2xs whitespace-nowrap"
           >
             Import Excel/CSV
           </Button>
 
-          <Link to="/sales/entry">
+          <Link to="/sales/entry" className="shrink-0">
             <Button
               variant="primary"
               size="md"
               leftIcon={<FilePlus2 className="w-4 h-4" />}
-              className="shadow-button-glow"
+              className="shadow-button-glow whitespace-nowrap"
             >
               + New Sales Entry
             </Button>
@@ -1046,7 +1085,26 @@ export const SalesRegisterPage: React.FC = () => {
 
                       {/* 10. Work Status */}
                       <td className="py-3 px-3.5">
-                        {renderWorkStatusBadge(row.work_status || row.operation_status || 'UNASSIGNED')}
+                        {isSuperAdmin && row.application_id ? (
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setStatusOverrideOrder(row);
+                              setStatusOverrideTarget(
+                                (row.work_status || row.operation_status) === 'APPROVED' ? 'IN_PROGRESS' : 'APPROVED'
+                              );
+                              setStatusOverrideComment('');
+                              setStatusOverrideError(null);
+                            }}
+                            className="inline-flex items-center gap-1.5 cursor-pointer group/stat transition"
+                            title="Super Admin: Click to change/reopen task status"
+                          >
+                            {renderWorkStatusBadge(row.work_status || row.operation_status || 'UNASSIGNED')}
+                            <Edit className="w-3 h-3 text-slate-400 group-hover/stat:text-purple-600 transition" />
+                          </div>
+                        ) : (
+                          renderWorkStatusBadge(row.work_status || row.operation_status || 'UNASSIGNED')
+                        )}
                       </td>
 
                       {/* 11. Total Amount */}
@@ -1144,9 +1202,28 @@ export const SalesRegisterPage: React.FC = () => {
                         )}
                       </td>
 
-                      {/* 22. Actions Column with Edit & Delete Buttons */}
+                      {/* 22. Actions Column with Edit, Delete & Status Buttons */}
                       <td className="py-2 px-3 text-center sticky right-0 bg-white dark:bg-slate-900 group-hover:bg-blue-50/40 dark:group-hover:bg-slate-900 z-10 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.06)] border-l border-slate-200 dark:border-slate-800">
                         <div className="flex items-center gap-1.5 justify-center">
+                          {isSuperAdmin && row.application_id && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setStatusOverrideOrder(row);
+                                setStatusOverrideTarget(
+                                  (row.work_status || row.operation_status) === 'APPROVED' ? 'IN_PROGRESS' : 'APPROVED'
+                                );
+                                setStatusOverrideComment('');
+                                setStatusOverrideError(null);
+                              }}
+                              className="hover:border-purple-500 hover:text-purple-600 text-purple-600 dark:text-purple-400 dark:hover:border-purple-400 font-medium text-xs shadow-none py-1 px-2.5"
+                              title="Super Admin: Change or reopen task status"
+                            >
+                              Status
+                            </Button>
+                          )}
                           <Button
                             variant="outline"
                             size="sm"
@@ -2084,6 +2161,104 @@ export const SalesRegisterPage: React.FC = () => {
         }}
         addToast={outletCtx?.addToast}
       />
+
+      {/* Modal: Super Admin Work Status Override */}
+      {statusOverrideOrder && (
+        <Modal
+          isOpen={!!statusOverrideOrder}
+          onClose={() => {
+            setStatusOverrideOrder(null);
+            setStatusOverrideComment('');
+            setStatusOverrideError(null);
+          }}
+          title={`Change Work Status: ${statusOverrideOrder.order_number}`}
+        >
+          <form onSubmit={handleStatusOverrideSubmit} className="space-y-4 text-xs">
+            <div className="p-3.5 rounded-xl bg-purple-50/70 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-sm text-purple-900 dark:text-purple-200">
+                  {statusOverrideOrder.client_name}
+                </span>
+                <span className="font-mono text-xs px-2 py-0.5 rounded bg-purple-200/80 dark:bg-purple-800 text-purple-900 dark:text-purple-100 font-semibold">
+                  {statusOverrideOrder.order_number}
+                </span>
+              </div>
+              <div className="text-slate-600 dark:text-slate-400">
+                Service: <strong className="text-slate-800 dark:text-slate-200">{statusOverrideOrder.service_name}</strong>
+                <span className="mx-2">•</span>
+                Current Status: <strong className="text-slate-800 dark:text-slate-200">{statusOverrideOrder.work_status || statusOverrideOrder.operation_status}</strong>
+              </div>
+            </div>
+
+            {statusOverrideError && (
+              <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
+                <span>{statusOverrideError}</span>
+              </div>
+            )}
+
+            <div>
+              <label htmlFor="override_new_status" className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Select New Work Status
+              </label>
+              <select
+                id="override_new_status"
+                value={statusOverrideTarget}
+                onChange={(e) => setStatusOverrideTarget(e.target.value)}
+                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium focus:ring-2 focus:ring-purple-500 outline-hidden"
+              >
+                <option value="IN_PROGRESS">In Progress (Working / Amendment)</option>
+                <option value="PENDING_DOCUMENTS">Pending Documents</option>
+                <option value="READY_FOR_SUBMISSION">Ready for Submission</option>
+                <option value="SUBMITTED">Submitted to Authority</option>
+                <option value="AUTHORITY_QUERY">Authority Query / Revision</option>
+                <option value="ASSIGNED">Assigned</option>
+                <option value="APPROVED">Approved (Completed)</option>
+                <option value="CANCELLED">Cancelled</option>
+              </select>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                Changing status away from Approved/Completed will reopen the task and allow the sales entry to be edited or deleted.
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="override_status_comment" className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Override Reason / Note (Optional)
+              </label>
+              <input
+                id="override_status_comment"
+                type="text"
+                value={statusOverrideComment}
+                onChange={(e) => setStatusOverrideComment(e.target.value)}
+                placeholder="e.g. Reopening for client amendment, test entry cleanup..."
+                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-purple-500 outline-hidden"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setStatusOverrideOrder(null)}
+                disabled={isOverridingStatus}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                disabled={isOverridingStatus}
+                className="bg-purple-600 hover:bg-purple-700 text-white font-semibold"
+              >
+                {isOverridingStatus ? 'Updating Status...' : 'Confirm Status Change'}
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
   );
+
 };

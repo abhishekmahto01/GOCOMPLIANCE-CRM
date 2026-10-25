@@ -167,8 +167,8 @@ export const SalesSidebar: React.FC<SalesSidebarProps> = ({
                 to="/sales/register?import=true"
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
                   location.search.includes('import=true')
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30'
                 }`}
               >
                 <UploadCloud className="w-3.5 h-3.5" />

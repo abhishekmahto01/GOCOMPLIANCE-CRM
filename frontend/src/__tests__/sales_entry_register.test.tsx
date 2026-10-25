@@ -9,6 +9,7 @@ import { SalesRegisterPage } from '../pages/SalesRegisterPage';
 import { SalesLayout } from '../components/sales/SalesLayout';
 import * as authApi from '../api/auth';
 import * as salesApi from '../api/sales';
+import * as operationsApi from '../api/operations';
 import { ACCESS_TOKEN_KEY } from '../api/client';
 import type { CurrentUser } from '../types/auth';
 import type { AccessibleModule } from '../types/permission';
@@ -1072,6 +1073,78 @@ describe('Sales Entry & Sales Register Module Tests', () => {
       );
     });
   });
+
+  it('allows super-admin to change/reopen work status of a task directly from Sales Register', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(authApi, 'getCurrentUserApi').mockResolvedValue({
+      ...mockUser,
+      is_super_admin: true,
+    });
+    vi.spyOn(salesApi, 'getSalesRegisterApi').mockResolvedValue({
+      ...mockRegisterData,
+      items: [
+        {
+          ...mockRegisterData.items[0],
+          application_id: 'app-test-1234',
+          operation_status: 'APPROVED',
+          work_status: 'APPROVED',
+        },
+      ],
+    });
+    const updateStatusSpy = vi.spyOn(operationsApi, 'updateOperationTaskStatusApi').mockResolvedValue({
+      application_id: 'app-test-1234',
+      application_number: 'AP-TEST-0001',
+      application_status: 'IN_PROGRESS',
+    } as any);
+
+    render(
+      <ThemeProvider>
+        <AuthProvider>
+          <MemoryRouter initialEntries={['/sales/register']}>
+            <Routes>
+              <Route path="/sales" element={<SalesLayout />}>
+                <Route path="register" element={<SalesRegisterPage />} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
+      </ThemeProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /sales register/i })).toBeInTheDocument();
+    });
+
+    // Super Admin sees the "Status" button in the row
+    const statusBtn = await screen.findByRole('button', { name: /^Status$/i });
+    expect(statusBtn).toBeInTheDocument();
+    await user.click(statusBtn);
+
+    // Modal opens
+    await waitFor(() => {
+      expect(screen.getByText(/Change Work Status: SO-2026-0001/i)).toBeInTheDocument();
+    });
+
+    // Select In Progress
+    const selectDropdown = screen.getByLabelText(/Select New Work Status/i);
+    fireEvent.change(selectDropdown, { target: { value: 'IN_PROGRESS' } });
+
+    // Enter comment
+    const commentInput = screen.getByPlaceholderText(/e\.g\. Reopening for client amendment/i);
+    await user.type(commentInput, 'Reopening for client amendment');
+
+    // Click Confirm Status Change
+    const confirmBtn = screen.getByRole('button', { name: /Confirm Status Change/i });
+    await user.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(updateStatusSpy).toHaveBeenCalledWith('app-test-1234', {
+        new_status: 'IN_PROGRESS',
+        comment: 'Reopening for client amendment',
+      });
+    });
+  });
 });
+
 
 

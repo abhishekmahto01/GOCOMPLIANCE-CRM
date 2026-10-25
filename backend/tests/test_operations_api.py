@@ -1227,6 +1227,73 @@ class TestOperationsRemarks:
         if mgr_app2:
             assert mgr_app2["latest_remark"] is None
 
+    def test_super_admin_status_override_on_completed_task(
+        self, client: TestClient, db_session: Session, ops_test_fixture: dict
+    ):
+        """Verify that:
+        1. Non-super admin cannot transition from APPROVED (returns HTTP 400).
+        2. Super Admin can transition from APPROVED back to IN_PROGRESS (reopening task).
+        3. Completion date is reset upon reopening.
+        4. Super Admin override creates an audit activity record.
+        """
+        ops_manager = ops_test_fixture["ops_manager"]
+        company = ops_test_fixture["company"]
+        app1 = ops_test_fixture["app1"]
+
+        # Advance app1 to APPROVED
+        mgr_headers = auth_header(ops_manager)
+        client.post(f"/api/operations/tasks/{app1.application_id}/status", json={"new_status": "IN_PROGRESS"}, headers=mgr_headers)
+        client.post(f"/api/operations/tasks/{app1.application_id}/status", json={"new_status": "SUBMITTED"}, headers=mgr_headers)
+        approved_res = client.post(f"/api/operations/tasks/{app1.application_id}/status", json={"new_status": "APPROVED"}, headers=mgr_headers)
+        assert approved_res.status_code == 200
+        assert approved_res.json()["application_status"] == "APPROVED"
+        assert approved_res.json()["completion_date"] is not None
+
+        # Manager attempts to transition from APPROVED back to IN_PROGRESS -> BLOCKED (HTTP 400)
+        reopen_attempt = client.post(
+            f"/api/operations/tasks/{app1.application_id}/status",
+            json={"new_status": "IN_PROGRESS"},
+            headers=mgr_headers,
+        )
+        assert reopen_attempt.status_code == 400
+        assert "Cannot transition application from 'APPROVED'" in reopen_attempt.json()["detail"]
+
+        # Create Super Admin user
+        super_admin = User(
+            employee_code="GC_SA_TEST",
+            company_id=company.company_id,
+            department_id=ops_manager.department_id,
+            designation_id=ops_manager.designation_id,
+            first_name="Super",
+            last_name="Admin",
+            official_email="superadmin@gocompliances.com",
+            mobile_number="+919999888877",
+            date_of_joining=date(2023, 1, 1),
+            employment_type="FULL_TIME",
+            account_status="ACTIVE",
+            must_change_password=False,
+        )
+        db_session.add(super_admin)
+        db_session.commit()
+        sa_headers = auth_header(super_admin)
+
+        # Super Admin transitions task from APPROVED to IN_PROGRESS (reopen for amendment)
+        override_res = client.post(
+            f"/api/operations/tasks/{app1.application_id}/status",
+            json={"new_status": "IN_PROGRESS", "comment": "Reopened for client amendment and corrections."},
+            headers=sa_headers,
+        )
+        assert override_res.status_code == 200, override_res.text
+        override_detail = override_res.json()
+        assert override_detail["application_status"] == "IN_PROGRESS"
+        assert override_detail["completion_date"] is None  # Reset completion date
+
+        # Verify activity log
+        activities = override_detail.get("activity_logs", [])
+        override_log = next((a for a in activities if a["action_type"] == "SUPER_ADMIN_STATUS_OVERRIDE"), None)
+        assert override_log is not None
+        assert "Reopened for client amendment" in override_log["comment"]
+
 
 
 

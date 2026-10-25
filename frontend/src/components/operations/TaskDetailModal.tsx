@@ -19,6 +19,7 @@ import {
   Send,
   AlertTriangle,
   MapPin,
+  Sparkles,
 } from 'lucide-react';
 import type {
   AssigneeOption,
@@ -52,7 +53,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   onShowToast,
   initialTab = 'overview',
 }) => {
-  const { user } = useAuth();
+  const { user, isSuperAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState<'overview' | 'remarks' | 'documents' | 'history' | 'reassign'>(initialTab);
   const [taskDetail, setTaskDetail] = useState<OperationApplicationDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -61,6 +62,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   // Status change state
   const [statusComment, setStatusComment] = useState('');
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [overrideTargetStatus, setOverrideTargetStatus] = useState('IN_PROGRESS');
 
   // Operations Remarks state
   const [newRemarkText, setNewRemarkText] = useState('');
@@ -119,7 +121,6 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
   if (!isOpen || !applicationId) return null;
 
-  const isSuperAdmin = user?.employee_code === 'CG0001';
   const isAssignee = !!(taskDetail?.assigned_to_user_id && user?.user_id && taskDetail.assigned_to_user_id === user.user_id);
   const deptName = (user?.department_name || user?.department?.name || '').toLowerCase();
   const desigName = (user?.designation_name || user?.designation?.name || '').toLowerCase();
@@ -306,6 +307,15 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           { target: 'SUBMITTED', label: 'Query Answered & Resubmitted', color: 'bg-purple-600 hover:bg-purple-700' },
           { target: 'IN_PROGRESS', label: 'Work on Query Resolution', color: 'bg-indigo-600 hover:bg-indigo-700' },
         ];
+      case 'APPROVED':
+        if (isSuperAdmin) {
+          return [
+            { target: 'IN_PROGRESS', label: 'Reopen Task (In Progress / Working)', color: 'bg-indigo-600 hover:bg-indigo-700' },
+            { target: 'AUTHORITY_QUERY', label: 'Client / Authority Amendment', color: 'bg-rose-600 hover:bg-rose-700' },
+            { target: 'ASSIGNED', label: 'Return to Assigned', color: 'bg-blue-600 hover:bg-blue-700' },
+          ];
+        }
+        return [];
       default:
         return [];
     }
@@ -746,7 +756,43 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                         )}
                       </div>
                     </div>
+
+                    {/* Super Admin Quick Override Dropdown */}
+                    {isSuperAdmin && (
+                      <div className="pt-3 border-t border-blue-200/50 dark:border-slate-700/60 flex flex-wrap items-center gap-2.5">
+                        <span className="text-[11px] font-bold text-purple-700 dark:text-purple-300 uppercase tracking-wider flex items-center gap-1">
+                          <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                          Super Admin Override:
+                        </span>
+                        <select
+                          value={overrideTargetStatus}
+                          onChange={(e) => setOverrideTargetStatus(e.target.value)}
+                          className="px-2.5 py-1.5 text-xs rounded-lg border border-purple-300 dark:border-purple-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
+                        >
+                          <option value="IN_PROGRESS">In Progress (Working / Amendment)</option>
+                          <option value="PENDING_DOCUMENTS">Pending Documents</option>
+                          <option value="READY_FOR_SUBMISSION">Ready for Submission</option>
+                          <option value="SUBMITTED">Submitted to Authority</option>
+                          <option value="AUTHORITY_QUERY">Authority Query / Revision</option>
+                          <option value="ASSIGNED">Assigned</option>
+                          <option value="APPROVED">Approved (Completed)</option>
+                          <option value="CANCELLED">Cancelled</option>
+                        </select>
+                        <button
+                          type="button"
+                          disabled={isUpdatingStatus || overrideTargetStatus === taskDetail.application_status}
+                          onClick={() => handleStatusTransition(overrideTargetStatus)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 transition shadow-xs disabled:opacity-50"
+                        >
+                          Apply Status Override
+                        </button>
+                        {overrideTargetStatus === taskDetail.application_status && (
+                          <span className="text-[11px] text-slate-400 italic">Current Status</span>
+                        )}
+                      </div>
+                    )}
                   </div>
+
                 </div>
               )}
 

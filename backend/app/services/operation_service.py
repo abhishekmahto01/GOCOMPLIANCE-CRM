@@ -1087,8 +1087,17 @@ def update_application_status(
         return app
 
     # Validate transition
+    is_super = permissions.is_super_admin_user(session, actor)
+    valid_statuses = set(VALID_STATUS_TRANSITIONS.keys())
+    if new_status not in valid_statuses:
+        raise InvalidStatusTransitionError(
+            f"'{new_status}' is not a valid application status. Valid statuses: {sorted(valid_statuses)}"
+        )
+
     allowed = VALID_STATUS_TRANSITIONS.get(old_status, [])
-    if new_status not in allowed:
+    is_override = is_super and (new_status not in allowed)
+
+    if not is_super and new_status not in allowed:
         raise InvalidStatusTransitionError(
             f"Cannot transition application from '{old_status}' to '{new_status}'. Allowed transitions: {allowed}"
         )
@@ -1097,30 +1106,42 @@ def update_application_status(
     app.application_status = new_status
     if new_status == "APPROVED":
         app.completion_date = date.today()
+    elif old_status == "APPROVED" and new_status != "APPROVED":
+        # Reopening a completed task: reset completion_date
+        app.completion_date = None
+
+    default_comment = (
+        f"Super Admin override: Status changed from {old_status} to {new_status}"
+        if is_override
+        else f"Status changed from {old_status} to {new_status}"
+    )
+    final_comment = comment.strip() if (comment and comment.strip()) else default_comment
 
     activity = ApplicationActivityLog(
         application_id=app.application_id,
         actor_user_id=actor.user_id,
-        action_type="STATUS_CHANGE",
+        action_type="SUPER_ADMIN_STATUS_OVERRIDE" if is_override else "STATUS_CHANGE",
         old_value=old_status,
         new_value=new_status,
-        comment=comment or f"Status changed from {old_status} to {new_status}",
+        comment=final_comment,
         created_at=now_utc,
     )
     session.add(activity)
 
     # Record system event in unified conversation
+    role_prefix = "Super Admin " if is_super else ""
     conversation_service.record_system_event(
         session=session,
         order_id=app.sales_order_id,
         event_type="STATUS_CHANGE",
-        message_text=f"Task status changed from {old_status} to {new_status} by {actor.first_name} {actor.last_name} ({actor.employee_code})." + (f" Note: {comment}" if comment else ""),
+        message_text=f"Task status changed from {old_status} to {new_status} by {role_prefix}{actor.first_name} {actor.last_name} ({actor.employee_code}). Note: {final_comment}",
         actor=actor,
         event_metadata={
-            "action": "STATUS_CHANGE",
+            "action": "SUPER_ADMIN_STATUS_OVERRIDE" if is_override else "STATUS_CHANGE",
             "old_status": old_status,
             "new_status": new_status,
-            "comment": comment,
+            "comment": final_comment,
+            "is_override": is_override,
         },
         created_at=now_utc,
     )
