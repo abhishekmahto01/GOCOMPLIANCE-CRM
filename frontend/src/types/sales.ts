@@ -184,6 +184,9 @@ export interface SalesRegisterItem {
   notes?: string | null;
   remarks?: string | null;
   gst_invoice_required?: boolean;
+  base_amount?: number;
+  gst_amount?: number;
+  gst_rate?: number;
 
   // Metadata
   order_id: string;
@@ -303,6 +306,9 @@ export interface SalesEntryFormData {
   salesperson_user_id?: string;
   company_id?: string;
   lead_source: string;
+  base_amount?: number;
+  gst_amount?: number;
+  gst_rate?: number;
   order_value: number;
   amount_received: number;
   govt_fees: number;
@@ -317,6 +323,9 @@ export interface SalesEntryFormData {
 }
 
 export interface SalesOrderUpdateRequest {
+  base_amount?: number;
+  gst_amount?: number;
+  gst_rate?: number;
   order_value?: number;
   amount_received?: number;
   govt_fees?: number;

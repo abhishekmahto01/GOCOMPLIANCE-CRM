@@ -1,7 +1,7 @@
 """Pydantic schemas for Sales Orders, Entry Form, and Sales Register."""
 import uuid
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -19,7 +19,10 @@ class SalesOrderBase(BaseModel):
     salesperson_user_id: Optional[uuid.UUID] = Field(None, description="Salesperson who converted the order")
     lead_source: str = Field(default="DIRECT", description="WEBSITE, REFERRAL, DIRECT, JUSTDIAL, INDIAMART, OTHERS")
     order_date: date = Field(..., description="Date when order was recorded")
-    order_value: Decimal = Field(..., ge=0, description="Total order amount (Total Amount) in INR")
+    base_amount: Optional[Decimal] = Field(None, ge=0, description="Base amount before GST in INR")
+    gst_amount: Optional[Decimal] = Field(None, ge=0, description="Calculated GST amount in INR")
+    gst_rate: Optional[Decimal] = Field(None, ge=0, description="GST rate percentage (e.g. 18.00)")
+    order_value: Optional[Decimal] = Field(None, ge=0, description="Total order amount (Total Amount) in INR")
     amount_received: Decimal = Field(default=Decimal("0.00"), ge=0, description="Advance collected in INR")
     govt_fees: Decimal = Field(default=Decimal("0.00"), ge=0, description="Government fees in INR")
     incidental_cost: Decimal = Field(default=Decimal("0.00"), ge=0, description="Incidental / expense costs in INR")
@@ -56,7 +59,58 @@ class SalesOrderCreate(SalesOrderBase):
 
     @model_validator(mode="after")
     def validate_amounts_and_client(self) -> "SalesOrderCreate":
-        if self.amount_received > self.order_value:
+        if self.base_amount is None and self.order_value is None:
+            raise ValueError("Either base_amount or order_value must be provided.")
+
+        gst_is_yes = bool(self.gst_invoice_required)
+        expected_rate = Decimal("18.00") if gst_is_yes else Decimal("0.00")
+
+        if self.base_amount is not None:
+            if self.base_amount < Decimal("0.00"):
+                raise ValueError("Base amount cannot be negative.")
+            expected_gst = (self.base_amount * (expected_rate / Decimal("100.00"))).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+            expected_final = (self.base_amount + expected_gst).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+
+            if self.order_value is not None:
+                if abs(self.order_value - expected_final) > Decimal("0.01"):
+                    raise ValueError(
+                        f"Final amount ({self.order_value}) does not match independently calculated amount ({expected_final}) based on base amount ({self.base_amount}) and GST rate ({expected_rate}%)."
+                    )
+            else:
+                self.order_value = expected_final
+
+            if self.gst_amount is not None:
+                if abs(self.gst_amount - expected_gst) > Decimal("0.01"):
+                    raise ValueError(
+                        f"Submitted GST amount ({self.gst_amount}) does not match independently calculated GST ({expected_gst})."
+                    )
+            else:
+                self.gst_amount = expected_gst
+            self.gst_rate = expected_rate
+
+        elif self.order_value is not None:
+            if self.order_value < Decimal("0.00"):
+                raise ValueError("Total amount cannot be negative.")
+            if gst_is_yes:
+                derived_base = (self.order_value / Decimal("1.18")).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                )
+                derived_gst = (self.order_value - derived_base).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                )
+                self.base_amount = derived_base
+                self.gst_amount = derived_gst
+                self.gst_rate = expected_rate
+            else:
+                self.base_amount = self.order_value
+                self.gst_amount = Decimal("0.00")
+                self.gst_rate = Decimal("0.00")
+
+        if self.amount_received is not None and self.order_value is not None and self.amount_received > self.order_value:
             raise ValueError("Advance Amount cannot be greater than Total Amount.")
         if not self.client_id and not (self.client_name and self.client_name.strip()):
             raise ValueError("Either Client Name or an existing Client ID must be provided.")
@@ -70,6 +124,9 @@ class SalesOrderUpdate(BaseModel):
     contact_no: Optional[str] = Field(None, max_length=20, description="Client Contact Number")
     location: Optional[str] = Field(None, max_length=200, description="Branch / Location / City of shop or service")
     salesperson_user_id: Optional[uuid.UUID] = Field(None, description="Sales employee who converted the order (must belong to Sales department)")
+    base_amount: Optional[Decimal] = Field(None, ge=0, description="Base amount before GST in INR")
+    gst_amount: Optional[Decimal] = Field(None, ge=0, description="Calculated GST amount in INR")
+    gst_rate: Optional[Decimal] = Field(None, ge=0, description="GST rate percentage")
     order_value: Optional[Decimal] = Field(None, ge=0, description="Total order amount (Total Amount) in INR")
     amount_received: Optional[Decimal] = Field(None, ge=0, description="Advance / Received amount in INR")
     govt_fees: Optional[Decimal] = Field(None, ge=0, description="Government fees in INR")
@@ -102,6 +159,30 @@ class SalesOrderUpdate(BaseModel):
 
     @model_validator(mode="after")
     def validate_amounts(self) -> "SalesOrderUpdate":
+        if self.base_amount is not None:
+            if self.base_amount < Decimal("0.00"):
+                raise ValueError("Base amount cannot be negative.")
+            if self.gst_invoice_required is not None:
+                gst_is_yes = self.gst_invoice_required
+                expected_rate = Decimal("18.00") if gst_is_yes else Decimal("0.00")
+                expected_gst = (self.base_amount * (expected_rate / Decimal("100.00"))).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                )
+                expected_final = (self.base_amount + expected_gst).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                )
+                if self.order_value is not None and abs(self.order_value - expected_final) > Decimal("0.01"):
+                    raise ValueError(
+                        f"Final amount ({self.order_value}) does not match independently calculated amount ({expected_final}) based on base amount ({self.base_amount}) and GST rate ({expected_rate}%)."
+                    )
+                if self.gst_amount is not None and abs(self.gst_amount - expected_gst) > Decimal("0.01"):
+                    raise ValueError(
+                        f"Submitted GST amount ({self.gst_amount}) does not match independently calculated GST ({expected_gst})."
+                    )
+                self.order_value = expected_final
+                self.gst_amount = expected_gst
+                self.gst_rate = expected_rate
+
         if (
             self.amount_received is not None
             and self.order_value is not None
@@ -129,6 +210,9 @@ class SalesOrderRead(BaseModel):
     lead_source: str
     location: Optional[str] = None
     order_date: date
+    base_amount: Optional[Decimal] = None
+    gst_amount: Optional[Decimal] = None
+    gst_rate: Optional[Decimal] = None
     order_value: Decimal
     amount_received: Decimal
     balance_amount: Decimal
@@ -148,6 +232,24 @@ class SalesOrderRead(BaseModel):
     deletion_reason: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+
+    @model_validator(mode="after")
+    def populate_gst_fields(self) -> "SalesOrderRead":
+        if self.base_amount is None and self.order_value is not None:
+            if self.gst_invoice_required:
+                self.gst_rate = Decimal("18.00")
+                b_amt = (self.order_value / Decimal("1.18")).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                )
+                self.base_amount = b_amt
+                self.gst_amount = (self.order_value - b_amt).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                )
+            else:
+                self.gst_rate = Decimal("0.00")
+                self.base_amount = self.order_value
+                self.gst_amount = Decimal("0.00")
+        return self
 
     model_config = ConfigDict(from_attributes=True)
 

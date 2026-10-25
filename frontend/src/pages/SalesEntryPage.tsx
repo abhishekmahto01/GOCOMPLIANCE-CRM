@@ -50,9 +50,16 @@ const salesEntrySchema = z
     lead_source: z.string().min(1, 'Please select a lead source'),
     service_id: z.string().uuid('Please select a valid service/work'),
     salesperson_user_id: z.string().uuid('Please select the sales employee (Converted By)'),
+    base_amount: z
+      .number({ invalid_type_error: 'Amount must be a number' })
+      .min(0, 'Amount must be greater than or equal to 0')
+      .max(9999999999.99, 'Amount is too large')
+      .default(0),
     order_value: z
       .number({ invalid_type_error: 'Total amount must be a number' })
-      .min(0, 'Total amount must be greater than or equal to 0'),
+      .min(0, 'Total amount must be greater than or equal to 0')
+      .max(9999999999.99, 'Total amount is too large')
+      .default(0),
     amount_received: z
       .number({ invalid_type_error: 'Advance amount must be a number' })
       .min(0, 'Advance amount cannot be negative'),
@@ -74,12 +81,14 @@ const salesEntrySchema = z
 
 type SalesEntryFormValues = z.infer<typeof salesEntrySchema>;
 
-function formatInr(val: number): string {
+function formatInr2(val: number): string {
+  if (val === undefined || val === null || isNaN(val)) return '₹0.00';
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(val || 0);
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(val);
 }
 
 export const SalesEntryPage: React.FC = () => {
@@ -112,6 +121,7 @@ export const SalesEntryPage: React.FC = () => {
       lead_source: 'WEBSITE',
       service_id: '',
       salesperson_user_id: '',
+      base_amount: 0,
       order_value: 0,
       amount_received: 0,
       govt_fees: 0,
@@ -120,14 +130,40 @@ export const SalesEntryPage: React.FC = () => {
     },
   });
 
-  // Watch fields for live calculation cards
-  const watchedOrderValue = watch('order_value') || 0;
+  // Watch fields for live calculations
+  const watchedBaseAmount = watch('base_amount');
   const watchedAdvance = watch('amount_received') || 0;
   const watchedGovtFees = watch('govt_fees') || 0;
   const watchedIncidental = watch('incidental_cost') || 0;
+  const watchedGstRequired = watch('gst_invoice_required');
   const watchedClientName = watch('client_name') || '';
   const watchedClientId = watch('client_id') || '';
   const watchedSalespersonId = watch('salesperson_user_id') || '';
+
+  // GST Auto-Calculation:
+  // When GST = YES: GST is 18% of base amount, Final = Base + GST.
+  // When GST = NO: GST is 0.00, Final = Base.
+  // Currency precision with two decimal places.
+  const isGstYes = Boolean(watchedGstRequired);
+  const cleanBaseAmount = useMemo(() => {
+    if (typeof watchedBaseAmount !== 'number' || isNaN(watchedBaseAmount)) return 0;
+    return Math.max(0, Math.round(watchedBaseAmount * 100) / 100);
+  }, [watchedBaseAmount]);
+
+  const gstPercentage = isGstYes ? 18 : 0;
+  const calculatedGstAmount = useMemo(() => {
+    if (!isGstYes || cleanBaseAmount <= 0) return 0;
+    return Math.round(cleanBaseAmount * 18) / 100;
+  }, [isGstYes, cleanBaseAmount]);
+
+  const calculatedFinalAmount = useMemo(() => {
+    return Math.round((cleanBaseAmount + calculatedGstAmount) * 100) / 100;
+  }, [cleanBaseAmount, calculatedGstAmount]);
+
+  // Synchronize order_value with calculatedFinalAmount
+  useEffect(() => {
+    setValue('order_value', calculatedFinalAmount, { shouldValidate: false });
+  }, [calculatedFinalAmount, setValue]);
 
   // Derive salesperson object and company
   const selectedSalesperson = useMemo(() => {
@@ -151,15 +187,15 @@ export const SalesEntryPage: React.FC = () => {
   }, [derivedCompanyId, watchedClientId, formOptions?.clients, setValue]);
 
   // Real-time Calculations
-  const calculatedPending = Math.max(0, watchedOrderValue - watchedAdvance);
-  const calculatedProfits = watchedOrderValue - watchedGovtFees - watchedIncidental;
+  const calculatedPending = Math.max(0, calculatedFinalAmount - watchedAdvance);
+  const calculatedProfits = calculatedFinalAmount - watchedGovtFees - watchedIncidental;
 
   const paymentStatusBadge = useMemo(() => {
-    if (watchedOrderValue <= 0) return { label: 'PENDING', color: 'amber' };
-    if (watchedAdvance >= watchedOrderValue) return { label: 'FULLY_PAID', color: 'emerald' };
+    if (calculatedFinalAmount <= 0) return { label: 'PENDING', color: 'amber' };
+    if (watchedAdvance >= calculatedFinalAmount) return { label: 'FULLY_PAID', color: 'emerald' };
     if (watchedAdvance > 0) return { label: 'PARTIALLY_PAID', color: 'blue' };
     return { label: 'PENDING', color: 'amber' };
-  }, [watchedOrderValue, watchedAdvance]);
+  }, [calculatedFinalAmount, watchedAdvance]);
 
   // Load Form Options
   useEffect(() => {
@@ -231,11 +267,14 @@ export const SalesEntryPage: React.FC = () => {
         salesperson_user_id: values.salesperson_user_id,
         company_id: derivedCompanyId || undefined,
         lead_source: values.lead_source,
-        order_value: Number(values.order_value),
+        base_amount: cleanBaseAmount,
+        gst_amount: calculatedGstAmount,
+        gst_rate: gstPercentage,
+        order_value: calculatedFinalAmount,
         amount_received: Number(values.amount_received),
         govt_fees: Number(values.govt_fees || 0),
         incidental_cost: Number(values.incidental_cost || 0),
-        gst_invoice_required: Boolean(values.gst_invoice_required),
+        gst_invoice_required: isGstYes,
         notes: values.notes?.trim() || undefined,
         auto_confirm: autoConfirm,
       };
@@ -270,6 +309,7 @@ export const SalesEntryPage: React.FC = () => {
       lead_source: 'WEBSITE',
       service_id: '',
       salesperson_user_id: formOptions?.default_salesperson_id || '',
+      base_amount: 0,
       order_value: 0,
       amount_received: 0,
       govt_fees: 0,
@@ -358,11 +398,13 @@ export const SalesEntryPage: React.FC = () => {
               <IndianRupee className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">
-            {formatInr(watchedOrderValue)}
+          <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-white" data-testid="kpi-total-amount">
+            {formatInr2(calculatedFinalAmount)}
           </div>
           <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-            Order contract value
+            {isGstYes
+              ? `Base: ${formatInr2(cleanBaseAmount)} + GST (18%): ${formatInr2(calculatedGstAmount)}`
+              : `Base: ${formatInr2(cleanBaseAmount)} (No GST)`}
           </div>
         </div>
 
@@ -385,10 +427,10 @@ export const SalesEntryPage: React.FC = () => {
             </span>
           </div>
           <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">
-            {formatInr(calculatedPending)}
+            {formatInr2(calculatedPending)}
           </div>
           <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-            Advance: <strong className="text-emerald-600 dark:text-emerald-400">{formatInr(watchedAdvance)}</strong>
+            Advance: <strong className="text-emerald-600 dark:text-emerald-400">{formatInr2(watchedAdvance)}</strong>
           </div>
         </div>
 
@@ -403,10 +445,10 @@ export const SalesEntryPage: React.FC = () => {
             </div>
           </div>
           <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">
-            {formatInr(watchedGovtFees + watchedIncidental)}
+            {formatInr2(watchedGovtFees + watchedIncidental)}
           </div>
           <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-            Govt: {formatInr(watchedGovtFees)} | Incidental: {formatInr(watchedIncidental)}
+            Govt: {formatInr2(watchedGovtFees)} | Incidental: {formatInr2(watchedIncidental)}
           </div>
         </div>
 
@@ -422,7 +464,7 @@ export const SalesEntryPage: React.FC = () => {
             </div>
           </div>
           <div className={`mt-2 text-2xl font-black ${calculatedProfits >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-            {formatInr(calculatedProfits)}
+            {formatInr2(calculatedProfits)}
           </div>
           <div className="mt-1 text-[11px] text-emerald-800/80 dark:text-emerald-400/80 flex items-center gap-1 font-medium">
             <Info className="w-3 h-3" />
@@ -652,25 +694,77 @@ export const SalesEntryPage: React.FC = () => {
               )}
             </div>
 
-            {/* GST Invoice Required */}
+            {/* GST Selection (Yes / No Radio & Routing) */}
             <div className="md:col-span-2 lg:col-span-3 pt-1">
-              <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 hover:bg-blue-50/80 dark:hover:bg-blue-950/30 transition">
-                <input
-                  id="gst_invoice_required"
-                  type="checkbox"
-                  {...register('gst_invoice_required')}
-                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                />
-                <div>
-                  <label
-                    htmlFor="gst_invoice_required"
-                    className="text-xs font-semibold text-slate-800 dark:text-slate-200 cursor-pointer select-none"
-                  >
-                    GST Invoice Required
-                  </label>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                    Select this to send this entry to Accounts for invoice processing.
-                  </p>
+              <div className="p-4 rounded-2xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 hover:bg-blue-50/80 dark:hover:bg-blue-950/30 transition">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <label
+                      htmlFor="gst_invoice_required"
+                      className="text-xs font-semibold text-slate-800 dark:text-slate-200 cursor-pointer select-none flex items-center gap-2"
+                    >
+                      <Receipt className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      GST Invoice Required
+                    </label>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      When YES, calculates 18% GST and routes to Accounts for invoice processing.
+                    </p>
+                  </div>
+
+                  {/* GST Radio Buttons (YES / NO) */}
+                  <div className="flex items-center gap-3">
+                    <label
+                      htmlFor="gst_yes"
+                      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold border cursor-pointer transition select-none ${
+                        isGstYes
+                          ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
+                          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/60'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        id="gst_yes"
+                        data-testid="gst-yes-radio"
+                        name="gst_selection"
+                        value="yes"
+                        checked={isGstYes}
+                        onChange={() => setValue('gst_invoice_required', true, { shouldValidate: true })}
+                        className="h-3.5 w-3.5 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      />
+                      <span>Yes (18% GST)</span>
+                    </label>
+
+                    <label
+                      htmlFor="gst_no"
+                      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold border cursor-pointer transition select-none ${
+                        !isGstYes
+                          ? 'bg-slate-700 border-slate-700 text-white dark:bg-slate-700 shadow-xs'
+                          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/60'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        id="gst_no"
+                        data-testid="gst-no-radio"
+                        name="gst_selection"
+                        value="no"
+                        checked={!isGstYes}
+                        onChange={() => setValue('gst_invoice_required', false, { shouldValidate: true })}
+                        className="h-3.5 w-3.5 text-slate-600 focus:ring-slate-500 cursor-pointer"
+                      />
+                      <span>No (0% GST)</span>
+                    </label>
+
+                    {/* Accessible/Backward-compatible checkbox synced to isGstYes */}
+                    <input
+                      id="gst_invoice_required"
+                      type="checkbox"
+                      checked={isGstYes}
+                      onChange={(e) => setValue('gst_invoice_required', e.target.checked, { shouldValidate: true })}
+                      className="sr-only"
+                      aria-label="GST Invoice Required"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -711,22 +805,38 @@ export const SalesEntryPage: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-            {/* Column 10: Total Amount */}
+            {/* Column 10: Base Amount */}
             <div>
-              <label htmlFor="order_value" className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                Total Amount (₹) <span className="text-rose-500">*</span>
+              <label htmlFor="order_value" className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
+                <span>Base Amount / Total Amount (₹) <span className="text-rose-500">*</span></span>
+                {isGstYes && (
+                  <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-1.5 py-0.5 rounded">
+                    +18% GST
+                  </span>
+                )}
               </label>
               <input
                 id="order_value"
+                data-testid="base-amount-input"
                 type="number"
                 step="any"
                 min="0"
                 placeholder="0"
-                {...register('order_value', { valueAsNumber: true })}
+                {...register('base_amount', {
+                  valueAsNumber: true,
+                  onChange: (e) => {
+                    const val = parseFloat(e.target.value);
+                    const clean = isNaN(val) ? 0 : val;
+                    const gst = Boolean(watch('gst_invoice_required'));
+                    const gstAmt = gst ? Math.round(clean * 18) / 100 : 0;
+                    const finAmt = Math.round((clean + gstAmt) * 100) / 100;
+                    setValue('order_value', finAmt, { shouldValidate: true });
+                  },
+                })}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-sm font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
               />
-              {errors.order_value && (
-                <p className="mt-1 text-xs text-rose-500">{errors.order_value.message}</p>
+              {errors.base_amount && (
+                <p className="mt-1 text-xs text-rose-500">{errors.base_amount.message}</p>
               )}
             </div>
 
@@ -788,16 +898,68 @@ export const SalesEntryPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Live Formula Note */}
-          <div className="p-3.5 rounded-2xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/60 text-xs text-blue-800 dark:text-blue-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-              <span>
-                <strong>Formula Reference:</strong> Pending = Total Amount - Advance Amount | Profit = Total Amount - Govt Fees - Incidental Cost
+          {/* GST Auto-Calculation Breakdown Panel */}
+          <div className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 dark:border-slate-700/40 pb-2.5">
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                <Receipt className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                GST Auto-Calculation Breakdown
+              </span>
+              <span
+                className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full w-fit ${
+                  isGstYes
+                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
+                    : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                }`}
+              >
+                {isGstYes ? 'GST: 18% Applied' : 'GST: 0% (No GST)'}
               </span>
             </div>
-            <div className="font-mono text-[11px] text-blue-700 dark:text-blue-400 bg-white/80 dark:bg-slate-900 px-2.5 py-1 rounded-lg border border-blue-200 dark:border-blue-800">
-              Pending: {formatInr(calculatedPending)} | Profit: {formatInr(calculatedProfits)}
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div className="bg-white dark:bg-slate-900/90 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800">
+                <span className="text-slate-500 dark:text-slate-400 block text-[11px] font-medium">Base Amount</span>
+                <span className="font-bold text-slate-900 dark:text-white text-sm" data-testid="summary-base-amount">
+                  {formatInr2(cleanBaseAmount)}
+                </span>
+              </div>
+              <div className="bg-white dark:bg-slate-900/90 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800">
+                <span className="text-slate-500 dark:text-slate-400 block text-[11px] font-medium">GST Rate</span>
+                <span className="font-bold text-slate-900 dark:text-white text-sm" data-testid="summary-gst-rate">
+                  {gstPercentage}%
+                </span>
+              </div>
+              <div className="bg-white dark:bg-slate-900/90 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800">
+                <span className="text-slate-500 dark:text-slate-400 block text-[11px] font-medium">GST Amount</span>
+                <span className="font-bold text-blue-600 dark:text-blue-400 text-sm" data-testid="summary-gst-amount">
+                  {formatInr2(calculatedGstAmount)}
+                </span>
+              </div>
+              <div className="bg-white dark:bg-slate-900/90 p-3 rounded-xl border border-emerald-300 dark:border-emerald-800/80 bg-emerald-50/40 dark:bg-emerald-950/20">
+                <span className="text-slate-500 dark:text-slate-400 block text-[11px] font-medium">Final Payable Amount</span>
+                <span className="font-extrabold text-emerald-600 dark:text-emerald-400 text-sm" data-testid="summary-final-amount">
+                  {formatInr2(calculatedFinalAmount)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Live Formula Note */}
+          <div className="p-3.5 rounded-2xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/60 text-xs text-blue-800 dark:text-blue-300 flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+              <span className="leading-relaxed">
+                <strong>Formula Reference:</strong> Final Amount = Base Amount + GST Amount | Pending = Final Amount - Advance | Profit = Final Amount - Govt Fees - Incidentals
+              </span>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0 font-mono text-[11px] whitespace-nowrap bg-white/90 dark:bg-slate-900 px-3 py-1.5 rounded-xl border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 shadow-xs">
+              <span className="inline-flex items-center gap-1">
+                Pending: <strong className="text-slate-900 dark:text-white font-bold">{formatInr2(calculatedPending)}</strong>
+              </span>
+              <span className="text-blue-300 dark:text-blue-700">|</span>
+              <span className="inline-flex items-center gap-1">
+                Profit: <strong className="text-emerald-600 dark:text-emerald-400 font-bold">{formatInr2(calculatedProfits)}</strong>
+              </span>
             </div>
           </div>
         </div>

@@ -4,7 +4,7 @@ import io
 import uuid
 from calendar import monthrange
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import case, desc, func, or_, select
@@ -471,7 +471,27 @@ def create_sales_order(
         raise ValueError(f"Active service with ID '{data.service_id}' not found.")
 
     # 5. Financial Calculations & Validations
-    val = Decimal(str(data.order_value))
+    if data.base_amount is not None:
+        gst_req = bool(data.gst_invoice_required)
+        expected_rate = Decimal("18.00") if gst_req else Decimal("0.00")
+        expected_gst = (data.base_amount * (expected_rate / Decimal("100.00"))).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        expected_final = (data.base_amount + expected_gst).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        if data.order_value is not None and abs(Decimal(str(data.order_value)) - expected_final) > Decimal("0.01"):
+            raise ValueError(
+                f"Final amount ({data.order_value}) does not match independently calculated amount ({expected_final}) based on base amount ({data.base_amount}) and GST rate ({expected_rate}%)."
+            )
+        if data.gst_amount is not None and abs(Decimal(str(data.gst_amount)) - expected_gst) > Decimal("0.01"):
+            raise ValueError(
+                f"Submitted GST amount ({data.gst_amount}) does not match independently calculated GST ({expected_gst})."
+            )
+        val = expected_final
+    else:
+        val = Decimal(str(data.order_value))
+
     rcvd = Decimal(str(data.amount_received or "0.00"))
     g_fee = Decimal(str(data.govt_fees or "0.00"))
     i_cost = Decimal(str(data.incidental_cost or "0.00"))
@@ -592,7 +612,29 @@ def update_sales_order(
     }
 
     # Financial Field updates & Decimal-safe validations
-    new_val = Decimal(str(data.order_value)) if data.order_value is not None else old_values["order_value"]
+    if data.base_amount is not None:
+        gst_req = data.gst_invoice_required if data.gst_invoice_required is not None else getattr(order, "gst_invoice_required", False)
+        expected_rate = Decimal("18.00") if gst_req else Decimal("0.00")
+        expected_gst = (data.base_amount * (expected_rate / Decimal("100.00"))).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        expected_final = (data.base_amount + expected_gst).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        if data.order_value is not None and abs(Decimal(str(data.order_value)) - expected_final) > Decimal("0.01"):
+            raise ValueError(
+                f"Final amount ({data.order_value}) does not match independently calculated amount ({expected_final}) based on base amount ({data.base_amount}) and GST rate ({expected_rate}%)."
+            )
+        if data.gst_amount is not None and abs(Decimal(str(data.gst_amount)) - expected_gst) > Decimal("0.01"):
+            raise ValueError(
+                f"Submitted GST amount ({data.gst_amount}) does not match independently calculated GST ({expected_gst})."
+            )
+        new_val = expected_final
+    elif data.order_value is not None:
+        new_val = Decimal(str(data.order_value))
+    else:
+        new_val = old_values["order_value"]
+
     new_rcvd = Decimal(str(data.amount_received)) if data.amount_received is not None else old_values["amount_received"]
     new_g_fee = Decimal(str(data.govt_fees)) if data.govt_fees is not None else old_values["govt_fees"]
     new_i_cost = Decimal(str(data.incidental_cost)) if data.incidental_cost is not None else old_values["incidental_cost"]
