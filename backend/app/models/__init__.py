@@ -23,6 +23,7 @@ from app.models.refresh_token import RefreshToken
 from app.models.sales_order import SalesOrder
 from app.models.sales_order_audit_log import SalesOrderAuditLog
 from app.models.service import ServiceMaster, ServiceRequiredDocument
+from app.models.source import SourceMaster
 from app.models.task_conversation import TaskConversationMessage
 from app.models.task_conversation_read import TaskConversationReadState
 from app.models.user import User
@@ -53,6 +54,7 @@ __all__ = [
     "SalesOrderAuditLog",
     "ServiceMaster",
     "ServiceRequiredDocument",
+    "SourceMaster",
     "TaskConversationMessage",
     "TaskConversationReadState",
     "User",

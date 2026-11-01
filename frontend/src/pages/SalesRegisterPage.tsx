@@ -18,6 +18,8 @@ import {
   Edit,
   Save,
   Trash2,
+  Check,
+  RefreshCw,
   MapPin,
   MessageSquare,
   UploadCloud,
@@ -223,6 +225,71 @@ export const SalesRegisterPage: React.FC = () => {
 
   // Bulk Sales Import Modal State
   const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
+
+  // Direct Inline Proforma Invoice Editing State
+  const [activeProformaOrderId, setActiveProformaOrderId] = useState<string | null>(null);
+  const [activeProformaValue, setActiveProformaValue] = useState<string>('');
+  const [savingProformaOrders, setSavingProformaOrders] = useState<Record<string, boolean>>({});
+  const [lastSavedProformaOrderId, setLastSavedProformaOrderId] = useState<string | null>(null);
+
+  const handleStartProformaEdit = (orderId: string, currentVal?: string | null, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setActiveProformaOrderId(orderId);
+    setActiveProformaValue(currentVal || '');
+  };
+
+  const handleCommitProformaEdit = async (orderId: string, originalVal?: string | null) => {
+    const trimmed = activeProformaValue.trim();
+    const originalTrimmed = (originalVal || '').trim();
+
+    if (trimmed === originalTrimmed) {
+      setActiveProformaOrderId(null);
+      return;
+    }
+
+    setSavingProformaOrders((prev) => ({ ...prev, [orderId]: true }));
+    try {
+      const updated = await updateSalesOrderApi(orderId, {
+        proforma_invoice_no: trimmed,
+      });
+
+      setRegisterData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          items: prev.items.map((it) =>
+            it.order_id === orderId
+              ? { ...it, proforma_invoice_no: updated.proforma_invoice_no !== undefined ? updated.proforma_invoice_no : (trimmed || null) }
+              : it
+          ),
+        };
+      });
+
+      if (selectedOrder && selectedOrder.order_id === orderId) {
+        setSelectedOrder((prev) => (prev ? { ...prev, proforma_invoice_no: updated.proforma_invoice_no !== undefined ? updated.proforma_invoice_no : (trimmed || null) } : null));
+      }
+
+      setLastSavedProformaOrderId(orderId);
+      setTimeout(() => setLastSavedProformaOrderId(null), 2500);
+
+      outletCtx?.addToast?.(
+        'success',
+        'Proforma Updated',
+        `Proforma Invoice Number updated for Order #${updated.order_number || ''}.`
+      );
+    } catch (err) {
+      console.error('Failed to update proforma invoice:', err);
+      const msg = extractErrorMessage(err);
+      outletCtx?.addToast?.('error', 'Update Failed', msg);
+    } finally {
+      setSavingProformaOrders((prev) => {
+        const next = { ...prev };
+        delete next[orderId];
+        return next;
+      });
+      setActiveProformaOrderId(null);
+    }
+  };
 
   const handleOpenConversation = (orderId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -521,7 +588,7 @@ export const SalesRegisterPage: React.FC = () => {
         amount_received: editAmountReceived,
         govt_fees: editGovtFees,
         incidental_cost: editIncidentalCost,
-        proforma_invoice_no: editProformaInvoiceNo.trim() || undefined,
+        proforma_invoice_no: editProformaInvoiceNo.trim(),
         tax_invoice_no: editTaxInvoiceNo.trim() || undefined,
         reimbursement_note: editReimbursementNote.trim() || undefined,
         notes: editNotes.trim() || undefined,
@@ -1127,9 +1194,59 @@ export const SalesRegisterPage: React.FC = () => {
                         {renderPaymentBadge(row.payment_status)}
                       </td>
 
-                      {/* 15. Proforma Invoice No. (shows — when not populated) */}
-                      <td className="py-3 px-3.5 text-slate-600 dark:text-slate-400 font-mono">
-                        {row.proforma_invoice_no || '—'}
+                      {/* 15. Proforma Invoice No. (Direct inline editable) */}
+                      <td
+                        className="py-2 px-2.5 font-mono text-xs min-w-[150px] relative group/cell"
+                        onClick={(e) => {
+                          if (activeProformaOrderId !== row.order_id) {
+                            handleStartProformaEdit(row.order_id, row.proforma_invoice_no, e);
+                          }
+                        }}
+                      >
+                        {activeProformaOrderId === row.order_id ? (
+                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="text"
+                              autoFocus
+                              value={activeProformaValue}
+                              onChange={(e) => setActiveProformaValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleCommitProformaEdit(row.order_id, row.proforma_invoice_no);
+                                } else if (e.key === 'Escape') {
+                                  setActiveProformaOrderId(null);
+                                }
+                              }}
+                              onBlur={() => {
+                                handleCommitProformaEdit(row.order_id, row.proforma_invoice_no);
+                              }}
+                              placeholder="Enter Proforma #"
+                              className="w-full px-2 py-1 text-xs font-mono font-medium rounded-lg bg-white dark:bg-slate-800 border-2 border-indigo-500 text-slate-900 dark:text-white shadow-xs outline-none"
+                            />
+                            {savingProformaOrders[row.order_id] && (
+                              <RefreshCw className="w-3.5 h-3.5 text-indigo-600 animate-spin shrink-0" />
+                            )}
+                          </div>
+                        ) : (
+                          <div
+                            className="flex items-center justify-between gap-1.5 cursor-pointer py-1 px-1.5 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-950/40 border border-transparent hover:border-indigo-200 dark:hover:border-indigo-800 transition"
+                            title="Click to edit Proforma Invoice Number"
+                          >
+                            {row.proforma_invoice_no ? (
+                              <span className="inline-flex items-center gap-1 font-semibold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-md border border-indigo-200/60 dark:border-indigo-800 truncate">
+                                {row.proforma_invoice_no}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 italic text-[11px]">Click to enter —</span>
+                            )}
+                            {lastSavedProformaOrderId === row.order_id ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            ) : (
+                              <Edit className="w-3 h-3 text-indigo-400 opacity-0 group-hover/cell:opacity-100 shrink-0 transition" />
+                            )}
+                          </div>
+                        )}
                       </td>
 
                       {/* 16. Tax Invoice No. (shows — when not populated) */}

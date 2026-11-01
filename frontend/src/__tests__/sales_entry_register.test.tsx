@@ -1144,6 +1144,56 @@ describe('Sales Entry & Sales Register Module Tests', () => {
       });
     });
   });
+
+  it('allows editing Proforma Invoice Number directly inline in the Sales Register table', async () => {
+    const user = userEvent.setup();
+    const updateSpy = vi.spyOn(salesApi, 'updateSalesOrderApi').mockResolvedValue({
+      ...mockRegisterData.items[0],
+      proforma_invoice_no: 'PI-2026-9999',
+    });
+
+    render(
+      <ThemeProvider>
+        <AuthProvider>
+          <MemoryRouter initialEntries={['/sales/register']}>
+            <Routes>
+              <Route path="/sales" element={<SalesLayout />}>
+                <Route path="register" element={<SalesRegisterPage />} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
+      </ThemeProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /sales register/i })).toBeInTheDocument();
+    });
+
+    // Find the cell with existing proforma invoice 'PI-2026-001'
+    const proformaCell = screen.getByText('PI-2026-001');
+    expect(proformaCell).toBeInTheDocument();
+
+    // Click on it to start inline editing
+    await user.click(proformaCell);
+
+    // Input appears
+    const input = screen.getByPlaceholderText(/Enter Proforma #/i);
+    expect(input).toBeInTheDocument();
+
+    // Clear and enter new number
+    await user.clear(input);
+    await user.type(input, 'PI-2026-9999{Enter}');
+
+    await waitFor(() => {
+      expect(updateSpy).toHaveBeenCalledWith(
+        mockRegisterData.items[0].order_id,
+        expect.objectContaining({
+          proforma_invoice_no: 'PI-2026-9999',
+        })
+      );
+    });
+  });
 });
 
 

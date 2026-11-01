@@ -110,6 +110,16 @@ INITIAL_MODULES: List[Dict[str, Optional[object]]] = [
         "is_navigation": True,
         "status": "ACTIVE",
     },
+    {
+        "module_code": "ADMIN_SOURCES",
+        "module_name": "Source Master",
+        "parent_code": "ADMIN",
+        "route": "/admin/sources",
+        "description": "Lead acquisition sources and marketing channels",
+        "display_order": 70,
+        "is_navigation": True,
+        "status": "ACTIVE",
+    },
     # Sub-Modules (Pages) under SALES
     {
         "module_code": "SALES_DASHBOARD",

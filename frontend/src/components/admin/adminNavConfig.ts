@@ -10,6 +10,7 @@ import {
   FileBadge,
   Network,
   Award,
+  Share2,
 } from 'lucide-react';
 import type { ActionType } from '../../types/permission';
 
@@ -130,6 +131,14 @@ export const ADMIN_NAV_GROUPS: NavParentGroup[] = [
         title: 'License Master',
         route: '/admin/licenses',
         icon: FileBadge,
+        requiredModule: 'ADMIN',
+        requiredAction: 'view',
+      },
+      {
+        id: 'source_master',
+        title: 'Source Master',
+        route: '/admin/sources',
+        icon: Share2,
         requiredModule: 'ADMIN',
         requiredAction: 'view',
       },

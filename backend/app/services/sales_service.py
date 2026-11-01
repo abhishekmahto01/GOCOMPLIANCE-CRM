@@ -1513,14 +1513,25 @@ def get_sales_dashboard_data(
     # -------------------------------------------------------------------------
     # 6. Lead Sources Donut
     # -------------------------------------------------------------------------
-    source_order = [
-        ("WEBSITE", "Website"),
-        ("REFERRAL", "Referral"),
-        ("DIRECT", "Direct"),
-        ("JUSTDIAL", "Justdial"),
-        ("INDIAMART", "IndiaMART"),
-        ("OTHERS", "Others"),
-    ]
+    from app.services.source_service import get_active_sources
+    db_sources = get_active_sources(session)
+    if db_sources:
+        source_order = [(s.source_code, s.source_name) for s in db_sources]
+    else:
+        source_order = [
+            ("WEBSITE", "Website"),
+            ("REFERRAL", "Referral"),
+            ("DIRECT", "Direct"),
+            ("JUSTDIAL", "Justdial"),
+            ("INDIAMART", "IndiaMART"),
+            ("OTHERS", "Others"),
+        ]
+    known_codes = {c for c, _ in source_order}
+    for o in curr_orders:
+        code = (o.lead_source or "").upper()
+        if code and code not in known_codes:
+            source_order.append((code, code.title()))
+            known_codes.add(code)
     lead_items: List[LeadSourceItem] = []
     for src_code, src_lbl in source_order:
         s_orders = [o for o in curr_orders if (o.lead_source or "").upper() == src_code]
@@ -1677,14 +1688,21 @@ def get_sales_dashboard_data(
         for s in active_services
     ]
 
-    lead_source_options = [
-        FilterOptionItem(id="WEBSITE", label="Website"),
-        FilterOptionItem(id="REFERRAL", label="Referral"),
-        FilterOptionItem(id="DIRECT", label="Direct"),
-        FilterOptionItem(id="JUSTDIAL", label="Justdial"),
-        FilterOptionItem(id="INDIAMART", label="IndiaMART"),
-        FilterOptionItem(id="OTHERS", label="Others"),
-    ]
+    db_lead_sources = get_active_sources(session)
+    if db_lead_sources:
+        lead_source_options = [
+            FilterOptionItem(id=s.source_code, label=s.source_name)
+            for s in db_lead_sources
+        ]
+    else:
+        lead_source_options = [
+            FilterOptionItem(id="WEBSITE", label="Website"),
+            FilterOptionItem(id="REFERRAL", label="Referral"),
+            FilterOptionItem(id="DIRECT", label="Direct"),
+            FilterOptionItem(id="JUSTDIAL", label="Justdial"),
+            FilterOptionItem(id="INDIAMART", label="IndiaMART"),
+            FilterOptionItem(id="OTHERS", label="Others"),
+        ]
 
     payment_status_options = [
         FilterOptionItem(id="FULLY_PAID", label="Fully Paid"),
@@ -2132,7 +2150,8 @@ def get_sales_form_options(
     # 4. Eligible Operations Assignees
     ops_assignees = get_eligible_operations_assignees(session, current_user.company_id, current_user=current_user)
 
-    lead_sources = ["WEBSITE", "REFERRAL", "DIRECT", "JUSTDIAL", "INDIAMART", "OTHERS"]
+    from app.services.source_service import get_active_source_codes
+    lead_sources = get_active_source_codes(session)
     comp = session.get(Company, current_user.company_id) if current_user.company_id else None
     comp_name = comp.company_name if comp else (
         "Gocompliances" if current_user.company_id else "GoCompliance CRM"

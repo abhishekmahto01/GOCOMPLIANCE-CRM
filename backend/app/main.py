@@ -17,6 +17,7 @@ from app.api import (
     operations,
     sales,
     sales_import,
+    sources,
 )
 from app.core.config import settings
 
@@ -62,6 +63,10 @@ app.include_router(
 )
 app.include_router(
     licenses.router,
+    prefix=settings.API_PREFIX,
+)
+app.include_router(
+    sources.router,
     prefix=settings.API_PREFIX,
 )
 app.include_router(

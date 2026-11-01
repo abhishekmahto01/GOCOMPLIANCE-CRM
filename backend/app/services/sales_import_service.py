@@ -460,6 +460,15 @@ def parse_and_validate_sales_file(
     service_by_name = {s.service_name.strip().lower(): s for s in active_services}
     service_by_code = {s.service_code.strip().lower(): s for s in active_services if s.service_code}
 
+    from app.services.source_service import get_active_source_codes
+    allowed_sources_set = set(ALLOWED_LEAD_SOURCES)
+    try:
+        active_codes = get_active_source_codes(session)
+        if active_codes:
+            allowed_sources_set.update(active_codes)
+    except Exception:
+        pass
+
     # Tracking sets for duplicate detection
     seen_in_file: Dict[Tuple[str, str, str, str], int] = {}
     parsed_rows: List[SalesImportRowValidation] = []
@@ -530,9 +539,9 @@ def parse_and_validate_sales_file(
         source_val = source_raw.strip().upper() if source_raw else ""
         if not source_val:
             row_errors.append("Source is required.")
-        elif source_val not in ALLOWED_LEAD_SOURCES:
+        elif source_val not in allowed_sources_set:
             row_errors.append(
-                f"Invalid Source '{source_raw}'. Allowed sources: {', '.join(sorted(ALLOWED_LEAD_SOURCES))}."
+                f"Invalid Source '{source_raw}'. Allowed sources: {', '.join(sorted(allowed_sources_set))}."
             )
 
         # Validate Work / Service

@@ -86,6 +86,7 @@ def test_registered_tables_in_metadata() -> None:
         "task_conversation_read_state",
         "operations_coordinator_config",
         "sales_order_audit_log",
+        "source_master",
     }
 
 

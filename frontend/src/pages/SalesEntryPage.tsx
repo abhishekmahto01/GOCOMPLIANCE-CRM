@@ -74,6 +74,7 @@ const salesEntrySchema = z
       .min(0, 'Incidental cost cannot be negative')
       .default(0),
     gst_invoice_required: z.boolean().default(false),
+    proforma_invoice_no: z.string().trim().max(100).optional().nullable(),
     notes: z.string().trim().max(2000).optional().nullable(),
   })
   .refine((data) => data.amount_received <= data.order_value, {
@@ -132,6 +133,7 @@ export const SalesEntryPage: React.FC = () => {
       govt_fees: 0,
       incidental_cost: 0,
       gst_invoice_required: false,
+      proforma_invoice_no: '',
     },
   });
 
@@ -280,6 +282,7 @@ export const SalesEntryPage: React.FC = () => {
         govt_fees: Number(values.govt_fees || 0),
         incidental_cost: Number(values.incidental_cost || 0),
         gst_invoice_required: isGstYes,
+        proforma_invoice_no: values.proforma_invoice_no?.trim() || undefined,
         notes: values.notes?.trim() || undefined,
         auto_confirm: autoConfirm,
       };
@@ -780,6 +783,29 @@ export const SalesEntryPage: React.FC = () => {
                       aria-label="GST Invoice Required"
                     />
                   </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Proforma Invoice Number (Optional) */}
+            <div className="md:col-span-2 lg:col-span-3">
+              <div className="p-3.5 rounded-2xl bg-indigo-50/40 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <label htmlFor="proforma_invoice_no" className="block text-xs font-semibold text-slate-800 dark:text-slate-200">
+                    Proforma Invoice Number
+                  </label>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    Optional: Specify Proforma Invoice (PI) number if already issued to the client.
+                  </p>
+                </div>
+                <div className="w-full sm:w-64">
+                  <input
+                    id="proforma_invoice_no"
+                    type="text"
+                    {...register('proforma_invoice_no')}
+                    placeholder="e.g. PI-2026-0012"
+                    className="w-full px-3 py-2 text-xs font-mono rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
                 </div>
               </div>
             </div>

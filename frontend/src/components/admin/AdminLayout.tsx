@@ -87,6 +87,9 @@ export const AdminLayout: React.FC = () => {
     if (pathname === '/admin/licenses' || pathname === '/admin/license-master' || pathname === '/admin/services') {
       return [{ label: 'Administration', href: '/admin' }, { label: 'License Master' }];
     }
+    if (pathname === '/admin/sources' || pathname === '/admin/source-master') {
+      return [{ label: 'Administration', href: '/admin' }, { label: 'Source Master' }];
+    }
     return [{ label: 'Administration' }];
   };
 

@@ -13,6 +13,7 @@ import { CompanyMasterPage } from './pages/CompanyMasterPage';
 import { DepartmentMasterPage } from './pages/DepartmentMasterPage';
 import { DesignationMasterPage } from './pages/DesignationMasterPage';
 import { LicenseMasterPage } from './pages/LicenseMasterPage';
+import { SourceMasterPage } from './pages/SourceMasterPage';
 import { ChangePasswordRequiredPage } from './pages/ChangePasswordRequiredPage';
 import { LoginCredentialsPage } from './pages/LoginCredentialsPage';
 import { UnauthorizedPage } from './pages/UnauthorizedPage';
@@ -420,6 +421,20 @@ export const App: React.FC = () => {
             <Route
               path="services"
               element={<Navigate to="/admin/licenses" replace />}
+            />
+
+            {/* Common Master / Source Master Routes */}
+            <Route
+              path="sources"
+              element={
+                <ProtectedRoute requiredModule="ADMIN" requiredAction="view">
+                  <SourceMasterPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="source-master"
+              element={<Navigate to="/admin/sources" replace />}
             />
           </Route>
 
