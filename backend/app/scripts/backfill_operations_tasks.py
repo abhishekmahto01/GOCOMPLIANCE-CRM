@@ -113,12 +113,19 @@ def inspect_and_backfill(session: Session, dry_run: bool = True) -> Tuple[int, i
         app_status = "ASSIGNED" if assigned_target else "UNASSIGNED"
         app_num = generate_application_number(session, order.order_date)
 
+        ops_dept_id = session.execute(
+            select(Department.department_id).where(
+                Department.department_code.in_(["OPERATIONS", "OP", "OPS"])
+            )
+        ).scalar_one_or_none()
+
         new_app = OperationApplication(
             application_number=app_num,
             sales_order_id=order.order_id,
             company_id=order.company_id,
             client_id=order.client_id,
             service_id=order.service_id,
+            department_id=ops_dept_id,
             assigned_to_user_id=assigned_to_id,
             assigned_by_user_id=assigned_by_id,
             assigned_at=now_utc if assigned_target else None,

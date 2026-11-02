@@ -63,6 +63,8 @@ export interface OperationApplication {
   company_id: string;
   company_name?: string | null;
   company_code?: string | null;
+  department_id?: string | null;
+  department_name?: string | null;
   client_id: string;
   client_name?: string | null;
   client_phone?: string | null;
@@ -210,6 +212,7 @@ export interface AssigneeOption {
   company_id?: string | null;
   company_name?: string | null;
   company_code?: string | null;
+  department_id?: string | null;
   department_name?: string | null;
   designation_name?: string | null;
 }

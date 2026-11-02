@@ -12,6 +12,7 @@ from app.models.company import Company
 from app.models.department import Department
 from app.models.designation import Designation
 from app.models.module import Module
+from app.models.operations_coordinator_config import OperationsCoordinatorConfig
 from app.models.operation_application import (
     ApplicationActivityLog,
     ApplicationAssignmentHistory,
@@ -224,6 +225,8 @@ def _to_application_read(app: OperationApplication) -> OperationApplicationRead:
         formatted_order_date=formatted_order_date,
         company_name=app.company.company_name if app.company else (app.sales_order.company.company_name if app.sales_order and app.sales_order.company else None),
         company_code=app.company.company_code if app.company else (app.sales_order.company.company_code if app.sales_order and app.sales_order.company else None),
+        department_id=getattr(app, "department_id", None),
+        department_name=app.department.department_name if hasattr(app, "department") and app.department else "Operations",
         latest_remark=latest_remark,
         created_at=app.created_at,
         updated_at=app.updated_at,
@@ -309,19 +312,93 @@ def _to_application_detail_read(app: OperationApplication) -> OperationApplicati
 
 
 
+def is_operations_lead_or_manager(session: Optional[Session], user: User) -> bool:
+    """Check if a user is an Operations Lead, Manager, or configured Operations Coordinator.
+
+    Operations Leads / Managers have department-wide oversight and visibility
+    over all tasks under the Operations department.
+    """
+    if not user or getattr(user, "account_status", None) != "ACTIVE":
+        return False
+    if getattr(user, "_is_impersonated", False):
+        return False
+    if (session and permissions.is_super_admin_user(session, user)) or getattr(user, "is_super_admin", False):
+        return True
+
+    # 1. Explicit role override or attribute
+    role_val = getattr(user, "role", None) or getattr(user, "role_type", None)
+    if role_val:
+        role_str = str(role_val).strip().lower()
+        if role_str in (
+            "operations_lead",
+            "manager",
+            "lead",
+            "ops_lead",
+            "operations_manager",
+            "head",
+            "director",
+            "coordinator",
+            "ops_coordinator",
+            "super_admin",
+            "admin",
+        ):
+            return True
+
+    # 2. GoCompliance default Operations Lead / Coordinator identity (Mansi)
+    first_name = (getattr(user, "first_name", "") or "").lower()
+    email = (getattr(user, "official_email", "") or "").lower()
+    emp_code = (getattr(user, "employee_code", "") or "").upper()
+    if "mansi" in first_name or "mansi" in email or emp_code == "CG0003":
+        return True
+
+    # 3. Managerial or lead designation
+    desig = getattr(user, "designation", None)
+    if desig is None and session and getattr(user, "designation_id", None):
+        desig = session.get(Designation, user.designation_id)
+    if desig:
+        if getattr(desig, "is_managerial", False) is True:
+            return True
+        dcode = (getattr(desig, "designation_code", "") or "").lower()
+        dname = (getattr(desig, "designation_name", "") or "").lower()
+        for kw in ("manager", "lead", "head", "director", "coordinator"):
+            if kw in dcode or kw in dname:
+                return True
+
+    # 4. Configured Operations Coordinator in OperationsCoordinatorConfig
+    if session and getattr(user, "user_id", None):
+        coord_exists = session.execute(
+            select(OperationsCoordinatorConfig).where(
+                OperationsCoordinatorConfig.coordinator_user_id == user.user_id
+            )
+        ).scalars().first()
+        if coord_exists is not None:
+            return True
+
+    return False
+
+
 def _apply_operations_scope(
     stmt: Any,
     user: User,
     context: permissions.DataScopeContext,
+    session: Optional[Session] = None,
 ) -> Any:
     """Apply RBAC data scope filters to OperationApplication queries."""
     if context.scope == "ALL":
         return stmt
-    if context.scope == "COMPANY":
+
+    is_lead = is_operations_lead_or_manager(session, user)
+
+    if context.scope in ("COMPANY", "DEPARTMENT"):
         return stmt.where(OperationApplication.company_id == context.company_id)
-    if context.scope == "DEPARTMENT":
-        # Scoped to company
-        return stmt.where(OperationApplication.company_id == context.company_id)
+
+    if is_lead:
+        # Operations Lead / Manager has department-wide visibility over Operations tasks.
+        # Preserve company scoping if user belongs to a specific company.
+        if getattr(context, "company_id", None):
+            return stmt.where(OperationApplication.company_id == context.company_id)
+        return stmt
+
     if context.scope == "TEAM":
         return stmt.where(
             or_(
@@ -330,7 +407,12 @@ def _apply_operations_scope(
             )
         )
     if context.scope == "SELF":
-        return stmt.where(OperationApplication.assigned_to_user_id == user.user_id)
+        return stmt.where(
+            or_(
+                OperationApplication.assigned_to_user_id == user.user_id,
+                OperationApplication.assigned_by_user_id == user.user_id,
+            )
+        )
     return stmt.where(OperationApplication.assigned_to_user_id == user.user_id)
 
 
@@ -357,7 +439,7 @@ def get_operations_dashboard_data(
             selectinload(OperationApplication.remarks).joinedload(OperationRemark.author).joinedload(User.designation),
         )
     )
-    base_query = _apply_operations_scope(base_query, user, context)
+    base_query = _apply_operations_scope(base_query, user, context, session=session)
     base_query = base_query.where(OperationApplication.deleted_at.is_(None))
     if company_id:
         if context.scope in ("COMPANY", "DEPARTMENT") and company_id != context.company_id:
@@ -547,9 +629,9 @@ def get_operations_tasks(
             ),
             OperationApplication.application_status != "CANCELLED",
         )
-        stmt = _apply_operations_scope(stmt, user, context)
+        stmt = _apply_operations_scope(stmt, user, context, session=session)
     else:
-        stmt = _apply_operations_scope(stmt, user, context)
+        stmt = _apply_operations_scope(stmt, user, context, session=session)
 
     # Exclude soft-deleted tasks
     stmt = stmt.where(OperationApplication.deleted_at.is_(None))
@@ -761,10 +843,12 @@ def get_operation_application_detail(
                 or getattr(app.sales_order, "created_by_user_id", None) == user.user_id
             )
         )
+        is_ops_lead = is_operations_lead_or_manager(session, user)
         is_participant = (
             app.assigned_to_user_id == user.user_id
             or app.assigned_by_user_id == user.user_id
             or is_salesperson
+            or is_ops_lead
             or getattr(user, "is_super_admin", False)
             or getattr(user, "role_type", "") == "SUPER_ADMIN"
             or user.employee_code == "CG0001"
@@ -899,9 +983,21 @@ def assign_task(
     prev_assignee_id = app.assigned_to_user_id
     now_utc = datetime.now(timezone.utc)
 
+    # Ensure department_id is populated and preserved
+    if getattr(app, "department_id", None) is None:
+        dept = session.execute(
+            select(Department.department_id).where(
+                Department.department_code.in_(["OPERATIONS", "OP", "OPS"])
+            )
+        ).scalar_one_or_none()
+        if dept:
+            app.department_id = dept
+
     # Update application
     app.assigned_to_user_id = assignee_user_id
+    app.assigned_to = assignee
     app.assigned_by_user_id = assigned_by.user_id
+    app.assigned_by = assigned_by
     app.assigned_at = now_utc
     app.priority = priority
     if target_due_date:
@@ -1011,8 +1107,20 @@ def reassign_task(
     prev_assignee_id = app.assigned_to_user_id
     now_utc = datetime.now(timezone.utc)
 
+    # Ensure department_id is populated and preserved
+    if getattr(app, "department_id", None) is None:
+        dept = session.execute(
+            select(Department.department_id).where(
+                Department.department_code.in_(["OPERATIONS", "OP", "OPS"])
+            )
+        ).scalar_one_or_none()
+        if dept:
+            app.department_id = dept
+
     app.assigned_to_user_id = new_assignee_user_id
+    app.assigned_to = new_assignee
     app.assigned_by_user_id = reassigned_by.user_id
+    app.assigned_by = reassigned_by
     app.assigned_at = now_utc
     if priority:
         app.priority = priority

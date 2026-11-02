@@ -143,6 +143,8 @@ class OperationApplicationRead(BaseModel):
     formatted_order_date: Optional[str] = None
     company_name: Optional[str] = None
     company_code: Optional[str] = None
+    department_id: Optional[uuid.UUID] = None
+    department_name: Optional[str] = "Operations"
     latest_remark: Optional[OperationRemarkRead] = None
     created_at: datetime
     updated_at: datetime

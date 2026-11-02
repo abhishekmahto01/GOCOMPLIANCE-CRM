@@ -145,23 +145,29 @@ def check_conversation_access(
             can_post = True
             reasons.append("Current Operations assignee")
         else:
-            try:
-                ops_ctx = permissions.resolve_data_scope_context(session, user, "OPERATIONS")
-            except permissions.PermissionDeniedError:
+            from app.services.operation_service import is_operations_lead_or_manager
+            if is_operations_lead_or_manager(session, user):
+                can_read = True
+                can_post = True
+                reasons.append("Operations Lead / Coordinator oversight")
+            else:
                 try:
-                    ops_ctx = permissions.resolve_data_scope_context(session, user, "OPERATION_ALL_TASKS")
+                    ops_ctx = permissions.resolve_data_scope_context(session, user, "OPERATIONS")
                 except permissions.PermissionDeniedError:
-                    ops_ctx = None
+                    try:
+                        ops_ctx = permissions.resolve_data_scope_context(session, user, "OPERATION_ALL_TASKS")
+                    except permissions.PermissionDeniedError:
+                        ops_ctx = None
 
-            if ops_ctx:
-                if ops_ctx.scope in ("ALL", "COMPANY", "DEPARTMENT"):
-                    can_read = True
-                    can_post = True
-                    reasons.append("Operations Manager / Team Lead scope")
-                elif ops_ctx.scope == "TEAM" and app.assigned_to_user_id in ops_ctx.team_user_ids:
-                    can_read = True
-                    can_post = True
-                    reasons.append("Operations Supervisor team scope")
+                if ops_ctx:
+                    if ops_ctx.scope in ("ALL", "COMPANY", "DEPARTMENT"):
+                        can_read = True
+                        can_post = True
+                        reasons.append("Operations Manager / Team Lead scope")
+                    elif ops_ctx.scope == "TEAM" and app.assigned_to_user_id in ops_ctx.team_user_ids:
+                        can_read = True
+                        can_post = True
+                        reasons.append("Operations Supervisor team scope")
 
     # 6. Accounts Module Access
     has_accounts_perm = (
@@ -297,7 +303,13 @@ def get_user_authorized_orders_subquery(session: Session, user: User):
             except permissions.PermissionDeniedError:
                 continue
 
-        if ops_ctx:
+        from app.services.operation_service import is_operations_lead_or_manager
+        if is_operations_lead_or_manager(session, user):
+            if getattr(user, "company_id", None):
+                ops_conds.append(SalesOrder.company_id == user.company_id)
+            else:
+                ops_conds.append(True)
+        elif ops_ctx:
             if ops_ctx.scope in ("ALL", "COMPANY", "DEPARTMENT"):
                 ops_conds.append(SalesOrder.company_id == user.company_id)
             elif ops_ctx.scope == "TEAM" and ops_ctx.team_user_ids:

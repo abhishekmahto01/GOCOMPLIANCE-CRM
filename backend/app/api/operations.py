@@ -1,13 +1,15 @@
 """FastAPI router for Operations Dashboard, Task Assignment, My Tasks, and Application Life Cycle."""
 import uuid
 from datetime import date
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, require_fully_activated_user, require_module_permission
 from app.database.session import get_db
+from app.models.department import Department
 from app.models.operation_application import OperationApplication
 from app.models.user import User
 from app.schemas.conversation import ConversationMessageCreate
@@ -252,6 +254,13 @@ def assign_application_task(
     description="Reassign an active task to another employee with mandatory audit reason.",
     dependencies=[Depends(require_module_permission("OPERATIONS", "reassign"))],
 )
+@router.put(
+    "/tasks/{application_id}/reassign",
+    response_model=OperationApplicationDetailRead,
+    status_code=status.HTTP_200_OK,
+    summary="Reassign Task to Different Employee (PUT)",
+    dependencies=[Depends(require_module_permission("OPERATIONS", "reassign"))],
+)
 def reassign_application_task(
     application_id: uuid.UUID,
     payload: TaskReassignRequest,
@@ -283,6 +292,71 @@ def reassign_application_task(
     except permissions.PermissionDeniedError as e:
         session.rollback()
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.patch(
+    "/tasks/{application_id}",
+    response_model=OperationApplicationDetailRead,
+    status_code=status.HTTP_200_OK,
+    summary="Update Application Task (PATCH)",
+    description="Update task fields while ensuring department_id and relational integrity are preserved.",
+    dependencies=[Depends(require_module_permission("OPERATIONS", "edit"))],
+)
+def update_application_task_patch(
+    application_id: uuid.UUID,
+    payload: Dict[str, Any] = Body(...),
+    current_user: User = Depends(require_fully_activated_user),
+    session: Session = Depends(get_db),
+) -> OperationApplicationDetailRead:
+    try:
+        app = session.get(OperationApplication, application_id)
+        if not app or app.deleted_at is not None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Operation application '{application_id}' not found.")
+
+        new_assignee = payload.get("new_assignee_user_id") or payload.get("assigned_to_user_id")
+        if new_assignee and str(new_assignee) != str(app.assigned_to_user_id):
+            reason = payload.get("reason") or "Task reassignment via update"
+            operation_service.reassign_task(
+                session=session,
+                application_id=application_id,
+                new_assignee_user_id=uuid.UUID(str(new_assignee)),
+                reason=reason,
+                reassigned_by=current_user,
+                priority=payload.get("priority", app.priority),
+                target_due_date=payload.get("target_due_date", app.target_due_date),
+            )
+        else:
+            if "priority" in payload and payload["priority"]:
+                app.priority = payload["priority"]
+            if "target_due_date" in payload:
+                app.target_due_date = payload["target_due_date"]
+            if "notes" in payload or "assignment_notes" in payload:
+                app.assignment_notes = payload.get("notes") or payload.get("assignment_notes")
+
+            if getattr(app, "department_id", None) is None:
+                dept = session.execute(
+                    select(Department.department_id).where(
+                        Department.department_code.in_(["OPERATIONS", "OP", "OPS"])
+                    )
+                ).scalar_one_or_none()
+                if dept:
+                    app.department_id = dept
+
+        session.commit()
+        return operation_service.get_operation_application_detail(
+            session=session,
+            application_id=application_id,
+            user=current_user,
+        )
+    except HTTPException:
+        session.rollback()
+        raise
+    except (ValueError, operation_service.AssignmentAuthorizationError) as e:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         session.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

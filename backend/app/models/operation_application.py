@@ -21,6 +21,7 @@ from app.database.base import Base
 if TYPE_CHECKING:
     from app.models.client import ClientMaster
     from app.models.company import Company
+    from app.models.department import Department
     from app.models.sales_order import SalesOrder
     from app.models.service import ServiceMaster
     from app.models.user import User
@@ -105,6 +106,18 @@ class OperationApplication(Base):
         nullable=False,
         index=True,
         comment="Foreign key referencing service_master.service_id",
+    )
+
+    department_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "department_master.department_id",
+            ondelete="SET NULL",
+            name="fk_op_app_department_id",
+        ),
+        nullable=True,
+        index=True,
+        comment="Foreign key referencing department_master.department_id (Operations department)",
     )
 
     assigned_to_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
@@ -231,6 +244,11 @@ class OperationApplication(Base):
     service: Mapped["ServiceMaster"] = relationship(
         "ServiceMaster",
         back_populates="applications",
+    )
+
+    department: Mapped[Optional["Department"]] = relationship(
+        "Department",
+        foreign_keys=[department_id],
     )
 
     assigned_to: Mapped[Optional["User"]] = relationship(
