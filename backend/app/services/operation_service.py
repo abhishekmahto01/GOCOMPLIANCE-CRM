@@ -125,6 +125,33 @@ def _to_remark_read(remark: OperationRemark) -> OperationRemarkRead:
     )
 
 
+def format_inr(value: Any) -> str:
+    """Format numeric or Decimal amount to Indian Rupee representation (e.g. ₹4,80,000)."""
+    if value is None:
+        return "₹0"
+    try:
+        val_int = int(round(float(value)))
+    except Exception:
+        return "₹0"
+    if val_int == 0:
+        return "₹0"
+    is_neg = val_int < 0
+    s = str(abs(val_int))
+    if len(s) <= 3:
+        formatted = s
+    else:
+        last3 = s[-3:]
+        rest = s[:-3]
+        groups = []
+        while len(rest) > 2:
+            groups.insert(0, rest[-2:])
+            rest = rest[:-2]
+        if rest:
+            groups.insert(0, rest)
+        formatted = ",".join(groups) + "," + last3
+    return f"-₹{formatted}" if is_neg else f"₹{formatted}"
+
+
 def _to_application_read(app: OperationApplication) -> OperationApplicationRead:
     """Convert an OperationApplication ORM instance into OperationApplicationRead schema."""
     today = date.today()
@@ -188,6 +215,18 @@ def _to_application_read(app: OperationApplication) -> OperationApplicationRead:
 
     order_location = app.sales_order.location if app.sales_order else None
 
+    govt_fees_val = Decimal(str(app.sales_order.govt_fees)) if (app.sales_order and app.sales_order.govt_fees is not None) else Decimal("0.00")
+    formatted_govt_fees = format_inr(govt_fees_val)
+    last_fees_updated_by = None
+    last_fees_updated_at = None
+    if hasattr(app, "activity_logs") and app.activity_logs:
+        fee_logs = [log for log in app.activity_logs if log.action_type == "GOVT_FEES_UPDATE"]
+        if fee_logs:
+            latest_fee_log = max(fee_logs, key=lambda l: l.created_at)
+            if latest_fee_log.actor:
+                last_fees_updated_by = f"{latest_fee_log.actor.first_name} {latest_fee_log.actor.last_name}".strip()
+            last_fees_updated_at = latest_fee_log.created_at
+
     return OperationApplicationRead(
         application_id=app.application_id,
         application_number=app.application_number,
@@ -227,6 +266,10 @@ def _to_application_read(app: OperationApplication) -> OperationApplicationRead:
         company_code=app.company.company_code if app.company else (app.sales_order.company.company_code if app.sales_order and app.sales_order.company else None),
         department_id=getattr(app, "department_id", None),
         department_name=app.department.department_name if hasattr(app, "department") and app.department else "Operations",
+        govt_fees=govt_fees_val,
+        formatted_govt_fees=formatted_govt_fees,
+        last_fees_updated_by=last_fees_updated_by,
+        last_fees_updated_at=last_fees_updated_at,
         latest_remark=latest_remark,
         created_at=app.created_at,
         updated_at=app.updated_at,
@@ -1428,4 +1471,131 @@ def get_operation_remarks(
     """Retrieve all operations remarks for an application in chronological order."""
     app_detail = get_operation_application_detail(session, application_id, user)
     return app_detail.remarks
+
+
+def update_task_govt_fees(
+    session: Session,
+    application_id: uuid.UUID,
+    user: User,
+    govt_fees: Any,
+    notes: Optional[str] = None,
+) -> OperationApplicationDetailRead:
+    """Enter or update statutory government fees on an Operations compliance application."""
+    stmt = (
+        select(OperationApplication)
+        .options(
+            joinedload(OperationApplication.sales_order),
+            joinedload(OperationApplication.company),
+            joinedload(OperationApplication.client),
+            joinedload(OperationApplication.service),
+            joinedload(OperationApplication.assigned_to),
+            joinedload(OperationApplication.assigned_by),
+            selectinload(OperationApplication.activity_logs).joinedload(ApplicationActivityLog.actor),
+        )
+        .where(OperationApplication.application_id == application_id)
+    )
+    app = session.execute(stmt).scalar_one_or_none()
+    if not app or app.deleted_at is not None:
+        raise ApplicationNotFoundError(f"Operation application with ID '{application_id}' not found.")
+
+    if not app.sales_order:
+        raise ValueError(f"Application '{app.application_number}' has no linked sales order.")
+
+    is_super = (
+        getattr(user, "is_super_admin", False)
+        or getattr(user, "role_type", "") == "SUPER_ADMIN"
+        or user.employee_code == "CG0001"
+    )
+
+    # 1. Company Scope Check
+    if not is_super:
+        scope_ctx = permissions.resolve_data_scope_context(session, user, "OPERATIONS")
+        if scope_ctx.scope != "ALL" and app.company_id != user.company_id:
+            raise permissions.PermissionDeniedError(
+                "Cross-company access denied: You cannot modify tasks belonging to a different company."
+            )
+
+    # 2. Sales Department Check: Sales employees can view but NOT modify fees through Operations workflow
+    is_sales_dept = False
+    if user.department:
+        d_code = (user.department.department_code or "").upper()
+        d_name = (user.department.department_name or "").lower()
+        if "sales" in d_name or d_code in ("SALES", "SL"):
+            is_sales_dept = True
+    user_role_str = str(getattr(user, "role", "") or "").lower()
+    if "sales" in user_role_str:
+        is_sales_dept = True
+
+    if is_sales_dept and not is_super:
+        raise permissions.PermissionDeniedError(
+            "Sales department employees are not permitted to modify Government Fees through the Operations workflow."
+        )
+
+    # 3. Role / Assignment Authorization
+    is_ops_lead = is_operations_lead_or_manager(session, user)
+    is_assigned = (app.assigned_to_user_id == user.user_id)
+
+    if not (is_super or is_ops_lead or is_assigned):
+        raise permissions.PermissionDeniedError(
+            "You are not authorized to modify Government Fees for this task. "
+            "Only the assigned Operations employee or Operations Lead/Manager may update fees."
+        )
+
+    # 4. Data Validation
+    if govt_fees is None:
+        raise ValueError("Government fees amount cannot be empty.")
+
+    if isinstance(govt_fees, str):
+        v_clean = govt_fees.strip().replace(",", "").replace("₹", "")
+        if not v_clean:
+            raise ValueError("Government fees amount cannot be empty.")
+        try:
+            parsed_dec = Decimal(v_clean)
+        except Exception:
+            raise ValueError("Government fees must be a valid numeric amount.")
+    elif isinstance(govt_fees, (int, float)):
+        import math
+        if math.isnan(govt_fees) or math.isinf(govt_fees):
+            raise ValueError("Government fees must be a valid numeric amount.")
+        parsed_dec = Decimal(str(govt_fees))
+    elif isinstance(govt_fees, Decimal):
+        parsed_dec = govt_fees
+    else:
+        raise ValueError("Government fees must be a valid numeric amount.")
+
+    if parsed_dec < Decimal("0.00"):
+        raise ValueError("Government fees cannot be negative.")
+
+    new_g_fees = parsed_dec.quantize(Decimal("0.01"))
+    old_g_fees = Decimal(str(app.sales_order.govt_fees or "0.00"))
+
+    # Update SalesOrder
+    app.sales_order.govt_fees = new_g_fees
+    order_val = Decimal(str(app.sales_order.order_value or "0.00"))
+    incidental = Decimal(str(app.sales_order.incidental_cost or "0.00"))
+    app.sales_order.profit_amount = order_val - new_g_fees - incidental
+
+    now_utc = datetime.now(timezone.utc)
+    app.updated_at = now_utc
+    app.sales_order.updated_at = now_utc
+
+    # Audit log
+    activity = ApplicationActivityLog(
+        application_id=app.application_id,
+        actor_user_id=user.user_id,
+        action_type="GOVT_FEES_UPDATE",
+        old_value=f"{old_g_fees:.2f}",
+        new_value=f"{new_g_fees:.2f}",
+        comment=(
+            f"Government fees updated from {format_inr(old_g_fees)} to {format_inr(new_g_fees)}"
+            + (f" - Note: {notes.strip()}" if notes and notes.strip() else "")
+        ),
+        created_at=now_utc,
+    )
+    session.add(activity)
+    session.flush()
+    session.expire(app)
+
+    return get_operation_application_detail(session, application_id, user)
+
 

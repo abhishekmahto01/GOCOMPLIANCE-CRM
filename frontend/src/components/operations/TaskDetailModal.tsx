@@ -20,6 +20,8 @@ import {
   AlertTriangle,
   MapPin,
   Sparkles,
+  Landmark,
+  Edit3,
 } from 'lucide-react';
 import type {
   AssigneeOption,
@@ -32,9 +34,17 @@ import {
   updateApplicationDocStatusApi,
   getOperationsAssigneesApi,
   addOperationRemarkApi,
+  updateTaskGovtFeesApi,
 } from '../../api/operations';
 
 import { useAuth } from '../../context/AuthContext';
+
+function formatInr(val: number | string | null | undefined): string {
+  if (val === null || val === undefined || val === '') return '₹0';
+  const num = typeof val === 'string' ? parseFloat(val) : val;
+  if (isNaN(num)) return '₹0';
+  return '₹' + num.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+}
 
 export interface TaskDetailModalProps {
   applicationId: string | null;
@@ -82,12 +92,23 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const [rejectingDocId, setRejectingDocId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
 
+  // Government Fees state
+  const [isEditingGovtFees, setIsEditingGovtFees] = useState(false);
+  const [govtFeesInput, setGovtFeesInput] = useState('');
+  const [govtFeesNotes, setGovtFeesNotes] = useState('');
+  const [isSavingGovtFees, setIsSavingGovtFees] = useState(false);
+  const [govtFeesError, setGovtFeesError] = useState<string | null>(null);
+  const [govtFeesSuccess, setGovtFeesSuccess] = useState<string | null>(null);
+
   const loadDetail = async (appId: string) => {
     try {
       setLoading(true);
       setError(null);
       const data = await getOperationTaskDetailApi(appId);
       setTaskDetail(data);
+      if (data?.govt_fees !== undefined) {
+        setGovtFeesInput(String(data.govt_fees));
+      }
     } catch (err: any) {
       setError(err?.response?.data?.detail || 'Failed to load task details.');
     } finally {
@@ -114,6 +135,10 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       setNewRemarkText('');
       setRemarkError(null);
       setRemarkSuccess(null);
+      setIsEditingGovtFees(false);
+      setGovtFeesError(null);
+      setGovtFeesSuccess(null);
+      setGovtFeesNotes('');
     } else {
       setTaskDetail(null);
     }
@@ -125,8 +150,60 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const deptName = (user?.department_name || user?.department?.name || '').toLowerCase();
   const desigName = (user?.designation_name || user?.designation?.name || '').toLowerCase();
   const isAdminOrDirector = isSuperAdmin || deptName.includes('admin') || desigName.includes('director') || desigName.includes('admin') || desigName.includes('manager') || desigName.includes('head');
+  const userEmail = (user?.official_email || user?.personal_email || '').toLowerCase();
+  const isOperationsLead = isSuperAdmin || isAdminOrDirector || (user?.first_name || '').toLowerCase().includes('mansi') || userEmail.includes('mansi') || (deptName.includes('operat') && (desigName.includes('lead') || desigName.includes('manager') || desigName.includes('head') || desigName.includes('coordinator')));
+  const isSalesEmployee = (deptName.includes('sales') || (user?.department_code || '').toUpperCase().includes('SALES')) && !isSuperAdmin;
   const isCancelled = taskDetail?.application_status === 'CANCELLED';
   const canAddRemark = (isAssignee || isAdminOrDirector) && !isCancelled;
+  const canEditGovtFees = !isCancelled && !isSalesEmployee && (isAssignee || isOperationsLead);
+
+  const handleSaveGovtFees = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!taskDetail) return;
+
+    const trimmed = govtFeesInput.trim();
+    if (!trimmed) {
+      setGovtFeesError('Government fees amount cannot be empty.');
+      return;
+    }
+    const num = Number(trimmed);
+    if (isNaN(num)) {
+      setGovtFeesError('Please enter a valid numeric amount.');
+      return;
+    }
+    if (num < 0) {
+      setGovtFeesError('Government fees cannot be negative.');
+      return;
+    }
+
+    try {
+      setIsSavingGovtFees(true);
+      setGovtFeesError(null);
+      setGovtFeesSuccess(null);
+
+      const updated = await updateTaskGovtFeesApi(taskDetail.application_id, {
+        govt_fees: num,
+        notes: govtFeesNotes.trim() || undefined,
+      });
+
+      setTaskDetail(updated);
+      setGovtFeesInput(String(updated.govt_fees ?? num));
+      setIsEditingGovtFees(false);
+      setGovtFeesSuccess(`Government fees updated to ${formatInr(num)}.`);
+      if (onShowToast) {
+        onShowToast('success', 'Govt Fees Updated', `Government fees updated to ${formatInr(num)}.`);
+      }
+      if (onRefresh) onRefresh();
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || 'Failed to update Government Fees.';
+      setGovtFeesError(msg);
+      if (onShowToast) {
+        onShowToast('error', 'Update Failed', msg);
+      }
+    } finally {
+      setIsSavingGovtFees(false);
+    }
+  };
 
   const handleAddRemark = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -565,6 +642,137 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                         </div>
                       </div>
                     </div>
+                  </div>
+
+                  {/* Government Statutory Fees Card */}
+                  <div className="p-4 rounded-xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200/80 dark:border-purple-900/60 space-y-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-purple-900 dark:text-purple-200 flex items-center gap-2">
+                        <Landmark className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                        Government Statutory Fees
+                      </h3>
+                      {canEditGovtFees && !isEditingGovtFees && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setGovtFeesInput(taskDetail.govt_fees !== undefined ? String(taskDetail.govt_fees) : '0');
+                            setGovtFeesNotes('');
+                            setGovtFeesError(null);
+                            setGovtFeesSuccess(null);
+                            setIsEditingGovtFees(true);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-purple-600 hover:bg-purple-700 text-white shadow-xs transition cursor-pointer"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          <span>{taskDetail.govt_fees ? 'Edit Fees' : 'Enter Fees'}</span>
+                        </button>
+                      )}
+                      {isSalesEmployee && (
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                          Read-only (Sales Department)
+                        </span>
+                      )}
+                    </div>
+
+                    {govtFeesSuccess && (
+                      <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-300 text-xs flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 shrink-0" />
+                        <span>{govtFeesSuccess}</span>
+                      </div>
+                    )}
+
+                    {govtFeesError && (
+                      <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 text-xs flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 shrink-0" />
+                        <span>{govtFeesError}</span>
+                      </div>
+                    )}
+
+                    {!isEditingGovtFees ? (
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-1">
+                        <div>
+                          <div className="text-2xl font-black text-purple-700 dark:text-purple-300">
+                            {taskDetail.formatted_govt_fees || formatInr(taskDetail.govt_fees || 0)}
+                          </div>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                            Statutory filing & regulatory fees incurred during application fulfillment.
+                          </p>
+                        </div>
+
+                        {(taskDetail.last_fees_updated_by || taskDetail.last_fees_updated_at) && (
+                          <div className="text-left sm:text-right text-[11px] text-slate-500 dark:text-slate-400 space-y-0.5 bg-white/70 dark:bg-slate-900/60 px-3 py-2 rounded-lg border border-purple-100 dark:border-purple-900/40">
+                            {taskDetail.last_fees_updated_by && (
+                              <div>
+                                Last updated by: <strong className="text-slate-800 dark:text-slate-200">{taskDetail.last_fees_updated_by}</strong>
+                              </div>
+                            )}
+                            {taskDetail.last_fees_updated_at && (
+                              <div>
+                                {new Date(taskDetail.last_fees_updated_at).toLocaleString()}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <form onSubmit={handleSaveGovtFees} className="space-y-3 pt-1">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label htmlFor="govt_fees_input" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                              Government Fees (₹) *
+                            </label>
+                            <input
+                              id="govt_fees_input"
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={govtFeesInput}
+                              onChange={(e) => {
+                                setGovtFeesInput(e.target.value);
+                                if (govtFeesError) setGovtFeesError(null);
+                              }}
+                              placeholder="0.00"
+                              className="w-full px-3 py-2 text-xs rounded-xl border border-purple-300 dark:border-purple-700 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-purple-500 outline-hidden font-bold"
+                              autoFocus
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor="govt_fees_notes" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                              Update Note / Challan Ref (Optional)
+                            </label>
+                            <input
+                              id="govt_fees_notes"
+                              type="text"
+                              value={govtFeesNotes}
+                              onChange={(e) => setGovtFeesNotes(e.target.value)}
+                              placeholder="e.g. Paid on MCA / DGFT portal..."
+                              className="w-full px-3 py-2 text-xs rounded-xl border border-purple-300 dark:border-purple-700 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-purple-500 outline-hidden"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            disabled={isSavingGovtFees}
+                            onClick={() => {
+                              setIsEditingGovtFees(false);
+                              setGovtFeesError(null);
+                            }}
+                            className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={isSavingGovtFees}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-xs transition disabled:opacity-50"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <span>{isSavingGovtFees ? 'Saving...' : 'Save Fees'}</span>
+                          </button>
+                        </div>
+                      </form>
+                    )}
                   </div>
 
                   {/* Highlighted Latest Remark Banner (if exists) */}

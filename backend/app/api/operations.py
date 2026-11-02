@@ -24,6 +24,7 @@ from app.schemas.operation_application import (
     OperationsDashboardResponse,
     OperationsTaskListResponse,
     TaskAssignRequest,
+    TaskGovtFeesUpdateRequest,
     TaskReassignRequest,
 )
 from app.schemas.sales_order import SalesEmployeeOption
@@ -316,6 +317,17 @@ def update_application_task_patch(
         if not app or app.deleted_at is not None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Operation application '{application_id}' not found.")
 
+        if "govt_fees" in payload or "government_fees" in payload:
+            fee_raw = payload.get("govt_fees") if "govt_fees" in payload else payload.get("government_fees")
+            fee_notes = payload.get("fee_notes") or payload.get("notes")
+            operation_service.update_task_govt_fees(
+                session=session,
+                application_id=application_id,
+                user=current_user,
+                govt_fees=fee_raw,
+                notes=fee_notes,
+            )
+
         new_assignee = payload.get("new_assignee_user_id") or payload.get("assigned_to_user_id")
         if new_assignee and str(new_assignee) != str(app.assigned_to_user_id):
             reason = payload.get("reason") or "Task reassignment via update"
@@ -360,6 +372,52 @@ def update_application_task_patch(
     except Exception as e:
         session.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.post(
+    "/tasks/{application_id}/govt-fees",
+    response_model=OperationApplicationDetailRead,
+    status_code=status.HTTP_200_OK,
+    summary="Update Government Fees for an Operations Task",
+    description="Enter or update statutory government fees incurred during application filing with audit history.",
+    dependencies=[Depends(require_module_permission("OPERATIONS", "edit"))],
+)
+@router.put(
+    "/tasks/{application_id}/govt-fees",
+    response_model=OperationApplicationDetailRead,
+    status_code=status.HTTP_200_OK,
+    summary="Update Government Fees for an Operations Task (PUT)",
+    dependencies=[Depends(require_module_permission("OPERATIONS", "edit"))],
+)
+def update_task_govt_fees_endpoint(
+    application_id: uuid.UUID,
+    payload: TaskGovtFeesUpdateRequest,
+    current_user: User = Depends(require_fully_activated_user),
+    session: Session = Depends(get_db),
+) -> OperationApplicationDetailRead:
+    try:
+        updated_detail = operation_service.update_task_govt_fees(
+            session=session,
+            application_id=application_id,
+            user=current_user,
+            govt_fees=payload.govt_fees,
+            notes=payload.notes,
+        )
+        session.commit()
+        return updated_detail
+    except operation_service.ApplicationNotFoundError as e:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except permissions.PermissionDeniedError as e:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except ValueError as e:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
 
 
 @router.post(

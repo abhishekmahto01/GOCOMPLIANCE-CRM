@@ -273,7 +273,7 @@ start_services() {
     # Start backend
     (
         cd "$REPO_ROOT/backend"
-        exec .venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+        exec .venv/bin/python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
     ) > >(awk '{ print "[backend]  " $0; fflush(); }') 2>&1 &
     BACKEND_PID=$!
 

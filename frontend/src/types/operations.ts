@@ -104,9 +104,18 @@ export interface OperationApplication {
   is_due_soon: boolean;
   order_date?: string | null;
   formatted_order_date?: string | null;
+  govt_fees?: number;
+  formatted_govt_fees?: string;
+  last_fees_updated_by?: string | null;
+  last_fees_updated_at?: string | null;
   latest_remark?: OperationRemark | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface TaskGovtFeesUpdateRequest {
+  govt_fees: number;
+  notes?: string;
 }
 
 export interface OperationApplicationDetail extends OperationApplication {

@@ -45,49 +45,50 @@ export const AdminLayout: React.FC = () => {
 
   // Compute Breadcrumbs from pathname
   const getBreadcrumbs = (pathname: string): BreadcrumbItem[] => {
-    if (pathname === '/admin/employees') {
+    const normalized = pathname.startsWith('/admin') ? pathname : `/admin${pathname === '/' ? '' : pathname}`;
+    if (normalized === '/admin/employees') {
       return [{ label: 'Administration', href: '/admin' }, { label: 'Employee Directory' }];
     }
-    if (pathname === '/admin/employees/new') {
+    if (normalized === '/admin/employees/new') {
       return [
         { label: 'Administration', href: '/admin' },
         { label: 'Employee Directory', href: '/admin/employees' },
         { label: 'Add Employee' },
       ];
     }
-    if (pathname.endsWith('/edit')) {
+    if (normalized.endsWith('/edit')) {
       return [
         { label: 'Administration', href: '/admin' },
         { label: 'Employee Directory', href: '/admin/employees' },
         { label: 'Edit Employee' },
       ];
     }
-    if (pathname.startsWith('/admin/employees/')) {
+    if (normalized.startsWith('/admin/employees/')) {
       return [
         { label: 'Administration', href: '/admin' },
         { label: 'Employee Directory', href: '/admin/employees' },
         { label: 'Employee Profile' },
       ];
     }
-    if (pathname === '/admin/access' || pathname === '/admin/permissions') {
+    if (normalized === '/admin/access' || normalized === '/admin/permissions') {
       return [{ label: 'Administration', href: '/admin' }, { label: 'User Permissions' }];
     }
-    if (pathname === '/admin/account-activation') {
+    if (normalized === '/admin/account-activation') {
       return [{ label: 'Administration', href: '/admin' }, { label: 'Account Activation' }];
     }
-    if (pathname === '/admin/companies' || pathname === '/admin/company-master') {
+    if (normalized === '/admin/companies' || normalized === '/admin/company-master') {
       return [{ label: 'Administration', href: '/admin' }, { label: 'Company Master' }];
     }
-    if (pathname === '/admin/departments' || pathname === '/admin/department-master') {
+    if (normalized === '/admin/departments' || normalized === '/admin/department-master') {
       return [{ label: 'Administration', href: '/admin' }, { label: 'Department Master' }];
     }
-    if (pathname === '/admin/designations' || pathname === '/admin/designation-master') {
+    if (normalized === '/admin/designations' || normalized === '/admin/designation-master') {
       return [{ label: 'Administration', href: '/admin' }, { label: 'Designation Master' }];
     }
-    if (pathname === '/admin/licenses' || pathname === '/admin/license-master' || pathname === '/admin/services') {
+    if (normalized === '/admin/licenses' || normalized === '/admin/license-master' || normalized === '/admin/services') {
       return [{ label: 'Administration', href: '/admin' }, { label: 'License Master' }];
     }
-    if (pathname === '/admin/sources' || pathname === '/admin/source-master') {
+    if (normalized === '/admin/sources' || normalized === '/admin/source-master') {
       return [{ label: 'Administration', href: '/admin' }, { label: 'Source Master' }];
     }
     return [{ label: 'Administration' }];

@@ -6,6 +6,7 @@ import { LiveClock } from './LiveClock';
 import { NotificationBell } from './NotificationBell';
 import { LogOut, ChevronRight, Home, KeyRound, Menu } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { getCrossModuleUrl } from '../../utils/routeResolver';
 
 export interface BreadcrumbItem {
   label: string;
@@ -39,17 +40,34 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
   const username = session.username || user?.employee_code || 'Admin';
   const initial = username.charAt(0).toUpperCase() || 'A';
   const isDark = theme === 'dark';
+  const workflowHome = getCrossModuleUrl('WORKFLOW');
+  const isWorkflowExternal = workflowHome.startsWith('http');
+
+  const renderHomeLink = (content: React.ReactNode, className: string, title?: string) => {
+    if (isWorkflowExternal) {
+      return (
+        <a href={workflowHome} className={className} title={title}>
+          {content}
+        </a>
+      );
+    }
+    return (
+      <Link to={workflowHome} className={className} title={title}>
+        {content}
+      </Link>
+    );
+  };
 
   return (
     <header className="w-full bg-white/80 dark:bg-slate-900/85 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800 px-4 sm:px-6 lg:px-8 py-3 transition-colors duration-300">
       <div className="w-full flex flex-col md:flex-row items-center justify-between gap-3">
         {/* Left: Brand Identity + Sidebar Toggle + Breadcrumbs */}
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-4 self-start md:self-center">
-          {showLogo && (
-            <Link to="/dashboard" className="shrink-0">
-              <BrandLogo showTagline={false} theme={isDark ? 'light' : 'dark'} size="sm" />
-            </Link>
-          )}
+          {showLogo &&
+            renderHomeLink(
+              <BrandLogo showTagline={false} theme={isDark ? 'light' : 'dark'} size="sm" />,
+              'shrink-0'
+            )}
 
           {onOpenMobileMenu && (
             <button
@@ -76,14 +94,14 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
 
           {breadcrumbs.length > 0 && (
             <nav className="flex items-center gap-1.5 text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">
-              <Link
-                to="/dashboard"
-                className="hover:text-blue-600 dark:hover:text-blue-400 flex items-center gap-1 transition"
-                title="Main Dashboard"
-              >
-                <Home className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Dashboard</span>
-              </Link>
+              {renderHomeLink(
+                <>
+                  <Home className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Dashboard</span>
+                </>,
+                'hover:text-blue-600 dark:hover:text-blue-400 flex items-center gap-1 transition',
+                'Main Dashboard'
+              )}
               {breadcrumbs.map((crumb, idx) => {
                 const isLast = idx === breadcrumbs.length - 1;
                 return (

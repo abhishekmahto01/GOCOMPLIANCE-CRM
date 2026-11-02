@@ -299,6 +299,18 @@ class OperationApplication(Base):
         order_by="OperationRemark.created_at.asc()",
     )
 
+    @property
+    def govt_fees(self) -> float:
+        """Government statutory / filing fees inherited from linked sales order."""
+        if self.sales_order and self.sales_order.govt_fees is not None:
+            return float(self.sales_order.govt_fees)
+        return 0.0
+
+    @govt_fees.setter
+    def govt_fees(self, value: float) -> None:
+        if self.sales_order:
+            self.sales_order.govt_fees = value
+
     def __repr__(self) -> str:
         return (
             f"<OperationApplication(number='{self.application_number}', "

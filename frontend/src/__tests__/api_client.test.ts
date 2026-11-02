@@ -18,6 +18,8 @@ describe('Frontend API Client & Error Handling', () => {
       expect(getApiBaseUrl('')).toBe('/api');
       expect(getApiBaseUrl('   ')).toBe('/api');
       expect(getApiBaseUrl('/')).toBe('/api');
+      expect(getApiBaseUrl('/api')).toBe('/api');
+      expect(getApiBaseUrl('/api/')).toBe('/api');
     });
 
     it('resolves to /api when envBaseUrl is undefined', () => {
@@ -27,6 +29,8 @@ describe('Frontend API Client & Error Handling', () => {
     it('resolves to custom backend with /api appended when non-empty URL provided', () => {
       expect(getApiBaseUrl('http://localhost:8000')).toBe('http://localhost:8000/api');
       expect(getApiBaseUrl('http://localhost:8000/')).toBe('http://localhost:8000/api');
+      expect(getApiBaseUrl('http://localhost:8000/api')).toBe('http://localhost:8000/api');
+      expect(getApiBaseUrl('http://127.0.0.1:8000')).toBe('http://127.0.0.1:8000/api');
       expect(getApiBaseUrl('https://api.gocompliances.in')).toBe('https://api.gocompliances.in/api');
       expect(getApiBaseUrl('https://api.gocompliances.in/')).toBe('https://api.gocompliances.in/api');
     });

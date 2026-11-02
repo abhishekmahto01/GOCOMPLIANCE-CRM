@@ -93,17 +93,33 @@ class Settings(BaseSettings):
     @field_validator("CORS_ORIGINS", mode="after")
     @classmethod
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
+        origins: List[str] = []
         if isinstance(v, str):
             if v.startswith("[") and v.endswith("]"):
                 import json
                 try:
-                    return json.loads(v)
+                    origins = json.loads(v)
                 except Exception:
-                    pass
-            return [i.strip() for i in v.split(",") if i.strip()]
+                    origins = []
+            else:
+                origins = [i.strip() for i in v.split(",") if i.strip()]
         elif isinstance(v, list):
-            return v
-        return [str(v)]
+            origins = [str(i) for i in v]
+        else:
+            origins = [str(v)]
+
+        # Include local development origins so localhost and 127.0.0.1 never fail with CORS
+        dev_origins = [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:8001",
+            "http://127.0.0.1:8001",
+        ]
+        for dev_origin in dev_origins:
+            if dev_origin not in origins:
+                origins.append(dev_origin)
+
+        return origins
 
     @property
     def masked_database_url(self) -> str:

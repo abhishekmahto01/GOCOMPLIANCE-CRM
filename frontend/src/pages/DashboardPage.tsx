@@ -7,6 +7,7 @@ import { DashboardHeader } from '../components/dashboard/DashboardHeader';
 import { ModuleCard, type ModuleData } from '../components/dashboard/ModuleCard';
 import { ChangePasswordModal } from '../components/dashboard/ChangePasswordModal';
 import { ToastContainer, type ToastMessage } from '../components/ui/toast';
+import { getCrossModuleUrl } from '../utils/routeResolver';
 
 const MODULES_DATA: ModuleData[] = [
   {
@@ -75,7 +76,12 @@ export const DashboardPage: React.FC = () => {
   const handleModuleClick = (selectedModule: ModuleData) => {
     if (selectedModule.id === 'admin') {
       if (hasModuleAccess('ADMIN')) {
-        navigate('/admin');
+        const dest = getCrossModuleUrl('ADMIN');
+        if (dest.startsWith('http')) {
+          window.location.href = dest;
+        } else {
+          navigate(dest);
+        }
       } else {
         addToast(
           'error',

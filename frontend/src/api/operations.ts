@@ -228,3 +228,17 @@ export async function getOperationRemarksApi(
   return response.data;
 }
 
+/**
+ * Update government statutory / filing fees for an Operations task.
+ */
+export async function updateTaskGovtFeesApi(
+  applicationId: string,
+  data: { govt_fees: number; notes?: string }
+): Promise<OperationApplicationDetail> {
+  const response = await apiClient.post<OperationApplicationDetail>(
+    `/operations/tasks/${applicationId}/govt-fees`,
+    data
+  );
+  return response.data;
+}
+

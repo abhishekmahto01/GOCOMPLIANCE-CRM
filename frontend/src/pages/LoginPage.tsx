@@ -12,6 +12,7 @@ import { Mail, Phone, Building2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { extractErrorMessage } from '../api/client';
+import { resolveActiveModule } from '../utils/routeResolver';
 
 export const LoginPage: React.FC = () => {
   const { isAuthenticated, mustChangePassword, login } = useAuth();
@@ -30,13 +31,19 @@ export const LoginPage: React.FC = () => {
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSubmitted, setForgotSubmitted] = useState(false);
 
+  const getPostLoginDestination = () => {
+    const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+    const { module } = resolveActiveModule(hostname, window.location.pathname);
+    return module === 'ADMIN' ? '/admin' : '/dashboard';
+  };
+
   // Redirect already authenticated users who manually visit /login (when not actively transitioning)
   useEffect(() => {
     if (isAuthenticated && !showTransition) {
       if (mustChangePassword) {
         navigate('/change-password-required', { replace: true });
       } else {
-        navigate('/dashboard', { replace: true });
+        navigate(getPostLoginDestination(), { replace: true });
       }
     }
   }, [isAuthenticated, mustChangePassword, showTransition, navigate]);
@@ -78,7 +85,7 @@ export const LoginPage: React.FC = () => {
 
   // Called when paper airplane transition completes (~1650ms)
   const handleTransitionComplete = () => {
-    navigate('/dashboard', { replace: true });
+    navigate(getPostLoginDestination(), { replace: true });
   };
 
   // Forgot password submit handler

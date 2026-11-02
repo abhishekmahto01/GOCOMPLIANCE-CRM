@@ -52,11 +52,14 @@ export function clearAuthTokens(): void {
 export function getApiBaseUrl(envBaseUrl?: string): string {
   const rawUrl = arguments.length > 0 ? envBaseUrl : import.meta.env.VITE_API_BASE_URL;
   if (typeof rawUrl === 'string') {
-    const trimmed = rawUrl.trim();
+    const trimmed = rawUrl.trim().replace(/\/+$/, '');
     if (trimmed === '' || trimmed === '/') {
       return '/api';
     }
-    return `${trimmed.replace(/\/+$/, '')}/api`;
+    if (trimmed === '/api' || trimmed.endsWith('/api')) {
+      return trimmed;
+    }
+    return `${trimmed}/api`;
   }
   return '/api';
 }

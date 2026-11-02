@@ -1,7 +1,8 @@
 """Pydantic schemas for Operations Applications, Documents, Assignments, and Status Changes."""
 import uuid
 from datetime import date, datetime
-from typing import List, Optional
+from decimal import Decimal
+from typing import Any, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -145,6 +146,10 @@ class OperationApplicationRead(BaseModel):
     company_code: Optional[str] = None
     department_id: Optional[uuid.UUID] = None
     department_name: Optional[str] = "Operations"
+    govt_fees: Decimal = Field(default=Decimal("0.00"), ge=0, description="Government statutory / filing fees in INR")
+    formatted_govt_fees: Optional[str] = "₹0"
+    last_fees_updated_by: Optional[str] = None
+    last_fees_updated_at: Optional[datetime] = None
     latest_remark: Optional[OperationRemarkRead] = None
     created_at: datetime
     updated_at: datetime
@@ -190,6 +195,41 @@ class TaskReassignRequest(BaseModel):
     priority: Optional[str] = None
     target_due_date: Optional[date] = None
     notes: Optional[str] = None
+
+
+class TaskGovtFeesUpdateRequest(BaseModel):
+    """Schema for entering or updating government fees on an operation application."""
+
+    govt_fees: Decimal = Field(..., ge=0, description="Government fees amount in INR (must be non-negative)")
+    notes: Optional[str] = Field(None, max_length=1000, description="Optional note or explanation for the fee update")
+
+    @field_validator("govt_fees", mode="before")
+    @classmethod
+    def validate_govt_fees_amount(cls, v: Any) -> Decimal:
+        if v is None:
+            raise ValueError("Government fees amount is required.")
+        if isinstance(v, str):
+            v_clean = v.strip().replace(",", "").replace("₹", "")
+            if not v_clean:
+                raise ValueError("Government fees amount cannot be empty.")
+            try:
+                dec = Decimal(v_clean)
+            except Exception:
+                raise ValueError("Government fees must be a valid numeric amount.")
+            if dec < Decimal("0.00"):
+                raise ValueError("Government fees cannot be negative.")
+            return dec.quantize(Decimal("0.01"))
+        elif isinstance(v, (int, float)):
+            if isinstance(v, float) and (v != v or v == float("inf") or v == float("-inf")):
+                raise ValueError("Government fees must be a valid numeric amount.")
+            if v < 0:
+                raise ValueError("Government fees cannot be negative.")
+            return Decimal(str(v)).quantize(Decimal("0.01"))
+        elif isinstance(v, Decimal):
+            if v < Decimal("0.00"):
+                raise ValueError("Government fees cannot be negative.")
+            return v.quantize(Decimal("0.01"))
+        raise ValueError("Government fees must be a valid numeric amount.")
 
 
 class ApplicationStatusUpdateRequest(BaseModel):

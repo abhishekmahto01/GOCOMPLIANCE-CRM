@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ChevronDown, X, ShieldAlert } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { getCrossModuleUrl } from '../../utils/routeResolver';
 import {
   TOP_NAV_ITEMS,
   ADMIN_NAV_GROUPS,
@@ -30,6 +31,11 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ isOpen, onClose }) =
     }).filter((group) => group.children.length > 0);
   }, [hasPermission]);
 
+  // Normalize current path so both /employees and /admin/employees match nav items
+  const normalizedPath = location.pathname.startsWith('/admin')
+    ? location.pathname
+    : `/admin${location.pathname === '/' ? '' : location.pathname}`;
+
   // Track expanded/collapsed state for parent groups
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
@@ -37,8 +43,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ isOpen, onClose }) =
       // Default to open if route belongs to this group or open by default
       const hasActiveChild = group.children.some(
         (c) =>
-          location.pathname === c.route ||
-          location.pathname.startsWith(`${c.route}/`)
+          normalizedPath === c.route ||
+          normalizedPath.startsWith(`${c.route}/`)
       );
       initial[group.id] = hasActiveChild || group.id === 'employee_master';
     });
@@ -50,14 +56,14 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ isOpen, onClose }) =
     ADMIN_NAV_GROUPS.forEach((group) => {
       const hasActiveChild = group.children.some(
         (c) =>
-          location.pathname === c.route ||
-          location.pathname.startsWith(`${c.route}/`)
+          normalizedPath === c.route ||
+          normalizedPath.startsWith(`${c.route}/`)
       );
       if (hasActiveChild) {
         setOpenGroups((prev) => ({ ...prev, [group.id]: true }));
       }
     });
-  }, [location.pathname]);
+  }, [normalizedPath]);
 
   // Lock background scroll when mobile drawer is open
   useEffect(() => {
@@ -79,13 +85,13 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ isOpen, onClose }) =
   };
 
   const isChildActive = (child: NavChildItem) => {
-    if (location.pathname === child.route) return true;
+    if (normalizedPath === child.route) return true;
     if (
       child.route !== '/admin' &&
-      location.pathname.startsWith(`${child.route}/`)
+      normalizedPath.startsWith(`${child.route}/`)
     ) {
       // Avoid matching /admin/employees/new as /admin/employees when on new
-      if (child.route === '/admin/employees' && location.pathname === '/admin/employees/new') {
+      if (child.route === '/admin/employees' && normalizedPath === '/admin/employees/new') {
         return false;
       }
       return true;
@@ -133,11 +139,26 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ isOpen, onClose }) =
         <div className="space-y-1">
           {TOP_NAV_ITEMS.map((item) => {
             const Icon = item.icon;
+            const dest = getCrossModuleUrl('WORKFLOW');
+            const isExternal = dest.startsWith('http');
             const isActive = location.pathname === item.route;
+            if (isExternal) {
+              return (
+                <a
+                  key={item.id}
+                  href={dest}
+                  onClick={onClose}
+                  className="flex items-center gap-2.5 px-3 py-2 rounded-xl transition font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100/80 dark:hover:bg-slate-800/70"
+                >
+                  <Icon className="w-4 h-4 shrink-0 text-slate-400" />
+                  <span>{item.title}</span>
+                </a>
+              );
+            }
             return (
               <Link
                 key={item.id}
-                to={item.route}
+                to={dest}
                 onClick={onClose}
                 className={`flex items-center gap-2.5 px-3 py-2 rounded-xl transition font-semibold ${
                   isActive
