@@ -27,6 +27,7 @@ import {
 import { TaskDetailModal } from '../../components/operations/TaskDetailModal';
 import { CompanyFilterTabs } from '../../components/common/CompanyFilterTabs';
 import { CompanyBadge } from '../../components/common/CompanyBadge';
+import { formatGovtFees } from '../../utils/formatters';
 
 export const UnassignedOrdersPage: React.FC = () => {
   const context = useOutletContext<{
@@ -331,6 +332,7 @@ export const UnassignedOrdersPage: React.FC = () => {
                   <th className="py-3.5 px-4">Client Name</th>
                   <th className="py-3.5 px-4">Location</th>
                   <th className="py-3.5 px-4">Service</th>
+                  <th className="py-3.5 px-4 whitespace-nowrap">GOVT FEES</th>
                   <th className="py-3.5 px-4">Converted By</th>
                   <th className="py-3.5 px-4">Order Date</th>
                   <th className="py-3.5 px-4 text-right">Actions</th>
@@ -374,6 +376,9 @@ export const UnassignedOrdersPage: React.FC = () => {
                     </td>
                     <td className="py-3.5 px-4 font-semibold text-slate-700 dark:text-slate-300">
                       {task.service_name}
+                    </td>
+                    <td className="py-3.5 px-4 font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                      {formatGovtFees(task.govt_fees, task.formatted_govt_fees)}
                     </td>
                     <td className="py-3.5 px-4 text-slate-500">
                       {task.salesperson_name || '—'} ({task.salesperson_code || '—'})

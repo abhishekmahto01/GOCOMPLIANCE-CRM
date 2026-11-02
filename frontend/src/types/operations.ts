@@ -105,6 +105,8 @@ export interface OperationApplication {
   order_date?: string | null;
   formatted_order_date?: string | null;
   govt_fees?: number;
+  govt_fee?: number;
+  government_fees?: number;
   formatted_govt_fees?: string;
   last_fees_updated_by?: string | null;
   last_fees_updated_at?: string | null;

@@ -810,4 +810,155 @@ describe('Operations Workspace & Connected Workflow', () => {
     });
     expect(screen.getAllByText('Awaiting NOC clearance from state medical board.').length).toBeGreaterThan(0);
   });
+
+  describe('Operations Table Govt Fees Column', () => {
+    it('renders the GOVT FEES column header in Operations table', async () => {
+      vi.spyOn(operationsApi, 'getOperationsTasksApi').mockResolvedValue(mockTaskListResponse);
+
+      render(
+        <MemoryRouter initialEntries={['/operations/task-assignment']}>
+          <ThemeProvider>
+            <AuthProvider>
+              <Routes>
+                <Route path="/operations" element={<OperationsLayout />}>
+                  <Route path="task-assignment" element={<TaskAssignmentPage />} />
+                </Route>
+              </Routes>
+            </AuthProvider>
+          </ThemeProvider>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('columnheader', { name: /govt fees/i })).toBeInTheDocument();
+      });
+      expect(screen.getByText('GOVT FEES')).toBeInTheDocument();
+    });
+
+    it('displays properly formatted fee values when govt_fees is provided in API data', async () => {
+      const taskWithFees: OperationsTaskListResponse = {
+        ...mockTaskListResponse,
+        items: [
+          {
+            ...mockTaskListResponse.items[0],
+            application_id: 'app-fees-001',
+            application_number: 'AP-2026-FEES1',
+            client_name: 'FEES CLIENT PVT LTD',
+            govt_fees: 15500,
+            formatted_govt_fees: '₹15,500',
+          },
+        ],
+      };
+
+      vi.spyOn(operationsApi, 'getOperationsTasksApi').mockResolvedValue(taskWithFees);
+
+      render(
+        <MemoryRouter initialEntries={['/operations/task-assignment']}>
+          <ThemeProvider>
+            <AuthProvider>
+              <Routes>
+                <Route path="/operations" element={<OperationsLayout />}>
+                  <Route path="task-assignment" element={<TaskAssignmentPage />} />
+                </Route>
+              </Routes>
+            </AuthProvider>
+          </ThemeProvider>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('FEES CLIENT PVT LTD')).toBeInTheDocument();
+      });
+
+      expect(screen.getByText('₹15,500')).toBeInTheDocument();
+    });
+
+    it('handles numeric govt_fees without pre-formatted string using Indian currency format', async () => {
+      const taskWithNumericFeesOnly: OperationsTaskListResponse = {
+        ...mockTaskListResponse,
+        items: [
+          {
+            ...mockTaskListResponse.items[0],
+            application_id: 'app-fees-002',
+            application_number: 'AP-2026-FEES2',
+            client_name: 'NUMERIC FEES CLIENT',
+            govt_fees: 25000,
+            formatted_govt_fees: undefined,
+          },
+        ],
+      };
+
+      vi.spyOn(operationsApi, 'getOperationsTasksApi').mockResolvedValue(taskWithNumericFeesOnly);
+
+      render(
+        <MemoryRouter initialEntries={['/operations/task-assignment']}>
+          <ThemeProvider>
+            <AuthProvider>
+              <Routes>
+                <Route path="/operations" element={<OperationsLayout />}>
+                  <Route path="task-assignment" element={<TaskAssignmentPage />} />
+                </Route>
+              </Routes>
+            </AuthProvider>
+          </ThemeProvider>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('NUMERIC FEES CLIENT')).toBeInTheDocument();
+      });
+
+      expect(screen.getByText('₹25,000')).toBeInTheDocument();
+    });
+
+    it('verifies fallback handling (renders - or ₹ 0) when govt_fees is null or undefined', async () => {
+      const taskWithNullAndZeroFees: OperationsTaskListResponse = {
+        ...mockTaskListResponse,
+        items: [
+          {
+            ...mockTaskListResponse.items[0],
+            application_id: 'app-null-fees',
+            application_number: 'AP-2026-NULL-FEES',
+            client_name: 'NULL FEES CLIENT',
+            govt_fees: undefined,
+            formatted_govt_fees: undefined,
+          },
+          {
+            ...mockTaskListResponse.items[0],
+            application_id: 'app-zero-fees',
+            application_number: 'AP-2026-ZERO-FEES',
+            client_name: 'ZERO FEES CLIENT',
+            govt_fees: 0,
+            formatted_govt_fees: '₹0',
+          },
+        ],
+      };
+
+      vi.spyOn(operationsApi, 'getOperationsTasksApi').mockResolvedValue(taskWithNullAndZeroFees);
+
+      render(
+        <MemoryRouter initialEntries={['/operations/task-assignment']}>
+          <ThemeProvider>
+            <AuthProvider>
+              <Routes>
+                <Route path="/operations" element={<OperationsLayout />}>
+                  <Route path="task-assignment" element={<TaskAssignmentPage />} />
+                </Route>
+              </Routes>
+            </AuthProvider>
+          </ThemeProvider>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('NULL FEES CLIENT')).toBeInTheDocument();
+      });
+      expect(screen.getByText('ZERO FEES CLIENT')).toBeInTheDocument();
+
+      // Null/undefined renders '-'
+      expect(screen.getByText('-')).toBeInTheDocument();
+      // Zero fees renders '₹0'
+      expect(screen.getByText('₹0')).toBeInTheDocument();
+    });
+  });
 });
