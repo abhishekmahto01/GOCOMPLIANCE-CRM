@@ -10,9 +10,11 @@ import {
   Clock,
   UserCheck,
   PanelLeftClose,
+  FlaskConical,
 } from 'lucide-react';
 import { BrandLogo } from '../auth/BrandLogo';
 import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 
 export interface OperationsSidebarProps {
   isOpen: boolean;
@@ -30,6 +32,8 @@ export const OperationsSidebar: React.FC<OperationsSidebarProps> = ({
   const location = useLocation();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
+  const { hasModuleAccess } = useAuth();
+  const canSeeInternalTasks = hasModuleAccess('OPERATION_INTERNAL_TASKS');
 
   const [isOpsExpanded, setIsOpsExpanded] = useState(true);
 
@@ -57,9 +61,14 @@ export const OperationsSidebar: React.FC<OperationsSidebarProps> = ({
     location.pathname.startsWith('/operations/work-assignment') ||
     location.pathname.startsWith('/operations/tasks') ||
     location.pathname.startsWith('/operations/all-tasks');
+  const isInternalTasksActive = location.pathname.startsWith('/operations/internal-tasks');
 
   const isAnyOpsActive =
-    isOpsDashboardActive || isMyTasksActive || isUnassignedActive || isTaskAssignmentActive;
+    isOpsDashboardActive ||
+    isMyTasksActive ||
+    isUnassignedActive ||
+    isTaskAssignmentActive ||
+    isInternalTasksActive;
 
   const renderSidebarContent = (isDrawer = false) => (
     <div className="flex flex-col h-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-r border-slate-200/80 dark:border-slate-800 transition-colors duration-300 select-none">
@@ -178,6 +187,21 @@ export const OperationsSidebar: React.FC<OperationsSidebarProps> = ({
                 <UserCheck className="w-3.5 h-3.5" />
                 <span>All Operations Tasks</span>
               </Link>
+
+              {/* R&D / Internal Tasks */}
+              {canSeeInternalTasks && (
+                <Link
+                  to="/operations/internal-tasks"
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
+                    isInternalTasksActive
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30'
+                  }`}
+                >
+                  <FlaskConical className="w-3.5 h-3.5" />
+                  <span>R&amp;D / Internal Tasks</span>
+                </Link>
+              )}
             </div>
           )}
         </div>

@@ -12,6 +12,7 @@ from app.api import (
     designations,
     employees,
     health,
+    internal_tasks,
     licenses,
     lookup,
     operations,
@@ -99,6 +100,10 @@ app.include_router(
 )
 app.include_router(
     accounts.router,
+    prefix=settings.API_PREFIX,
+)
+app.include_router(
+    internal_tasks.router,
     prefix=settings.API_PREFIX,
 )
 app.include_router(

@@ -263,6 +263,16 @@ INITIAL_MODULES: List[Dict[str, Optional[object]]] = [
         "status": "ACTIVE",
     },
     {
+        "module_code": "OPERATION_INTERNAL_TASKS",
+        "module_name": "R&D / Internal Tasks",
+        "parent_code": "OPERATIONS",
+        "route": "/operations/internal-tasks",
+        "description": "Internal (non-sales) tasks: R&D research, vendor work and other assignments",
+        "display_order": 75,
+        "is_navigation": True,
+        "status": "ACTIVE",
+    },
+    {
         "module_code": "ACCOUNTS",
         "module_name": "Accounts",
         "parent_code": None,

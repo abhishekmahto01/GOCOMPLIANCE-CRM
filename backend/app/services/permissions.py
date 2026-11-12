@@ -217,6 +217,19 @@ PAGE_CATALOG_CONFIG: Dict[str, Dict[str, Any]] = {
             "update": "operation.application_status.update",
         },
     },
+    "OPERATION_INTERNAL_TASKS": {
+        "module_code": "OPERATIONS",
+        "page_name": "R&D / Internal Tasks",
+        "route": "/operations/internal-tasks",
+        "display_order": 75,
+        "supported_actions": ["read", "write", "assign", "update"],
+        "slugs": {
+            "read": "operation.internal_tasks.read",
+            "write": "operation.internal_tasks.create",
+            "assign": "operation.internal_tasks.assign",
+            "update": "operation.internal_tasks.update",
+        },
+    },
     "OPERATION_REPORTS": {
         "module_code": "OPERATIONS",
         "page_name": "Operation Reports",

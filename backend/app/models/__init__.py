@@ -8,6 +8,7 @@ from app.models.company import Company
 from app.models.department import Department
 from app.models.designation import Designation
 from app.models.impersonation_session import ImpersonationAuditLog, ImpersonationSession
+from app.models.internal_task import InternalTask, InternalTaskMessage
 from app.models.module import Module
 from app.models.operation_application import (
     ApplicationActivityLog,
@@ -43,6 +44,8 @@ __all__ = [
     "Designation",
     "ImpersonationAuditLog",
     "ImpersonationSession",
+    "InternalTask",
+    "InternalTaskMessage",
     "Module",
     "OperationApplication",
     "OperationRemark",

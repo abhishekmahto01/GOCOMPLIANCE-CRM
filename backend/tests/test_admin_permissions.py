@@ -117,7 +117,7 @@ def test_permission_catalog_structure(mock_db: MagicMock) -> None:
 
     assert len(admin_mod.pages) == 6
     assert len(sales_mod.pages) == 6
-    assert len(op_mod.pages) == 8
+    assert len(op_mod.pages) == 9
     assert len(acc_mod.pages) == 2
 
     # Admin pages check
@@ -225,7 +225,7 @@ def test_get_user_permissions_bundle(
     bundle = get_user_permissions_bundle(mock_db, standard_employee.user_id)
     assert bundle.employee_code == standard_employee.employee_code
     assert bundle.first_name == "Aadarsh"
-    assert len(bundle.permissions) == 22  # 6 Admin + 6 Sales + 8 Operation + 2 Accounts
+    assert len(bundle.permissions) == 23  # 6 Admin + 6 Sales + 9 Operation + 2 Accounts
 
 
 def test_save_user_permissions_bundle(
@@ -358,7 +358,7 @@ def test_copy_user_permissions_service(
             user_agent="TestAgent",
         )
         assert mock_save.called
-        assert res.copied_count == 14
+        assert res.copied_count == 15
         assert res.source_user_id == standard_employee.user_id
         assert res.target_user_id == target_user.user_id
         assert mock_db.commit.called

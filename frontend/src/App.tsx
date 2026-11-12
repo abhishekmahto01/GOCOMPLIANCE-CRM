@@ -34,6 +34,7 @@ import { OperationsDashboardPage } from './pages/operations/OperationsDashboardP
 import { MyTasksPage } from './pages/operations/MyTasksPage';
 import { UnassignedOrdersPage } from './pages/operations/UnassignedOrdersPage';
 import { TaskAssignmentPage } from './pages/operations/TaskAssignmentPage';
+import { InternalTasksPage } from './pages/operations/InternalTasksPage';
 
 import { AccountsLayout } from './components/accounts/AccountsLayout';
 import { AccountsIndexRedirect } from './components/accounts/AccountsIndexRedirect';
@@ -395,6 +396,14 @@ export const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute requiredModule="OPERATIONS" requiredAction="view">
               <TaskAssignmentPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="internal-tasks"
+          element={
+            <ProtectedRoute requiredModule="OPERATION_INTERNAL_TASKS" requiredAction="view">
+              <InternalTasksPage />
             </ProtectedRoute>
           }
         />

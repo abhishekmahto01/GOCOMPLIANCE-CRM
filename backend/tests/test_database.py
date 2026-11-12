@@ -82,6 +82,8 @@ def test_registered_tables_in_metadata() -> None:
         "accounts_follow_up",
         "impersonation_sessions",
         "impersonation_audit_logs",
+        "internal_task",
+        "internal_task_message",
         "task_conversation_message",
         "task_conversation_read_state",
         "operations_coordinator_config",
