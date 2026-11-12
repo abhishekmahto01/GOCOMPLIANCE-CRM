@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -41,13 +41,12 @@ import { AccountsDashboardPage } from './pages/accounts/AccountsDashboardPage';
 import { AccountsEntriesPage } from './pages/accounts/AccountsEntriesPage';
 import { ImpersonationBanner } from './components/common/ImpersonationBanner';
 import { ImpersonationUrlHandler } from './components/auth/ImpersonationUrlHandler';
-import { resolveActiveModule, isLocalEnvironment } from './utils/routeResolver';
+import { resolveActiveModule } from './utils/routeResolver';
 
 /**
- * Deterministically redirects root '/' based on session and resolved active module:
+ * Deterministically redirects root '/' based on session:
  * - Unauthenticated -> /login
- * - Authenticated on Admin module (admin.gocompliances.com) -> /admin (or admin root)
- * - Authenticated on Workflow module (workflow.gocompliances.com or localhost) -> /dashboard
+ * - Authenticated -> /dashboard (main dashboard with all module cards)
  */
 const RootRedirect: React.FC = () => {
   const { isAuthenticated, isLoading, mustChangePassword } = useAuth();
@@ -77,28 +76,6 @@ const RootRedirect: React.FC = () => {
   }
 
   return <Navigate to={`/login${location.search}`} replace />;
-};
-
-/**
- * Redirects production workflow users attempting to access /admin to the dedicated admin subdomain.
- */
-const ProductionAdminRedirect: React.FC = () => {
-  const location = useLocation();
-  useEffect(() => {
-    const subpath = location.pathname.replace(/^\/admin/, '') || '/';
-    window.location.href = `https://admin.gocompliances.com${subpath}${location.search}`;
-  }, [location]);
-
-  return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-slate-50 dark:bg-slate-950">
-      <div className="flex flex-col items-center gap-3">
-        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
-        <span className="text-sm font-medium text-slate-500 dark:text-slate-400">
-          Redirecting to Admin Portal...
-        </span>
-      </div>
-    </div>
-  );
 };
 
 /**
@@ -249,71 +226,8 @@ const renderAdminChildRoutes = () => (
 );
 
 export const AppRoutes: React.FC = () => {
-  const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-  const isLocal = isLocalEnvironment(hostname);
-  const isProdAdmin = !isLocal && hostname.toLowerCase().startsWith('admin.');
-
-  if (isProdAdmin) {
-    // --------------------------------------------------------------------------
-    // Production Admin Portal (admin.gocompliances.com)
-    // --------------------------------------------------------------------------
-    return (
-      <Routes>
-        {/* Public Login Route */}
-        <Route
-          path="/login"
-          element={
-            <PublicRoute>
-              <LoginPage />
-            </PublicRoute>
-          }
-        />
-
-        {/* Mandatory First-Login Password Change Route */}
-        <Route
-          path="/change-password-required"
-          element={<ChangePasswordRequiredPage />}
-        />
-
-        {/* 403 Forbidden Route */}
-        <Route path="/unauthorized" element={<UnauthorizedPage />} />
-
-        {/* Admin Root on admin.gocompliances.com */}
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute requiredModule="ADMIN" requiredAction="view">
-              <AdminLayout />
-            </ProtectedRoute>
-          }
-        >
-          {renderAdminChildRoutes()}
-        </Route>
-
-        {/* Support /admin/* subpaths on admin.gocompliances.com */}
-        <Route
-          path="/admin"
-          element={
-            <ProtectedRoute requiredModule="ADMIN" requiredAction="view">
-              <AdminLayout />
-            </ProtectedRoute>
-          }
-        >
-          {renderAdminChildRoutes()}
-        </Route>
-
-        {/* Redirect /dashboard to / in admin portal */}
-        <Route path="/dashboard" element={<Navigate to="/" replace />} />
-
-        {/* Catch-all Fallback */}
-        <Route path="*" element={<NotFoundPage />} />
-      </Routes>
-    );
-  }
-
-  // --------------------------------------------------------------------------
-  // Localhost (Development) OR Production Workflow (workflow.gocompliances.com)
-  // --------------------------------------------------------------------------
+  // Single-domain, path-based routing (same on localhost and production).
+  // Main dashboard lives at /dashboard and the Admin panel at /admin.
   return (
     <Routes>
       {/* Public Login Route */}
@@ -524,24 +438,17 @@ export const AppRoutes: React.FC = () => {
         <Route path="reports" element={<Navigate to="/accounts/entries" replace />} />
       </Route>
 
-      {/* Administration Module: on Localhost mount under /admin; on Production Workflow redirect */}
-      {isLocal ? (
-        <Route
-          path="/admin"
-          element={
-            <ProtectedRoute requiredModule="ADMIN" requiredAction="view">
-              <AdminLayout />
-            </ProtectedRoute>
-          }
-        >
-          {renderAdminChildRoutes()}
-        </Route>
-      ) : (
-        <>
-          <Route path="/admin" element={<ProductionAdminRedirect />} />
-          <Route path="/admin/*" element={<ProductionAdminRedirect />} />
-        </>
-      )}
+      {/* Administration Module: mounted under /admin on the same origin (localhost and production) */}
+      <Route
+        path="/admin"
+        element={
+          <ProtectedRoute requiredModule="ADMIN" requiredAction="view">
+            <AdminLayout />
+          </ProtectedRoute>
+        }
+      >
+        {renderAdminChildRoutes()}
+      </Route>
 
       {/* 403 Forbidden Route */}
       <Route path="/unauthorized" element={<UnauthorizedPage />} />

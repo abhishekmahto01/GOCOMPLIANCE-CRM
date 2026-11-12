@@ -46,6 +46,8 @@ rsync -avz --delete \
   --exclude '*.pyc' \
   --exclude '.pytest_cache' \
   --exclude 'backend/uploads' \
+  --exclude 'deploy/certbot' \
+  --exclude 'backend/backups' \
   --exclude '.env' \
   "${LOCAL_PATH}" "${VPS_USER}@${VPS_HOST}:${VPS_PATH}/"
 
