@@ -70,11 +70,34 @@ fi
 echo "--> .env found. Verified variables:"
 grep -E "^(MAIN_DOMAIN|ADMIN_DOMAIN|POSTGRES_USER|POSTGRES_DB)=" .env || true
 
+# Guard: MAIN_DOMAIN must be the main CRM domain (e.g. workflow.*), never the admin.* subdomain.
+# A swapped value makes nginx serve the wrong app on each domain.
+MAIN_DOMAIN_VALUE=$(grep -E "^MAIN_DOMAIN=" .env | head -1 | cut -d= -f2- | tr -d "\"' ")
+ADMIN_DOMAIN_VALUE=$(grep -E "^ADMIN_DOMAIN=" .env | head -1 | cut -d= -f2- | tr -d "\"' ")
+case "$MAIN_DOMAIN_VALUE" in
+  admin.*|"")
+    echo "[-] ERROR: MAIN_DOMAIN='${MAIN_DOMAIN_VALUE}' looks wrong. It must be the main CRM domain (e.g. workflow.gocompliances.com)."
+    echo "    ADMIN_DOMAIN is currently '${ADMIN_DOMAIN_VALUE}'. Fix .env on the server and run deploy again."
+    exit 1
+    ;;
+esac
+
 echo "--> Building updated Docker images..."
 docker compose --env-file .env build --parallel
 
 echo "--> Restarting containers (zero-downtime rolling update)..."
 docker compose --env-file .env up -d --remove-orphans
+
+# nginx renders deploy/nginx/templates/*.template only when the container starts, and
+# `up -d` does not recreate it when only the mounted template changed. Force-recreate it
+# so routing changes are always applied.
+echo "--> Recreating nginx to apply the latest routing config..."
+docker compose --env-file .env up -d --force-recreate --no-deps nginx
+sleep 3
+if ! docker compose --env-file .env exec -T nginx nginx -t; then
+  echo "[-] ERROR: nginx config test failed. Check: docker compose logs nginx"
+  exit 1
+fi
 
 echo "--> Waiting for backend to be healthy..."
 sleep 5
